@@ -91,3 +91,5 @@ codegen/nonext/
 local_testing
 dist-server
 scripts/build.go
+
+.claude/

@@ -42,6 +42,7 @@ export const __playback_downloadedMediaAtom = atomWithStorage<string>("sea-playb
 
 export const enum PlaybackTorrentStreaming {
     Default = "default", // Desktop media player
+    NativePlayer = "nativePlayer", // Transcoding / Direct Play (in-browser)
     ExternalPlayerLink = "externalPlayerLink",
 }
 

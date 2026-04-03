@@ -562,8 +562,8 @@ func (a *App) InitOrRefreshModules() {
 	// |   Library Watcher   |
 	// +---------------------+
 
-	// Initialize library watcher
-	if settings.Library != nil && len(settings.Library.LibraryPath) > 0 {
+	// Initialize library watcher only if auto scan is enabled
+	if settings.Library != nil && len(settings.Library.LibraryPath) > 0 && settings.Library.AutoScan {
 		go a.initLibraryWatcher(settings.Library.GetLibraryPaths())
 	}
 
