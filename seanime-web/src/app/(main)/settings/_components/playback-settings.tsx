@@ -265,8 +265,8 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
                                 <MdOutlineBroadcastOnHome className="text-xl text-brand-600 dark:text-brand-400 mt-1" />
                                 <div className="flex-1 space-y-2">
                                     <div>
-                                        <p className="font-medium">Transcoding / Direct Play</p>
-                                        <p className="text-xs text-gray-600 dark:text-gray-400">Plays in browser with transcoding</p>
+                                        <p className="font-medium">Built-in Player</p>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">Plays directly in the browser</p>
                                     </div>
                                 </div>
                             </div>
