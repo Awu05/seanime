@@ -381,6 +381,16 @@ export const API_ENDPOINTS = {
             methods: ["DELETE"],
             endpoint: "/api/v1/admin/profiles",
         },
+        GetProfileSettings: {
+            key: "AUTH-get-profile-settings",
+            methods: ["GET"],
+            endpoint: "/api/v1/profile-settings",
+        },
+        SaveProfileSettings: {
+            key: "AUTH-save-profile-settings",
+            methods: ["POST"],
+            endpoint: "/api/v1/profile-settings",
+        },
     },
     AUTO_DOWNLOADER: {
         /**
