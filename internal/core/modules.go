@@ -595,9 +595,28 @@ func (a *App) InitOrRefreshModules() {
 	// |   Library Watcher   |
 	// +---------------------+
 
-	// Initialize library watcher only if auto scan is enabled
-	if settings.Library != nil && len(settings.Library.LibraryPath) > 0 && settings.Library.AutoScan {
-		go a.initLibraryWatcher(settings.Library.GetLibraryPaths())
+	// Initialize library watcher with paths from both settings and library_paths table
+	if settings.Library != nil && settings.Library.AutoScan {
+		watchPaths := settings.Library.GetLibraryPaths()
+
+		// Also include paths from the library_paths table
+		dbPaths, err := a.Database.GetAllLibraryPathStrings()
+		if err == nil && len(dbPaths) > 0 {
+			seen := make(map[string]bool)
+			for _, p := range watchPaths {
+				seen[p] = true
+			}
+			for _, p := range dbPaths {
+				if !seen[p] {
+					watchPaths = append(watchPaths, p)
+					seen[p] = true
+				}
+			}
+		}
+
+		if len(watchPaths) > 0 {
+			go a.initLibraryWatcher(watchPaths)
+		}
 	}
 
 	// +---------------------+
