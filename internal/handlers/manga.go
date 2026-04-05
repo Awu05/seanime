@@ -147,7 +147,7 @@ func (h *Handler) HandleGetMangaEntryDetails(c echo.Context) error {
 		return h.RespondWithData(c, detailsMedia)
 	}
 
-	details, err := h.App.AnilistPlatformRef.Get().GetMangaDetails(c.Request().Context(), id)
+	details, err := h.getAnilistPlatform(c).GetMangaDetails(c.Request().Context(), id)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -249,7 +249,7 @@ func (h *Handler) HandleGetMangaEntryChapters(c echo.Context) error {
 	baseManga, found := baseMangaCache.Get(b.MediaId)
 	if !found {
 		var err error
-		baseManga, err = h.App.AnilistPlatformRef.Get().GetManga(c.Request().Context(), b.MediaId)
+		baseManga, err = h.getAnilistPlatform(c).GetManga(c.Request().Context(), b.MediaId)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -441,7 +441,7 @@ func (h *Handler) HandleUpdateMangaProgress(c echo.Context) error {
 	}
 
 	// Update the progress on AniList
-	err := h.App.AnilistPlatformRef.Get().UpdateEntryProgress(
+	err := h.getAnilistPlatform(c).UpdateEntryProgress(
 		c.Request().Context(),
 		b.MediaId,
 		b.ChapterNumber,

@@ -362,7 +362,7 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	animeCollectionWithRelations, err := h.App.AnilistPlatformRef.Get().GetAnimeCollectionWithRelations(c.Request().Context())
+	animeCollectionWithRelations, err := h.getAnilistPlatform(c).GetAnimeCollectionWithRelations(c.Request().Context())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -393,7 +393,7 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 	})
 
 	// Get the media
-	media, err := h.App.AnilistPlatformRef.Get().GetAnime(c.Request().Context(), b.MediaId)
+	media, err := h.getAnilistPlatform(c).GetAnime(c.Request().Context(), b.MediaId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -658,7 +658,7 @@ func (h *Handler) HandleUpdateAnimeEntryProgress(c echo.Context) error {
 	}
 
 	// Update the progress on AniList
-	err := h.App.AnilistPlatformRef.Get().UpdateEntryProgress(
+	err := h.getAnilistPlatform(c).UpdateEntryProgress(
 		c.Request().Context(),
 		b.MediaId,
 		b.EpisodeNumber,
@@ -694,7 +694,7 @@ func (h *Handler) HandleUpdateAnimeEntryRepeat(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err := h.App.AnilistPlatformRef.Get().UpdateEntryRepeat(
+	err := h.getAnilistPlatform(c).UpdateEntryRepeat(
 		c.Request().Context(),
 		b.MediaId,
 		b.Repeat,

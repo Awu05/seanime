@@ -89,7 +89,7 @@ func (h *Handler) HandleEditAnilistListEntry(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err := h.App.AnilistPlatformRef.Get().UpdateEntry(
+	err := h.getAnilistPlatform(c).UpdateEntry(
 		c.Request().Context(),
 		*p.MediaId,
 		p.Status,
@@ -138,7 +138,7 @@ func (h *Handler) HandleGetAnilistAnimeDetails(c echo.Context) error {
 	if details, ok := detailsCache.Get(mId); ok {
 		return h.RespondWithData(c, details)
 	}
-	details, err := h.App.AnilistPlatformRef.Get().GetAnimeDetails(c.Request().Context(), mId)
+	details, err := h.getAnilistPlatform(c).GetAnimeDetails(c.Request().Context(), mId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -168,7 +168,7 @@ func (h *Handler) HandleGetAnilistStudioDetails(c echo.Context) error {
 	if details, ok := studioDetailsMap.Get(mId); ok {
 		return h.RespondWithData(c, details)
 	}
-	details, err := h.App.AnilistPlatformRef.Get().GetStudioDetails(c.Request().Context(), mId)
+	details, err := h.getAnilistPlatform(c).GetStudioDetails(c.Request().Context(), mId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -238,7 +238,7 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 	}
 
 	// Delete the list entry
-	err := h.App.AnilistPlatformRef.Get().DeleteEntry(c.Request().Context(), *p.MediaId, listEntryID)
+	err := h.getAnilistPlatform(c).DeleteEntry(c.Request().Context(), *p.MediaId, listEntryID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -420,7 +420,7 @@ func (h *Handler) HandleAnilistListMissedSequels(c echo.Context) error {
 	}
 
 	// Get complete anime collection
-	animeCollection, err := h.App.AnilistPlatformRef.Get().GetAnimeCollectionWithRelations(c.Request().Context())
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollectionWithRelations(c.Request().Context())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -456,7 +456,7 @@ func (h *Handler) HandleGetAniListStats(c echo.Context) error {
 		return h.RespondWithData(c, cached)
 	}
 
-	stats, err := h.App.AnilistPlatformRef.Get().GetViewerStats(c.Request().Context())
+	stats, err := h.getAnilistPlatform(c).GetViewerStats(c.Request().Context())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

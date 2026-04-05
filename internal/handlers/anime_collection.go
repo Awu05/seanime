@@ -242,7 +242,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		return h.RespondWithData(c, ret)
 	}
 
-	animeSchedule, err := h.App.AnilistPlatformRef.Get().GetAnimeAiringSchedule(c.Request().Context())
+	animeSchedule, err := h.getAnilistPlatform(c).GetAnimeAiringSchedule(c.Request().Context())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -278,7 +278,7 @@ func (h *Handler) HandleAddUnknownMedia(c echo.Context) error {
 	}
 
 	// Add non-added media entries to AniList collection
-	if err := h.App.AnilistPlatformRef.Get().AddMediaToCollection(c.Request().Context(), b.MediaIds); err != nil {
+	if err := h.getAnilistPlatform(c).AddMediaToCollection(c.Request().Context(), b.MediaIds); err != nil {
 		return h.RespondWithError(c, errors.New("error: Anilist responded with an error, this is most likely a rate limit issue"))
 	}
 

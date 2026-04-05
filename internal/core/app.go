@@ -99,6 +99,7 @@ type (
 		MediastreamRepository   *mediastream.Repository
 		TorrentstreamRepository *torrentstream.Repository
 		StreamSessionManager    *StreamSessionManager
+		AnilistPool             *AnilistClientPool
 
 		// Players
 		NativePlayer *nativeplayer.NativePlayer

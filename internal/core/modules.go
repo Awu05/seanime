@@ -54,6 +54,10 @@ func (a *App) initModulesOnce() {
 		a.StreamSessionManager = NewStreamSessionManager(30 * time.Minute)
 	}
 
+	if a.AnilistPool == nil {
+		a.AnilistPool = NewAnilistClientPool(a)
+	}
+
 	a.LocalManager.SetRefreshAnilistCollectionsFunc(func() {
 		_, _ = a.RefreshAnimeCollection()
 		_, _ = a.RefreshMangaCollection()

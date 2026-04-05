@@ -287,7 +287,7 @@ func (h *Handler) HandleNakamaPlayVideo(c echo.Context) error {
 		return h.RespondWithError(c, errors.New("not connected to host"))
 	}
 
-	media, err := h.App.AnilistPlatformRef.Get().GetAnime(c.Request().Context(), b.MediaId)
+	media, err := h.getAnilistPlatform(c).GetAnime(c.Request().Context(), b.MediaId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
