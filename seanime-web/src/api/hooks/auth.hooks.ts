@@ -149,3 +149,28 @@ export function useAuthLogout() {
         mutationKey: [API_ENDPOINTS.AUTH.LogoutSession.key],
     })
 }
+
+// Profile settings hooks
+
+export function useGetProfileSettings() {
+    return useServerQuery<{
+        overrides: string
+        merged: any
+    }>({
+        endpoint: API_ENDPOINTS.AUTH.GetProfileSettings.endpoint,
+        method: API_ENDPOINTS.AUTH.GetProfileSettings.methods[0],
+        queryKey: [API_ENDPOINTS.AUTH.GetProfileSettings.key],
+        enabled: true,
+    })
+}
+
+export function useSaveProfileSettings() {
+    return useServerMutation<
+        { success: boolean },
+        { overrides: string }
+    >({
+        endpoint: API_ENDPOINTS.AUTH.SaveProfileSettings.endpoint,
+        method: API_ENDPOINTS.AUTH.SaveProfileSettings.methods[0],
+        mutationKey: [API_ENDPOINTS.AUTH.SaveProfileSettings.key],
+    })
+}
