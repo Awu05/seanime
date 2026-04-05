@@ -1,12 +1,15 @@
 import { useAuthGetProfiles, useAuthSelectProfile } from "@/api/hooks/auth.hooks"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import { buildSeaQuery } from "@/api/client/requests"
+import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { useQueryClient } from "@tanstack/react-query"
+import { useSetAtom } from "jotai"
 import React from "react"
 import { toast } from "sonner"
 
 export function ProfilePickerPage() {
     const qc = useQueryClient()
+    const setProfile = useSetAtom(currentProfileAtom)
     const { data: profiles } = useAuthGetProfiles()
     const { mutate: selectProfile, isPending } = useAuthSelectProfile()
     const [pinFor, setPinFor] = React.useState<string | null>(null)
@@ -16,6 +19,18 @@ export function ProfilePickerPage() {
     const [newName, setNewName] = React.useState("")
     const [isCreating, setIsCreating] = React.useState(false)
 
+    function storeProfileAndRedirect(data: any) {
+        if (data?.profile) {
+            setProfile({
+                id: data.profile.id,
+                name: data.profile.name,
+                isAdmin: data.profile.isAdmin,
+                avatar: data.profile.avatar,
+            })
+        }
+        window.location.href = "/"
+    }
+
     function handleSelect(profileId: string, hasPin: boolean) {
         if (hasPin) {
             setPinFor(profileId)
@@ -24,7 +39,7 @@ export function ProfilePickerPage() {
             return
         }
         selectProfile({ profileId }, {
-            onSuccess: () => { window.location.href = "/" },
+            onSuccess: (data) => storeProfileAndRedirect(data),
             onError: () => setError("Failed to select profile"),
         })
     }
@@ -33,7 +48,7 @@ export function ProfilePickerPage() {
         e.preventDefault()
         if (!pinFor) return
         selectProfile({ profileId: pinFor, pin }, {
-            onSuccess: () => { window.location.href = "/" },
+            onSuccess: (data) => storeProfileAndRedirect(data),
             onError: () => setError("Invalid PIN"),
         })
     }

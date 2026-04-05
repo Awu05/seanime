@@ -12,8 +12,9 @@ import { logger } from "@/lib/helpers/debug"
 import { usePathname, useRouter } from "@/lib/navigation"
 import { ANILIST_OAUTH_URL, ANILIST_PIN_URL } from "@/lib/server/config"
 import { WSEvents } from "@/lib/server/ws-events"
+import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { __isDesktop__ } from "@/types/constants"
-import { useAtomValue } from "jotai"
+import { useAtomValue, useSetAtom } from "jotai"
 import React from "react"
 import { useWebsocketMessageListener } from "./_hooks/handle-websockets"
 
@@ -35,6 +36,7 @@ export function ServerDataWrapper(props: ServerDataWrapperProps) {
     const serverStatus = useServerStatus()
     const setServerStatus = useSetServerStatus()
     const password = useAtomValue(serverAuthTokenAtom)
+    const setCurrentProfile = useSetAtom(currentProfileAtom)
     const { data: _serverStatus, isLoading, refetch } = useGetStatus()
 
     React.useEffect(() => {
@@ -71,6 +73,16 @@ export function ServerDataWrapper(props: ServerDataWrapperProps) {
                             window.location.href = "/login"
                             setAuthenticated(false)
                         } else {
+                            res.json().then((body: any) => {
+                                if (body?.data?.profile) {
+                                    setCurrentProfile({
+                                        id: body.data.profile.id,
+                                        name: body.data.profile.name,
+                                        isAdmin: body.data.profile.isAdmin,
+                                        avatar: body.data.profile.avatar,
+                                    })
+                                }
+                            }).catch(() => {})
                             setAuthenticated(true)
                         }
                     })

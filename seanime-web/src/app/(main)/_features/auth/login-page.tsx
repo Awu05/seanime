@@ -1,8 +1,11 @@
 import { useAuthAdminLogin } from "@/api/hooks/auth.hooks"
+import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
+import { useSetAtom } from "jotai"
 import React from "react"
 
 export function LoginPage() {
     const { mutate: login, isPending } = useAuthAdminLogin()
+    const setProfile = useSetAtom(currentProfileAtom)
     const [username, setUsername] = React.useState("")
     const [password, setPassword] = React.useState("")
     const [error, setError] = React.useState("")
@@ -11,7 +14,15 @@ export function LoginPage() {
         e.preventDefault()
         setError("")
         login({ username, password }, {
-            onSuccess: () => {
+            onSuccess: (data) => {
+                if (data?.profile) {
+                    setProfile({
+                        id: data.profile.id,
+                        name: data.profile.name,
+                        isAdmin: data.profile.isAdmin,
+                        avatar: data.profile.avatar,
+                    })
+                }
                 window.location.href = "/"
             },
             onError: () => {
