@@ -146,6 +146,22 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/auth/login", h.HandleLogin)
 	v1.POST("/auth/logout", h.HandleLogout)
 
+	// Multi-user auth routes
+	v1.GET("/auth/setup-check", h.HandleSetupCheck)
+	v1.POST("/auth/setup", h.HandleAdminSetup)
+	v1.POST("/auth/admin-login", h.HandleAdminLogin)
+	v1.POST("/auth/access-code", h.HandleAccessCode)
+	v1.GET("/auth/profiles", h.HandleGetProfiles)
+	v1.POST("/auth/select-profile", h.HandleSelectProfile)
+	v1.GET("/auth/me", h.HandleGetMe)
+	v1.POST("/auth/logout-session", h.HandleLogoutAuth)
+
+	// Admin profile management
+	v1.POST("/admin/profiles", h.HandleCreateProfile)
+	v1.DELETE("/admin/profiles/:id", h.HandleDeleteProfile)
+	v1.POST("/admin/access-code", h.HandleSetAccessCode)
+	v1.POST("/profiles/:id/pin", h.HandleUpdateProfilePin)
+
 	// Settings
 	v1.GET("/settings", h.HandleGetSettings)
 	v1.PATCH("/settings", h.HandleSaveSettings)

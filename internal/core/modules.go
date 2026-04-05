@@ -1,6 +1,7 @@
 package core
 
 import (
+	"os"
 	"seanime/internal/api/anilist"
 	"seanime/internal/continuity"
 	"seanime/internal/database/db"
@@ -38,7 +39,9 @@ import (
 	"seanime/internal/videocore"
 
 	"github.com/cli/browser"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // initModulesOnce will initialize modules that need to persist.
@@ -388,6 +391,36 @@ func (a *App) InitOrRefreshModules() {
 
 	if settings.Anilist != nil {
 		shared_platform.ShouldCache.Store(!settings.Anilist.DisableCacheLayer)
+	}
+
+	// Initialize JWT secret if not set
+	if a.JWTSecret == "" {
+		secret, err := GenerateJWTSecret()
+		if err != nil {
+			a.Logger.Error().Err(err).Msg("app: Failed to generate JWT secret")
+		} else {
+			a.JWTSecret = secret
+		}
+	}
+
+	// Bootstrap admin from environment variables (Docker)
+	if !a.IsDesktopSidecar {
+		adminExists, _ := a.Database.AdminExists()
+		if !adminExists {
+			adminUser := os.Getenv("SEANIME_ADMIN_USERNAME")
+			adminPass := os.Getenv("SEANIME_ADMIN_PASSWORD")
+			if adminUser != "" && adminPass != "" {
+				a.bootstrapAdminFromEnv(adminUser, adminPass, os.Getenv("SEANIME_INSTANCE_ACCESS_CODE"))
+			}
+		}
+		exists, _ := a.Database.AdminExists()
+		a.MultiUserEnabled = exists
+	} else {
+		exists, _ := a.Database.AdminExists()
+		a.MultiUserEnabled = exists
+		if !exists {
+			a.ensureDefaultProfile()
+		}
 	}
 
 	// +---------------------+
@@ -813,4 +846,59 @@ func (a *App) performActionsOnce() {
 		}
 	}()
 
+}
+
+func (a *App) bootstrapAdminFromEnv(username, password, accessCode string) {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to hash admin password from env")
+		return
+	}
+
+	profile, err := a.Database.CreateProfile(&models.Profile{
+		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+		Name:          username,
+		IsAdmin:       true,
+	})
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to create admin profile from env")
+		return
+	}
+
+	_, err = a.Database.CreateAdmin(&models.Admin{
+		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+		Username:      username,
+		PasswordHash:  string(passwordHash),
+		ProfileID:     profile.ID,
+	})
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to create admin from env")
+		return
+	}
+
+	if accessCode != "" {
+		codeHash, err := bcrypt.GenerateFromPassword([]byte(accessCode), bcrypt.DefaultCost)
+		if err == nil {
+			_, _ = a.Database.UpsertInstanceConfig(&models.InstanceConfig{
+				AccessCodeHash: string(codeHash),
+			})
+		}
+	}
+
+	a.Logger.Info().Str("username", username).Msg("app: Admin account bootstrapped from environment variables")
+}
+
+func (a *App) ensureDefaultProfile() {
+	count, _ := a.Database.CountProfiles()
+	if count > 0 {
+		return
+	}
+	_, err := a.Database.CreateProfile(&models.Profile{
+		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+		Name:          "Default",
+		IsAdmin:       true,
+	})
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to create default profile")
+	}
 }
