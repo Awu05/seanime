@@ -234,6 +234,36 @@ func (h *Handler) HandleGetMe(c echo.Context) error {
 	return h.RespondWithData(c, result)
 }
 
+// HandleSelfCreateProfile
+//
+//	@summary allows a household member (access code scope) to create their own profile.
+//	@route /api/v1/auth/create-profile [POST]
+//	@returns *models.Profile
+func (h *Handler) HandleSelfCreateProfile(c echo.Context) error {
+	type body struct {
+		Name string `json:"name"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	if b.Name == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Name is required"})
+	}
+
+	profile, err := h.App.Database.CreateProfile(&models.Profile{
+		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+		Name:          b.Name,
+	})
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	return h.RespondWithData(c, profile)
+}
+
 func (h *Handler) HandleLogoutAuth(c echo.Context) error {
 	c.SetCookie(&http.Cookie{
 		Name:     "seanime-auth",
