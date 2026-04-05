@@ -140,6 +140,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//
 	// Set current file & torrent
 	//
+	r.client.SetActiveStream(opts.ClientId, torrentToStream.Torrent, torrentToStream.File)
 	r.client.currentFile = mo.Some(torrentToStream.File)
 	r.client.currentTorrent = mo.Some(torrentToStream.Torrent)
 
