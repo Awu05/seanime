@@ -45,6 +45,7 @@ import { SiQbittorrent, SiTransmission } from "react-icons/si"
 import { TbReportSearch } from "react-icons/tb"
 import { nakamaModalOpenAtom, useNakamaStatus } from "../nakama/nakama-manager"
 import { PluginSidebarTray } from "../plugin/tray/plugin-sidebar-tray"
+import { ProfileIndicator } from "./profile-indicator"
 
 export function MainSidebar() {
 
@@ -548,6 +549,7 @@ function SidebarFooter({ isCollapsed, onLogout }: { isCollapsed: boolean, onLogo
                     ] : []),
                 ]}
             />
+            <ProfileIndicator />
             <ConfirmationDialog {...confirmSignOut} />
         </div>
     )
