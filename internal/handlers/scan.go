@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/library/scanner"
 	"seanime/internal/library/summary"
@@ -38,6 +39,19 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 	additionalLibraryPaths, err := h.App.Database.GetAdditionalLibraryPathsFromSettings()
 	if err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	// Include paths from library_paths table for this profile
+	profileID := core.GetProfileIDFromContext(c)
+	if profileID != "" {
+		dbPaths, err := h.App.Database.GetLibraryPathStringsForProfile(profileID)
+		if err == nil {
+			for _, p := range dbPaths {
+				if p != libraryPath {
+					additionalLibraryPaths = append(additionalLibraryPaths, p)
+				}
+			}
+		}
 	}
 
 	// Get the latest local files
