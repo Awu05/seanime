@@ -48,7 +48,6 @@ export function ProfileIndicator() {
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white text-xs font-bold">
                     {profile.name?.[0]?.toUpperCase()}
                 </div>
-                <span className="text-sm text-gray-300 hidden md:inline">{profile.name}</span>
             </button>
 
             {open && createPortal(

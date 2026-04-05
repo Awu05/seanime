@@ -31,7 +31,7 @@ import { TORRENT_CLIENT, TORRENT_PROVIDER } from "@/lib/server/settings"
 import { WSEvents } from "@/lib/server/ws-events"
 import { useThemeSettings } from "@/lib/theme/theme-hooks"
 import { __isDesktop__, __isElectronDesktop__ } from "@/types/constants"
-import { useAtom } from "jotai"
+import { useAtom, useAtomValue } from "jotai"
 import React from "react"
 import { BiChevronRight, BiExtension, BiLogIn, BiLogOut } from "react-icons/bi"
 import { FiLogIn, FiSearch } from "react-icons/fi"
@@ -45,12 +45,14 @@ import { SiQbittorrent, SiTransmission } from "react-icons/si"
 import { TbReportSearch } from "react-icons/tb"
 import { nakamaModalOpenAtom, useNakamaStatus } from "../nakama/nakama-manager"
 import { PluginSidebarTray } from "../plugin/tray/plugin-sidebar-tray"
+import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { ProfileIndicator } from "./profile-indicator"
 
 export function MainSidebar() {
 
     const ctx = useAppSidebarContext()
     const ts = useThemeSettings()
+    const currentProfile = useAtomValue(currentProfileAtom)
 
     const [expandedSidebar, setExpandSidebar] = React.useState(false)
     const isCollapsed = ts.expandSidebarOnHover ? (!ctx.isBelowBreakpoint && !expandedSidebar) : !ctx.isBelowBreakpoint
@@ -109,7 +111,7 @@ export function MainSidebar() {
                 <div className="flex w-full gap-2 flex-col px-4 shrink-0 pb-2">
                     <SidebarUpdates isCollapsed={isCollapsed} />
                     <SidebarFooter isCollapsed={isCollapsed} onLogout={logout} />
-                    <SidebarUser expandedSidebar={expandedSidebar} onLogout={logout} isCollapsed={isCollapsed} />
+                    {!currentProfile && <SidebarUser expandedSidebar={expandedSidebar} onLogout={logout} isCollapsed={isCollapsed} />}
                 </div>
             </AppSidebar>
         </>

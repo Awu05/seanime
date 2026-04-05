@@ -70,7 +70,9 @@ import { DenshiSettings } from "./_containers/denshi-settings"
 import { DiscordRichPresenceSettings } from "./_containers/discord-rich-presence-settings"
 import { LocalSettings } from "./_containers/local-settings"
 import { NakamaSettings } from "./_containers/nakama-settings"
+import { useLogout } from "@/api/hooks/auth.hooks"
 import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
+import { useCurrentUser } from "@/app/(main)/_hooks/use-server-status"
 import { ProfileManagementSettings } from "./_containers/profile-management-settings"
 import { ProfileOverrideSettings } from "./_containers/profile-override-settings"
 
@@ -99,6 +101,8 @@ export default function Page() {
 
     const currentProfile = useAtomValue(currentProfileAtom)
     const isAdmin = currentProfile?.isAdmin ?? false
+    const currentUser = useCurrentUser()
+    const { mutate: anilistLogout } = useLogout()
 
     const { mutate: openInExplorer, isPending: isOpening } = useOpenInExplorer()
 
@@ -148,10 +152,30 @@ export default function Page() {
         <>
             <CustomLibraryBanner discrete />
             <PageWrapper data-settings-page-container className="p-4 sm:p-8 space-y-4 relative">
-                {/*<Separator/>*/}
 
-
-                {/*<Card className="p-0 overflow-hidden">*/}
+                {currentProfile && (
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold">
+                                {currentProfile.name?.[0]?.toUpperCase()}
+                            </div>
+                            <div>
+                                <p className="text-lg font-semibold text-white">{currentProfile.name}</p>
+                                {currentUser && !currentUser.isSimulated && (
+                                    <p className="text-sm text-gray-400">AniList: {currentUser.viewer?.name}</p>
+                                )}
+                            </div>
+                        </div>
+                        {currentUser && !currentUser.isSimulated && (
+                            <button
+                                onClick={() => anilistLogout(undefined)}
+                                className="text-sm text-red-400 hover:text-red-300 px-3 py-1 rounded-lg border border-gray-700 hover:border-red-400/50 transition-colors"
+                            >
+                                Sign out of AniList
+                            </button>
+                        )}
+                    </div>
+                )}
                 <Tabs
                     value={tab}
                     onValueChange={setTab}
