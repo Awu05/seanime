@@ -39,12 +39,14 @@ type Account struct {
 
 type LocalFiles struct {
 	BaseModel
-	Value []byte `gorm:"column:value" json:"value"`
+	Value     []byte `gorm:"column:value" json:"value"`
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 }
 
 type ShelvedLocalFiles struct {
 	BaseModel
-	Value []byte `gorm:"column:value" json:"value"`
+	Value     []byte `gorm:"column:value" json:"value"`
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 }
 
 // +---------------------+
