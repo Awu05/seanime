@@ -21,8 +21,17 @@ import (
 //	@route /api/v1/settings [GET]
 //	@returns models.Settings
 func (h *Handler) HandleGetSettings(c echo.Context) error {
+	profileID := core.GetProfileIDFromContext(c)
 
-	settings, err := h.App.Database.GetSettings()
+	var settings *models.Settings
+	var err error
+
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.GetSettingsForProfile(profileID)
+	} else {
+		settings, err = h.App.Database.GetSettings()
+	}
+
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -218,11 +227,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		autoDownloaderSettings.Enabled = false
 	}
 
-	settings, err := h.App.Database.UpsertSettings(&models.Settings{
-		BaseModel: models.BaseModel{
-			ID:        1,
-			UpdatedAt: time.Now(),
-		},
+	newSettings := &models.Settings{
 		Library:        &b.Library,
 		MediaPlayer:    &b.MediaPlayer,
 		Torrent:        &b.Torrent,
@@ -232,7 +237,18 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		Notifications:  &b.Notifications,
 		Nakama:         &b.Nakama,
 		AutoDownloader: &autoDownloaderSettings,
-	})
+	}
+
+	var settings *models.Settings
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertSettingsForProfile(profileID, newSettings)
+	} else {
+		newSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		settings, err = h.App.Database.UpsertSettings(newSettings)
+	}
 
 	if err != nil {
 		return h.RespondWithError(c, err)

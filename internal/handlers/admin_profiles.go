@@ -45,6 +45,9 @@ func (h *Handler) HandleCreateProfile(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// Clone global settings for the new profile
+	_, _ = h.App.Database.CloneSettingsForProfile(created.ID)
+
 	return h.RespondWithData(c, created)
 }
 

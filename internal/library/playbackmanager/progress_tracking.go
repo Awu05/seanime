@@ -520,12 +520,7 @@ func (pm *PlaybackManager) getStreamPlaybackState(status *mediaplayer.PlaybackSt
 // This is called once when a "video complete" event is heard.
 func (pm *PlaybackManager) autoSyncCurrentProgress(_ps *PlaybackState) {
 
-	shouldUpdate, err := pm.Database.AutoUpdateProgressIsEnabled()
-	if err != nil {
-		pm.Logger.Error().Err(err).Msg("playback manager: Failed to check if auto update progress is enabled")
-		return
-	}
-
+	shouldUpdate := pm.Database.AutoUpdateProgressIsEnabled()
 	if !shouldUpdate {
 		return
 	}
@@ -556,7 +551,7 @@ func (pm *PlaybackManager) autoSyncCurrentProgress(_ps *PlaybackState) {
 
 	// Update the progress on AniList
 	pm.Logger.Debug().Msg("playback manager: Updating progress on AniList")
-	err = pm.updateProgress()
+	err := pm.updateProgress()
 
 	if err != nil {
 		_ps.ProgressUpdated = false

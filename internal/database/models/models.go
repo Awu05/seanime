@@ -55,6 +55,7 @@ type ShelvedLocalFiles struct {
 
 type Settings struct {
 	BaseModel
+	ProfileID      string                  `gorm:"column:profile_id;index" json:"profileId"`
 	Library        *LibrarySettings        `gorm:"embedded" json:"library"`
 	MediaPlayer    *MediaPlayerSettings    `gorm:"embedded" json:"mediaPlayer"`
 	Torrent        *TorrentSettings        `gorm:"embedded" json:"torrent"`

@@ -911,6 +911,9 @@ func (a *App) bootstrapAdminFromEnv(username, password, accessCode string) {
 		return
 	}
 
+	// Clone global settings for the admin profile
+	_, _ = a.Database.CloneSettingsForProfile(profile.ID)
+
 	if accessCode != "" {
 		codeHash, err := bcrypt.GenerateFromPassword([]byte(accessCode), bcrypt.DefaultCost)
 		if err == nil {
@@ -928,12 +931,14 @@ func (a *App) ensureDefaultProfile() {
 	if count > 0 {
 		return
 	}
-	_, err := a.Database.CreateProfile(&models.Profile{
+	profile, err := a.Database.CreateProfile(&models.Profile{
 		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
 		Name:          "Default",
 		IsAdmin:       true,
 	})
 	if err != nil {
 		a.Logger.Error().Err(err).Msg("app: Failed to create default profile")
+		return
 	}
+	_, _ = a.Database.CloneSettingsForProfile(profile.ID)
 }

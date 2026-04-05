@@ -63,6 +63,9 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// Clone global settings for the admin profile
+	_, _ = h.App.Database.CloneSettingsForProfile(profile.ID)
+
 	if b.AccessCode != "" {
 		accessCodeHash, err := bcrypt.GenerateFromPassword([]byte(b.AccessCode), bcrypt.DefaultCost)
 		if err != nil {
@@ -260,6 +263,9 @@ func (h *Handler) HandleSelfCreateProfile(c echo.Context) error {
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
+
+	// Clone global settings for the new profile
+	_, _ = h.App.Database.CloneSettingsForProfile(profile.ID)
 
 	return h.RespondWithData(c, profile)
 }
