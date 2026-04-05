@@ -63,13 +63,23 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 	//var mal *models.Mal
 
 	// Get the user from the database (if logged in)
-	if dbAcc, _ = h.App.Database.GetAccount(); dbAcc != nil {
+	// In multi-user mode, load the profile-specific AniList account
+	profileID := core.GetProfileIDFromContext(c)
+	if h.App.MultiUserEnabled && profileID != "" {
+		if profileAcc, err := h.App.Database.GetAccountByProfileID(profileID); err == nil && profileAcc != nil {
+			currentUser, _ = user.NewUser(profileAcc)
+			if currentUser != nil {
+				currentUser.Token = "HIDDEN"
+			}
+		} else {
+			currentUser = user.NewSimulatedUser()
+		}
+	} else if dbAcc, _ = h.App.Database.GetAccount(); dbAcc != nil {
 		currentUser, _ = user.NewUser(dbAcc)
 		if currentUser != nil {
 			currentUser.Token = "HIDDEN"
 		}
 	} else {
-		// If the user is not logged in, create a simulated user
 		currentUser = user.NewSimulatedUser()
 	}
 
