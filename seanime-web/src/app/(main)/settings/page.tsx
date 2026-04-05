@@ -36,7 +36,7 @@ import { DEFAULT_TORRENT_CLIENT, DEFAULT_TORRENT_PROVIDER, settingsSchema, TORRE
 import { __isElectronDesktop__ } from "@/types/constants"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSetAtom } from "jotai"
-import { useAtom } from "jotai/react"
+import { useAtom, useAtomValue } from "jotai/react"
 import capitalize from "lodash/capitalize"
 import React from "react"
 import { UseFormReturn } from "react-hook-form"
@@ -70,6 +70,7 @@ import { DenshiSettings } from "./_containers/denshi-settings"
 import { DiscordRichPresenceSettings } from "./_containers/discord-rich-presence-settings"
 import { LocalSettings } from "./_containers/local-settings"
 import { NakamaSettings } from "./_containers/nakama-settings"
+import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { ProfileManagementSettings } from "./_containers/profile-management-settings"
 
 const tabContentClass = cn(
@@ -94,6 +95,9 @@ export default function Page() {
     const { data: torrentProviderExtensions } = useAnimeListTorrentProviderExtensions()
 
     const { data: torrentstreamSettings } = useGetTorrentstreamSettings()
+
+    const currentProfile = useAtomValue(currentProfileAtom)
+    const isAdmin = currentProfile?.isAdmin ?? false
 
     const { mutate: openInExplorer, isPending: isOpening } = useOpenInExplorer()
 
@@ -187,10 +191,12 @@ export default function Page() {
                                         value="seanime"
                                         className="group"
                                     ><LuWandSparkles className="text-xl mr-3 transition-transform duration-200" /> App</TabsTrigger>
+                                    {isAdmin && (
                                     <TabsTrigger
                                         value="profiles"
                                         className="group"
                                     ><LuUsers className="text-xl mr-3 transition-transform duration-200" /> Profiles</TabsTrigger>
+                                    )}
                                     {/* <TabsTrigger
                                      value="local"
                                      className="group"
@@ -966,6 +972,7 @@ export default function Page() {
 
                         </TabsContent>
 
+                        {isAdmin && (
                         <TabsContent value="profiles" className={tabContentClass}>
 
                             <SettingsPageHeader
@@ -977,6 +984,7 @@ export default function Page() {
                             <ProfileManagementSettings />
 
                         </TabsContent>
+                        )}
                     </div>
                 </Tabs>
                 {/*</Card>*/}
