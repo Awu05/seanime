@@ -376,6 +376,11 @@ export const API_ENDPOINTS = {
             methods: ["POST"],
             endpoint: "/api/v1/admin/access-code",
         },
+        DeleteProfile: {
+            key: "AUTH-delete-profile",
+            methods: ["DELETE"],
+            endpoint: "/api/v1/admin/profiles",
+        },
     },
     AUTO_DOWNLOADER: {
         /**
