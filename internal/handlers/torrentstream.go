@@ -108,7 +108,9 @@ func (h *Handler) HandleGetTorrentstreamTorrentFilePreviews(c echo.Context) erro
 		absoluteOffset = animeMetadata.GetOffset()
 	}
 
-	files, err := h.App.TorrentstreamRepository.GetTorrentFilePreviewsFromManualSelection(&torrentstream.GetTorrentFilePreviewsOptions{
+	session := h.getStreamSession(c)
+
+	files, err := session.TorrentStream.GetTorrentFilePreviewsFromManualSelection(&torrentstream.GetTorrentFilePreviewsOptions{
 		Torrent:        b.Torrent,
 		Magnet:         magnet,
 		EpisodeNumber:  b.EpisodeNumber,
@@ -164,13 +166,15 @@ func (h *Handler) HandleTorrentstreamStartStream(c echo.Context) error {
 		BatchEpisodeFiles: b.BatchEpisodeFiles,
 	}
 
+	session := h.getStreamSession(c)
+
 	if !b.Preload {
-		err := h.App.TorrentstreamRepository.StartStream(c.Request().Context(), opts)
+		err := session.TorrentStream.StartStream(c.Request().Context(), opts)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
 	} else {
-		err := h.App.TorrentstreamRepository.PreloadStream(c.Request().Context(), opts)
+		err := session.TorrentStream.PreloadStream(c.Request().Context(), opts)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -187,8 +191,9 @@ func (h *Handler) HandleTorrentstreamStartStream(c echo.Context) error {
 //	@returns bool
 //	@route /api/v1/torrentstream/stop [POST]
 func (h *Handler) HandleTorrentstreamStopStream(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.TorrentstreamRepository.StopStream()
+	err := session.TorrentStream.StopStream()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -204,8 +209,9 @@ func (h *Handler) HandleTorrentstreamStopStream(c echo.Context) error {
 //	@returns bool
 //	@route /api/v1/torrentstream/drop [POST]
 func (h *Handler) HandleTorrentstreamDropTorrent(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.TorrentstreamRepository.DropTorrent()
+	err := session.TorrentStream.DropTorrent()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -228,12 +234,15 @@ func (h *Handler) HandleGetTorrentstreamBatchHistory(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	ret := h.App.TorrentstreamRepository.GetBatchHistory(b.MediaID)
+	session := h.getStreamSession(c)
+
+	ret := session.TorrentStream.GetBatchHistory(b.MediaID)
 	return h.RespondWithData(c, ret)
 }
 
 // route /api/v1/torrentstream/stream/*
 func (h *Handler) HandleTorrentstreamServeStream(c echo.Context) error {
-	h.App.TorrentstreamRepository.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
+	session := h.getStreamSession(c)
+	session.TorrentStream.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
 	return nil
 }

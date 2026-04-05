@@ -13,7 +13,9 @@ func (h *Handler) getAnimeEpisodeCollection(c echo.Context, mId int) (*anime.Epi
 		anime.ClearEpisodeCollectionCache()
 	})
 
-	completeAnime, animeMetadata, err := h.App.TorrentstreamRepository.GetMediaInfo(c.Request().Context(), mId)
+	session := h.getStreamSession(c)
+
+	completeAnime, animeMetadata, err := session.TorrentStream.GetMediaInfo(c.Request().Context(), mId)
 	if err != nil {
 		return nil, err
 	}

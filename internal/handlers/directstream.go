@@ -32,7 +32,9 @@ func (h *Handler) HandleDirectstreamPlayLocalFile(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	return h.App.DirectStreamManager.PlayLocalFile(c.Request().Context(), directstream.PlayLocalFileOptions{
+	session := h.getStreamSession(c)
+
+	return session.DirectStreamManager.PlayLocalFile(c.Request().Context(), directstream.PlayLocalFileOptions{
 		ClientId:   b.ClientId,
 		Path:       b.Path,
 		LocalFiles: lfs,
@@ -72,9 +74,11 @@ func (h *Handler) HandleDirectstreamConvertSubs(c echo.Context) error {
 		to = mkvparser.SubtitleTypeWEBVTT
 	}
 
+	session := h.getStreamSession(c)
+
 	if len(b.Content) > 0 {
 		// Convert from content
-		ret, err := h.App.VideoCore.ConvertSubsTo(b.Content, mkvparser.SubtitleTypeUnknown, to)
+		ret, err := session.VideoCore.ConvertSubsTo(b.Content, mkvparser.SubtitleTypeUnknown, to)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -82,7 +86,7 @@ func (h *Handler) HandleDirectstreamConvertSubs(c echo.Context) error {
 	}
 
 	// Convert from url
-	ret, err := h.App.VideoCore.FetchAndConvertSubsTo(b.Url, to)
+	ret, err := session.VideoCore.FetchAndConvertSubsTo(b.Url, to)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -95,5 +99,6 @@ func (h *Handler) HandleDirectstreamGetStream() http.Handler {
 }
 
 func (h *Handler) HandleDirectstreamGetAttachments(c echo.Context) error {
-	return h.App.DirectStreamManager.ServeEchoAttachments(c)
+	session := h.getStreamSession(c)
+	return session.DirectStreamManager.ServeEchoAttachments(c)
 }

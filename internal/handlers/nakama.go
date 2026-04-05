@@ -304,7 +304,8 @@ func (h *Handler) HandleNakamaPlayVideo(c echo.Context) error {
 // route /api/v1/nakama/host/torrentstream/stream
 // Allows peers to stream the currently playing torrent.
 func (h *Handler) HandleNakamaHostTorrentstreamServeStream(c echo.Context) error {
-	h.App.TorrentstreamRepository.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
+	session := h.getStreamSession(c)
+	session.TorrentStream.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
 	return nil
 }
 
