@@ -1,13 +1,23 @@
 package core
 
 import (
+	"seanime/internal/directstream"
+	"seanime/internal/library/playbackmanager"
+	"seanime/internal/nativeplayer"
+	"seanime/internal/torrentstream"
+	"seanime/internal/videocore"
 	"sync"
 	"time"
 )
 
 type ProfileStreamSession struct {
-	ProfileID  string
-	LastActive time.Time
+	ProfileID           string
+	LastActive          time.Time
+	VideoCore           *videocore.VideoCore
+	NativePlayer        *nativeplayer.NativePlayer
+	PlaybackManager     *playbackmanager.PlaybackManager
+	DirectStreamManager *directstream.Manager
+	TorrentStream       *torrentstream.Repository
 }
 
 type StreamSessionManager struct {
@@ -29,7 +39,7 @@ func NewStreamSessionManager(inactivityTimeout time.Duration) *StreamSessionMana
 	return sm
 }
 
-func (sm *StreamSessionManager) GetOrCreateSession(profileID string) *ProfileStreamSession {
+func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory func(string) *ProfileStreamSession) *ProfileStreamSession {
 	if profileID == "" {
 		profileID = "_default"
 	}
@@ -38,10 +48,7 @@ func (sm *StreamSessionManager) GetOrCreateSession(profileID string) *ProfileStr
 
 	session, exists := sm.sessions[profileID]
 	if !exists {
-		session = &ProfileStreamSession{
-			ProfileID:  profileID,
-			LastActive: time.Now(),
-		}
+		session = factory(profileID)
 		sm.sessions[profileID] = session
 	} else {
 		session.LastActive = time.Now()
