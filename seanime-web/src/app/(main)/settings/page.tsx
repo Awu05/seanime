@@ -55,6 +55,7 @@ import {
     LuMonitorPlay,
     LuPalette,
     LuTabletSmartphone,
+    LuUsers,
     LuWandSparkles,
 } from "react-icons/lu"
 import { LuRefreshCw } from "react-icons/lu"
@@ -69,6 +70,7 @@ import { DenshiSettings } from "./_containers/denshi-settings"
 import { DiscordRichPresenceSettings } from "./_containers/discord-rich-presence-settings"
 import { LocalSettings } from "./_containers/local-settings"
 import { NakamaSettings } from "./_containers/nakama-settings"
+import { ProfileManagementSettings } from "./_containers/profile-management-settings"
 
 const tabContentClass = cn(
     "space-y-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300",
@@ -185,6 +187,10 @@ export default function Page() {
                                         value="seanime"
                                         className="group"
                                     ><LuWandSparkles className="text-xl mr-3 transition-transform duration-200" /> App</TabsTrigger>
+                                    <TabsTrigger
+                                        value="profiles"
+                                        className="group"
+                                    ><LuUsers className="text-xl mr-3 transition-transform duration-200" /> Profiles</TabsTrigger>
                                     {/* <TabsTrigger
                                      value="local"
                                      className="group"
@@ -957,6 +963,18 @@ export default function Page() {
                         <TabsContent value="debrid" className={tabContentClass}>
 
                             <DebridSettings />
+
+                        </TabsContent>
+
+                        <TabsContent value="profiles" className={tabContentClass}>
+
+                            <SettingsPageHeader
+                                title="Profiles"
+                                description="Manage user profiles and instance access"
+                                icon={LuUsers}
+                            />
+
+                            <ProfileManagementSettings />
 
                         </TabsContent>
                     </div>
