@@ -28,10 +28,11 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/components/ui/core/styling"
-import { Field, Form } from "@/components/ui/form"
+import { defineSchema, Field, Form } from "@/components/ui/form"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter, useSearchParams } from "@/lib/navigation"
+import { ANILIST_PIN_URL } from "@/lib/server/config"
 import { DEFAULT_TORRENT_CLIENT, DEFAULT_TORRENT_PROVIDER, settingsSchema, TORRENT_PROVIDER } from "@/lib/server/settings"
 import { __isElectronDesktop__ } from "@/types/constants"
 import { useQueryClient } from "@tanstack/react-query"
@@ -686,19 +687,32 @@ export default function Page() {
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center justify-between">
-                                                    <p className="text-sm text-gray-400">No AniList account linked</p>
-                                                    <button
-                                                        onClick={() => {
-                                                            const url = status?.anilistClientId
-                                                                ? `https://anilist.co/api/v2/oauth/authorize?client_id=${status.anilistClientId}&response_type=token`
-                                                                : "https://anilist.co/api/v2/oauth/authorize?client_id=21622&response_type=token"
-                                                            window.open(url, "_self")
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-sm text-gray-400">No AniList account linked</p>
+                                                        <a
+                                                            href={ANILIST_PIN_URL}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-sm text-brand-400 hover:text-brand-300 px-3 py-1.5 rounded-lg border border-gray-700 hover:border-brand-400/50 transition-colors"
+                                                        >
+                                                            Get AniList Token
+                                                        </a>
+                                                    </div>
+                                                    <Form
+                                                        schema={defineSchema(({ z }) => z.object({
+                                                            token: z.string().min(1, "Token is required"),
+                                                        }))}
+                                                        onSubmit={data => {
+                                                            router.push("/auth/callback#access_token=" + data.token.trim())
                                                         }}
-                                                        className="text-sm text-brand-400 hover:text-brand-300 px-3 py-1.5 rounded-lg border border-gray-700 hover:border-brand-400/50 transition-colors"
                                                     >
-                                                        Connect AniList
-                                                    </button>
+                                                        <Field.Textarea
+                                                            name="token"
+                                                            label="Paste your AniList token"
+                                                        />
+                                                        <Field.Submit showLoadingOverlayOnSuccess>Connect</Field.Submit>
+                                                    </Form>
                                                 </div>
                                             )}
                                         </SettingsCard>
