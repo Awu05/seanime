@@ -131,6 +131,27 @@ func (r *Repository) IsEnabled() bool {
 	return r.settings.IsPresent() && r.settings.MustGet().Enabled && r.client != nil
 }
 
+// GetClient returns the underlying torrent client wrapper.
+func (r *Repository) GetClient() *Client {
+	return r.client
+}
+
+// SetSettings sets the torrentstream settings without initializing the torrent client.
+// Used by per-session repositories that share the anacrolix engine.
+func (r *Repository) SetSettings(settings *models.TorrentstreamSettings, host string, port int) {
+	if settings != nil {
+		s := *settings
+		if s.DownloadDir == "" {
+			s.DownloadDir = r.getDefaultDownloadPath()
+		}
+		r.settings = mo.Some(Settings{
+			TorrentstreamSettings: s,
+			Host:                  host,
+			Port:                  port,
+		})
+	}
+}
+
 func (r *Repository) GetPreviousStreamOptions() (*StartStreamOptions, bool) {
 	return r.previousStreamOptions.OrElse(nil), r.previousStreamOptions.IsPresent()
 }

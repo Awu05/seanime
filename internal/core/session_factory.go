@@ -1,15 +1,19 @@
 package core
 
 import (
+	"seanime/internal/api/anilist"
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/nativeplayer"
+	"seanime/internal/torrentstream"
 	"seanime/internal/videocore"
 	"time"
 )
 
 // CreateStreamSession creates a new ProfileStreamSession with all streaming components initialized.
-// This mirrors the initialization in initModulesOnce but creates per-profile instances.
+// Each session gets its own per-profile instances. The TorrentstreamRepository gets its own Client
+// wrapper (with its own currentTorrent/currentFile tracking) but shares the single anacrolix
+// torrent engine from the App's singleton.
 func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	// Create VideoCore
 	vc := videocore.New(videocore.NewVideoCoreOptions{
@@ -70,9 +74,43 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		},
 	})
 
-	// Use the App's singleton TorrentstreamRepository — the torrent engine binds to a single
-	// port and cannot be duplicated per session. Per-profile isolation happens at the
-	// playback/tracking level (PlaybackManager, DirectStreamManager) not the torrent client.
+	// Create per-session TorrentstreamRepository with its own Client wrapper,
+	// but sharing the anacrolix torrent engine from the App's singleton.
+	tsr := torrentstream.NewRepository(&torrentstream.NewRepositoryOptions{
+		Logger:              a.Logger,
+		BaseAnimeCache:      anilist.NewBaseAnimeCache(),
+		CompleteAnimeCache:  anilist.NewCompleteAnimeCache(),
+		MetadataProviderRef: a.MetadataProviderRef,
+		TorrentRepository:   a.TorrentRepository,
+		PlatformRef:         a.AnilistPlatformRef,
+		PlaybackManager:     pm,
+		WSEventManager:      a.WSEventManager,
+		Database:            a.Database,
+		DirectStreamManager: dsm,
+		NativePlayer:        np,
+	})
+
+	// Share the anacrolix engine from the App's singleton instead of creating a new one.
+	// This avoids port conflicts while giving each session its own state tracking.
+	if a.TorrentstreamRepository != nil {
+		appClient := a.TorrentstreamRepository.GetClient()
+		if appClient != nil {
+			if tc := appClient.GetTorrentClient(); tc.IsPresent() {
+				tsr.GetClient().UseSharedTorrentClient(tc.MustGet())
+			}
+		}
+	}
+
+	// Copy settings from App singleton
+	if a.SecondarySettings.Torrentstream != nil {
+		tsr.SetSettings(a.SecondarySettings.Torrentstream, a.Config.Server.Host, a.Config.Server.Port)
+	}
+
+	// Set media player repository if available
+	if a.MediaPlayerRepository != nil {
+		tsr.SetMediaPlayerRepository(a.MediaPlayerRepository)
+	}
+
 	return &ProfileStreamSession{
 		ProfileID:           profileID,
 		LastActive:          time.Now(),
@@ -80,6 +118,6 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		NativePlayer:        np,
 		PlaybackManager:     pm,
 		DirectStreamManager: dsm,
-		TorrentStream:       a.TorrentstreamRepository,
+		TorrentStream:       tsr,
 	}
 }
