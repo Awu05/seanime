@@ -154,26 +154,13 @@ export default function Page() {
             <PageWrapper data-settings-page-container className="p-4 sm:p-8 space-y-4 relative">
 
                 {currentProfile && (
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold">
-                                {currentProfile.name?.[0]?.toUpperCase()}
-                            </div>
-                            <div>
-                                <p className="text-lg font-semibold text-white">{currentProfile.name}</p>
-                                {currentUser && !currentUser.isSimulated && (
-                                    <p className="text-sm text-gray-400">AniList: {currentUser.viewer?.name}</p>
-                                )}
-                            </div>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold">
+                            {currentProfile.name?.[0]?.toUpperCase()}
                         </div>
-                        {currentUser && !currentUser.isSimulated && (
-                            <button
-                                onClick={() => anilistLogout(undefined)}
-                                className="text-sm text-red-400 hover:text-red-300 px-3 py-1 rounded-lg border border-gray-700 hover:border-red-400/50 transition-colors"
-                            >
-                                Sign out of AniList
-                            </button>
-                        )}
+                        <div>
+                            <p className="text-lg font-semibold text-white">{currentProfile.name}</p>
+                        </div>
                     </div>
                 )}
                 <Tabs
@@ -292,6 +279,10 @@ export default function Page() {
                                 {/*</div>*/}
 
                                 <Card className="lg:p-2 contents lg:block border-0 bg-transparent lg:border lg:bg-gray-950/80">
+                                    <TabsTrigger
+                                        value="anime-tracker"
+                                        className="group"
+                                    ><LuCircleArrowOutUpRight className="text-xl mr-3 transition-transform duration-200" /> Anime Tracker</TabsTrigger>
                                     <TabsTrigger
                                         value="onlinestream"
                                         className="group"
@@ -662,6 +653,59 @@ export default function Page() {
                                     <TabsContent value="manga" className={tabContentClass}>
 
                                         <MangaSettings isPending={isPending} />
+
+                                    </TabsContent>
+
+                                    <TabsContent value="anime-tracker" className={tabContentClass}>
+
+                                        <SettingsPageHeader
+                                            title="Anime Tracker"
+                                            description="Link and manage your anime tracking accounts"
+                                            icon={LuCircleArrowOutUpRight}
+                                        />
+
+                                        <SettingsCard title="AniList">
+                                            {currentUser && !currentUser.isSimulated ? (
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <img
+                                                            src={currentUser.viewer?.avatar?.medium || ""}
+                                                            alt=""
+                                                            className="w-10 h-10 rounded-full"
+                                                        />
+                                                        <div>
+                                                            <p className="font-medium text-white">{currentUser.viewer?.name}</p>
+                                                            <p className="text-xs text-gray-400">Connected</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => anilistLogout(undefined)}
+                                                        className="text-sm text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg border border-gray-700 hover:border-red-400/50 transition-colors"
+                                                    >
+                                                        Disconnect
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-sm text-gray-400">No AniList account linked</p>
+                                                    <button
+                                                        onClick={() => {
+                                                            const url = status?.anilistClientId
+                                                                ? `https://anilist.co/api/v2/oauth/authorize?client_id=${status.anilistClientId}&response_type=token`
+                                                                : "https://anilist.co/api/v2/oauth/authorize?client_id=21622&response_type=token"
+                                                            window.open(url, "_self")
+                                                        }}
+                                                        className="text-sm text-brand-400 hover:text-brand-300 px-3 py-1.5 rounded-lg border border-gray-700 hover:border-brand-400/50 transition-colors"
+                                                    >
+                                                        Connect AniList
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </SettingsCard>
+
+                                        <SettingsCard title="MyAnimeList" description="Coming soon">
+                                            <p className="text-sm text-gray-500">MyAnimeList integration is planned for a future update.</p>
+                                        </SettingsCard>
 
                                     </TabsContent>
 
