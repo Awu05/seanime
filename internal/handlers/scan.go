@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
@@ -80,7 +81,7 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 	}
 	defer scanLogger.Done()
 
-	ac, _ := h.App.GetAnimeCollection(false)
+	ac, _ := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 
 	// Create a new scanner
 	sc := scanner.Scanner{
@@ -133,7 +134,8 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 
 	go h.App.AutoDownloader.CleanUpDownloadedItems()
 
-	go h.App.RefreshAnimeCollection()
+	plat := h.getAnilistPlatform(c)
+	go plat.RefreshAnimeCollection(context.Background())
 
 	return h.RespondWithData(c, lfs)
 

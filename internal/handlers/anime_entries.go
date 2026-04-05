@@ -57,7 +57,7 @@ func (h *Handler) getAnimeEntry(c echo.Context, lfs []*anime.LocalFile, mId int)
 	}
 
 	// Get the user's anilist collection
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -493,7 +493,7 @@ func (h *Handler) HandleGetMissingEpisodes(c echo.Context) error {
 	// Get the user's anilist collection
 	// Do not bypass the cache, since this handler might be called multiple times, and we don't want to spam the API
 	// A cron job will refresh the cache every 10 minutes
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -546,7 +546,7 @@ func (h *Handler) HandleGetUpcomingEpisodes(c echo.Context) error {
 	}
 
 	// Get the user's anilist collection
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -668,7 +668,7 @@ func (h *Handler) HandleUpdateAnimeEntryProgress(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	_, _ = h.App.RefreshAnimeCollection() // Refresh the AniList collection
+	_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context()) // Refresh the AniList collection
 
 	return h.RespondWithData(c, true)
 }

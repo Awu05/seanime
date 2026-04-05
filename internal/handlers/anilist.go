@@ -23,24 +23,18 @@ import (
 func (h *Handler) HandleGetAnimeCollection(c echo.Context) error {
 
 	bypassCache := c.Request().Method == "POST"
+	plat := h.getAnilistPlatform(c)
 
-	if !bypassCache {
-		// Get the user's anilist collection
-		animeCollection, err := h.App.GetAnimeCollection(false)
-		if err != nil {
-			return h.RespondWithError(c, err)
-		}
-		return h.RespondWithData(c, animeCollection)
-	}
-
-	animeCollection, err := h.App.RefreshAnimeCollection()
+	animeCollection, err := plat.GetAnimeCollection(c.Request().Context(), bypassCache)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	go func() {
-		_, _ = h.App.RefreshMangaCollection()
-	}()
+	if bypassCache {
+		go func() {
+			_, _ = plat.RefreshMangaCollection(c.Request().Context())
+		}()
+	}
 
 	return h.RespondWithData(c, animeCollection)
 }
@@ -56,7 +50,8 @@ func (h *Handler) HandleGetRawAnimeCollection(c echo.Context) error {
 	bypassCache := c.Request().Method == "POST"
 
 	// Get the user's anilist collection
-	animeCollection, err := h.App.GetRawAnimeCollection(bypassCache)
+	plat := h.getAnilistPlatform(c)
+	animeCollection, err := plat.GetRawAnimeCollection(c.Request().Context(), bypassCache)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -104,12 +99,12 @@ func (h *Handler) HandleEditAnilistListEntry(c echo.Context) error {
 
 	switch p.Type {
 	case "anime":
-		_, _ = h.App.RefreshAnimeCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context())
 	case "manga":
-		_, _ = h.App.RefreshMangaCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshMangaCollection(c.Request().Context())
 	default:
-		_, _ = h.App.RefreshAnimeCollection()
-		_, _ = h.App.RefreshMangaCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context())
+		_, _ = h.getAnilistPlatform(c).RefreshMangaCollection(c.Request().Context())
 	}
 
 	return h.RespondWithData(c, true)
@@ -213,7 +208,7 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 	switch *p.Type {
 	case "anime":
 		// Get the list entry ID
-		animeCollection, err := h.App.GetAnimeCollection(false)
+		animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -225,7 +220,7 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 		listEntryID = listEntry.ID
 	case "manga":
 		// Get the list entry ID
-		mangaCollection, err := h.App.GetMangaCollection(false)
+		mangaCollection, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -245,9 +240,9 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 
 	switch *p.Type {
 	case "anime":
-		_, _ = h.App.RefreshAnimeCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context())
 	case "manga":
-		_, _ = h.App.RefreshMangaCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshMangaCollection(c.Request().Context())
 	}
 
 	return h.RespondWithData(c, true)

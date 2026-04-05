@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -278,11 +279,12 @@ func (h *Handler) HandleTorrentClientDownload(c echo.Context) error {
 	}
 
 	// Add the media to the collection (if it wasn't already)
+	plat := h.getAnilistPlatform(c)
 	go func() {
 		defer util.HandlePanicInModuleThen("handlers/HandleTorrentClientDownload", func() {})
 		if b.Media != nil {
 			// Check if the media is already in the collection
-			animeCollection, err := h.App.GetAnimeCollection(false)
+			animeCollection, err := plat.GetAnimeCollection(context.Background(), false)
 			if err != nil {
 				return
 			}
@@ -291,11 +293,11 @@ func (h *Handler) HandleTorrentClientDownload(c echo.Context) error {
 				return
 			}
 			// Add the media to the collection
-			err = h.getAnilistPlatform(c).AddMediaToCollection(c.Request().Context(), []int{b.Media.ID})
+			err = plat.AddMediaToCollection(context.Background(), []int{b.Media.ID})
 			if err != nil {
 				h.App.Logger.Error().Err(err).Msg("anilist: Failed to add media to collection")
 			}
-			_, _ = h.App.RefreshAnimeCollection()
+			_, _ = plat.RefreshAnimeCollection(context.Background())
 		}
 	}()
 
