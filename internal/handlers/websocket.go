@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"seanime/internal/core"
 	"seanime/internal/events"
 
 	"github.com/goccy/go-json"
@@ -39,9 +40,22 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 		id = "0"
 	}
 
+	// Extract profile from auth token
+	profileID := ""
+	authToken := c.QueryParam("auth_token")
+	if authToken == "" {
+		authToken = c.QueryParam("token")
+	}
+	if authToken != "" && h.App.JWTSecret != "" {
+		claims, err := core.ParseToken(h.App.JWTSecret, authToken)
+		if err == nil {
+			profileID = claims.ProfileID
+		}
+	}
+
 	// Add connection to manager
-	h.App.WSEventManager.AddConn(id, "", ws)
-	h.App.Logger.Debug().Str("id", id).Msg("ws: Client connected")
+	h.App.WSEventManager.AddConn(id, profileID, ws)
+	h.App.Logger.Debug().Str("id", id).Str("profileID", profileID).Msg("ws: Client connected")
 
 	for {
 		_, msg, err := ws.ReadMessage()
