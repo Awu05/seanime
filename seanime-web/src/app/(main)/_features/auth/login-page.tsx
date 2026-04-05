@@ -23,8 +23,8 @@ export function LoginPage() {
     return (
         <div className="space-y-6">
             <div className="text-center">
-                <h1 className="text-2xl font-bold text-white">Admin Login</h1>
-                <p className="text-gray-400 mt-2">Sign in to manage your seanime instance</p>
+                <h1 className="text-2xl font-bold text-white">Login</h1>
+                <p className="text-gray-400 mt-2">Sign in to your seanime instance</p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
