@@ -45,7 +45,7 @@ export function ProfileOverrideSettings() {
     React.useEffect(() => {
         if (data?.overrides) {
             try {
-                setOverrides(JSON.parse(data.overrides))
+                setOverrides(JSON.parse(data.overrides) as OverridableSettings)
             } catch {
                 setOverrides({})
             }
@@ -60,7 +60,7 @@ export function ProfileOverrideSettings() {
             if (key in next) {
                 delete next[key]
             } else {
-                next[key] = false
+                (next as any)[key] = false
             }
             return next
         })
