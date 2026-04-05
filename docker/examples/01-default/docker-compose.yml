@@ -1,0 +1,23 @@
+services:
+  seanime:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      target: base
+    container_name: seanime
+    environment:
+      - QBIT_WEBUI_PORT=8081
+      - QBIT_USERNAME=admin
+      - QBIT_PASSWORD=adminadmin
+      # Multi-user settings (uncomment to enable)
+      # - SEANIME_ADMIN_USERNAME=admin
+      # - SEANIME_ADMIN_PASSWORD=changeme
+      # - SEANIME_INSTANCE_ACCESS_CODE=secret
+    ports:
+      - "3211:43211"
+      - "8081:8081" # qBittorrent WebUI
+    volumes:
+      - ./config:/root/.config
+      - ./anime:/anime
+      - ./downloads:/downloads
+    restart: unless-stopped

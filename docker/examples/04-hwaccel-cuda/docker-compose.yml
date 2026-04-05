@@ -1,0 +1,37 @@
+services:
+  seanime:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile.cuda
+    container_name: seanime
+    # Option 1: Using runtime (recommended)
+    runtime: nvidia
+    group_add:
+      - video
+    environment:
+      - QBIT_WEBUI_PORT=8081
+      - QBIT_USERNAME=admin
+      - QBIT_PASSWORD=adminadmin
+      - NVIDIA_VISIBLE_DEVICES=all # or '0' for first GPU
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      # Multi-user settings (uncomment to enable)
+      # - SEANIME_ADMIN_USERNAME=admin
+      # - SEANIME_ADMIN_PASSWORD=changeme
+      # - SEANIME_INSTANCE_ACCESS_CODE=secret
+    ports:
+      - "3211:43211"
+      - "8081:8081" # qBittorrent WebUI
+    volumes:
+      - ./config:/home/seanime/.config
+      - ./anime:/anime
+      - ./downloads:/downloads
+    restart: unless-stopped
+
+    # Option 2: Using deploy resources (alternative)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
