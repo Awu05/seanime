@@ -164,6 +164,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/admin/profiles/delete", h.HandleDeleteProfile)
 	v1.POST("/admin/access-code", h.HandleSetAccessCode)
 	v1.POST("/profiles/:id/pin", h.HandleUpdateProfilePin)
+	v1.POST("/profiles/:id/name", h.HandleUpdateProfileName)
 
 	// Profile settings
 	v1.GET("/profile-settings", h.HandleGetProfileSettings)

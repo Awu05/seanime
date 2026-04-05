@@ -1,11 +1,12 @@
 import { useGetProfileSettings, useSaveProfileSettings } from "@/api/hooks/auth.hooks"
+import { buildSeaQuery } from "@/api/client/requests"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { SettingsCard } from "@/app/(main)/settings/_components/settings-card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { useQueryClient } from "@tanstack/react-query"
-import { useAtomValue } from "jotai"
+import { useAtom } from "jotai"
 import React from "react"
 import { toast } from "sonner"
 
@@ -35,12 +36,35 @@ const BOOL_FIELDS: { key: keyof OverridableSettings; label: string }[] = [
 ]
 
 export function ProfileOverrideSettings() {
-    const profile = useAtomValue(currentProfileAtom)
+    const [profile, setProfile] = useAtom(currentProfileAtom)
     const qc = useQueryClient()
     const { data } = useGetProfileSettings()
     const { mutate: save, isPending } = useSaveProfileSettings()
 
     const [overrides, setOverrides] = React.useState<OverridableSettings>({})
+    const [profileName, setProfileName] = React.useState("")
+    const [isSavingName, setIsSavingName] = React.useState(false)
+
+    React.useEffect(() => {
+        if (profile?.name) setProfileName(profile.name)
+    }, [profile?.name])
+
+    function handleSaveName(e: React.FormEvent) {
+        e.preventDefault()
+        if (!profile || !profileName.trim() || isSavingName) return
+        setIsSavingName(true)
+        buildSeaQuery({
+            endpoint: `/api/v1/profiles/${profile.id}/name`,
+            method: "POST",
+            data: { name: profileName.trim() },
+        })
+            .then(() => {
+                setProfile({ ...profile, name: profileName.trim() })
+                toast.success("Profile name updated")
+            })
+            .catch(() => toast.error("Failed to update name"))
+            .finally(() => setIsSavingName(false))
+    }
 
     React.useEffect(() => {
         if (data?.overrides) {
@@ -82,6 +106,29 @@ export function ProfileOverrideSettings() {
 
     return (
         <div className="space-y-4">
+            <SettingsCard title="Profile">
+                <form onSubmit={handleSaveName} className="flex gap-2 items-end">
+                    <div className="flex-1">
+                        <label className="block text-sm text-gray-300 mb-1">Display Name</label>
+                        <input
+                            type="text"
+                            value={profileName}
+                            onChange={e => setProfileName(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                            required
+                        />
+                    </div>
+                    <Button
+                        type="submit"
+                        loading={isSavingName}
+                        disabled={!profileName.trim() || profileName.trim() === profile?.name}
+                        intent="primary-subtle"
+                    >
+                        Save
+                    </Button>
+                </form>
+            </SettingsCard>
+
             <SettingsCard
                 title="Personal Overrides"
                 description="Override global settings for your profile. Unset fields use the admin's defaults."

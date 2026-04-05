@@ -153,3 +153,45 @@ func (h *Handler) HandleUpdateProfilePin(c echo.Context) error {
 
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
 }
+
+// HandleUpdateProfileName
+//
+//	@summary updates a profile's display name.
+//	@desc Profile owner or admin can update.
+//	@route /api/v1/profiles/:id/name [POST]
+//	@returns map[string]interface{}
+func (h *Handler) HandleUpdateProfileName(c echo.Context) error {
+	profileID := core.GetProfileIDFromContext(c)
+	isAdmin := core.GetIsAdminFromContext(c)
+	targetID := c.Param("id")
+
+	if profileID != targetID && !isAdmin {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "Not authorized"})
+	}
+
+	type body struct {
+		Name string `json:"name"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	if b.Name == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Name is required"})
+	}
+
+	profile, err := h.App.Database.GetProfileByID(targetID)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Profile not found"})
+	}
+
+	profile.Name = b.Name
+	_, err = h.App.Database.UpdateProfile(profile)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	return h.RespondWithData(c, map[string]interface{}{"success": true})
+}
