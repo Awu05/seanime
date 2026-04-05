@@ -44,6 +44,8 @@ export function ProfileOverrideSettings() {
     const [overrides, setOverrides] = React.useState<OverridableSettings>({})
     const [profileName, setProfileName] = React.useState("")
     const [isSavingName, setIsSavingName] = React.useState(false)
+    const [newPin, setNewPin] = React.useState("")
+    const [isSavingPin, setIsSavingPin] = React.useState(false)
 
     React.useEffect(() => {
         if (profile?.name) setProfileName(profile.name)
@@ -64,6 +66,23 @@ export function ProfileOverrideSettings() {
             })
             .catch(() => toast.error("Failed to update name"))
             .finally(() => setIsSavingName(false))
+    }
+
+    function handleSavePin(e: React.FormEvent) {
+        e.preventDefault()
+        if (!profile || isSavingPin) return
+        setIsSavingPin(true)
+        buildSeaQuery({
+            endpoint: `/api/v1/profiles/${profile.id}/pin`,
+            method: "POST",
+            data: { pin: newPin },
+        })
+            .then(() => {
+                setNewPin("")
+                toast.success(newPin ? "PIN set" : "PIN removed")
+            })
+            .catch(() => toast.error("Failed to update PIN"))
+            .finally(() => setIsSavingPin(false))
     }
 
     React.useEffect(() => {
@@ -127,6 +146,30 @@ export function ProfileOverrideSettings() {
                         Save
                     </Button>
                 </form>
+
+                <div className="border-t border-gray-800 mt-4 pt-4">
+                    <form onSubmit={handleSavePin} className="flex gap-2 items-end">
+                        <div className="flex-1">
+                            <label className="block text-sm text-gray-300 mb-1">Profile PIN</label>
+                            <input
+                                type="password"
+                                value={newPin}
+                                onChange={e => setNewPin(e.target.value)}
+                                placeholder="Enter new PIN (4-6 digits)"
+                                maxLength={6}
+                                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            loading={isSavingPin}
+                            intent="primary-subtle"
+                        >
+                            {newPin ? "Set PIN" : "Remove PIN"}
+                        </Button>
+                    </form>
+                    <p className="text-xs text-gray-500 mt-1">Leave empty and click "Remove PIN" to remove the PIN from your profile.</p>
+                </div>
             </SettingsCard>
 
             <SettingsCard
