@@ -1,11 +1,9 @@
 package core
 
 import (
-	"seanime/internal/api/anilist"
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/nativeplayer"
-	"seanime/internal/torrentstream"
 	"seanime/internal/videocore"
 	"time"
 )
@@ -72,31 +70,9 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		},
 	})
 
-	// Create TorrentstreamRepository (depends on PlaybackManager, DirectStreamManager, NativePlayer)
-	tsr := torrentstream.NewRepository(&torrentstream.NewRepositoryOptions{
-		Logger:              a.Logger,
-		BaseAnimeCache:      anilist.NewBaseAnimeCache(),
-		CompleteAnimeCache:  anilist.NewCompleteAnimeCache(),
-		MetadataProviderRef: a.MetadataProviderRef,
-		TorrentRepository:   a.TorrentRepository,
-		PlatformRef:         a.AnilistPlatformRef,
-		PlaybackManager:     pm,
-		WSEventManager:      a.WSEventManager,
-		Database:            a.Database,
-		DirectStreamManager: dsm,
-		NativePlayer:        np,
-	})
-
-	// Initialize torrentstream with current settings (mirrors InitOrRefreshTorrentstreamSettings)
-	if a.SecondarySettings.Torrentstream != nil {
-		_ = tsr.InitModules(a.SecondarySettings.Torrentstream, a.Config.Server.Host, a.Config.Server.Port)
-	}
-
-	// Set media player repository if available (mirrors post-init in initModulesOnce)
-	if a.MediaPlayerRepository != nil {
-		tsr.SetMediaPlayerRepository(a.MediaPlayerRepository)
-	}
-
+	// Use the App's singleton TorrentstreamRepository — the torrent engine binds to a single
+	// port and cannot be duplicated per session. Per-profile isolation happens at the
+	// playback/tracking level (PlaybackManager, DirectStreamManager) not the torrent client.
 	return &ProfileStreamSession{
 		ProfileID:           profileID,
 		LastActive:          time.Now(),
@@ -104,6 +80,6 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		NativePlayer:        np,
 		PlaybackManager:     pm,
 		DirectStreamManager: dsm,
-		TorrentStream:       tsr,
+		TorrentStream:       a.TorrentstreamRepository,
 	}
 }
