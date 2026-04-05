@@ -8,5 +8,5 @@ import (
 
 func (h *Handler) getStreamSession(c echo.Context) *core.ProfileStreamSession {
 	profileID := core.GetProfileIDFromContext(c)
-	return h.App.StreamSessionManager.GetOrCreateSession(profileID)
+	return h.App.StreamSessionManager.GetOrCreateSession(profileID, h.App.CreateStreamSession)
 }
