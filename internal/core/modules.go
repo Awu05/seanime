@@ -398,13 +398,24 @@ func (a *App) InitOrRefreshModules() {
 		shared_platform.ShouldCache.Store(!settings.Anilist.DisableCacheLayer)
 	}
 
-	// Initialize JWT secret if not set
+	// Initialize JWT secret if not set — load from DB or generate and persist
 	if a.JWTSecret == "" {
-		secret, err := GenerateJWTSecret()
-		if err != nil {
-			a.Logger.Error().Err(err).Msg("app: Failed to generate JWT secret")
+		config, configErr := a.Database.GetInstanceConfig()
+		if configErr == nil && config.JWTSecret != "" {
+			a.JWTSecret = config.JWTSecret
 		} else {
-			a.JWTSecret = secret
+			secret, genErr := GenerateJWTSecret()
+			if genErr != nil {
+				a.Logger.Error().Err(genErr).Msg("app: Failed to generate JWT secret")
+			} else {
+				a.JWTSecret = secret
+				// Persist to DB — load existing config to avoid overwriting other fields
+				if config == nil {
+					config = &models.InstanceConfig{}
+				}
+				config.JWTSecret = secret
+				_, _ = a.Database.UpsertInstanceConfig(config)
+			}
 		}
 	}
 

@@ -149,6 +149,8 @@ func (m *WSEventManager) AddConn(id string, profileID string, conn *websocket.Co
 }
 
 func (m *WSEventManager) RemoveConn(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for i, conn := range m.Conns {
 		if conn.ID == id {
 			m.Conns = append(m.Conns[:i], m.Conns[i+1:]...)

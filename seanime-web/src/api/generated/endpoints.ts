@@ -378,8 +378,8 @@ export const API_ENDPOINTS = {
         },
         DeleteProfile: {
             key: "AUTH-delete-profile",
-            methods: ["DELETE"],
-            endpoint: "/api/v1/admin/profiles",
+            methods: ["POST"],
+            endpoint: "/api/v1/admin/profiles/delete",
         },
         GetProfileSettings: {
             key: "AUTH-get-profile-settings",

@@ -24,6 +24,7 @@ func (db *Database) GetProfileByID(id string) (*models.Profile, error) {
 	if err != nil {
 		return nil, err
 	}
+	profile.HasPin = profile.PinHash != ""
 	return &profile, nil
 }
 
@@ -33,6 +34,7 @@ func (db *Database) GetProfileByName(name string) (*models.Profile, error) {
 	if err != nil {
 		return nil, err
 	}
+	profile.HasPin = profile.PinHash != ""
 	return &profile, nil
 }
 
@@ -41,6 +43,9 @@ func (db *Database) GetAllProfiles() ([]*models.Profile, error) {
 	err := db.gormdb.Order("created_at ASC").Find(&profiles).Error
 	if err != nil {
 		return nil, err
+	}
+	for _, p := range profiles {
+		p.HasPin = p.PinHash != ""
 	}
 	return profiles, nil
 }

@@ -77,7 +77,7 @@ export function ProfilePickerPage() {
                 {profiles?.map((profile: any) => (
                     <button
                         key={profile.id}
-                        onClick={() => handleSelect(profile.id, !!profile.pinHash)}
+                        onClick={() => handleSelect(profile.id, !!profile.hasPin)}
                         className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-700 hover:border-brand-500 transition-all"
                     >
                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white text-xl font-bold">

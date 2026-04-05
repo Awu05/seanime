@@ -198,7 +198,7 @@ export default function Page() {
                                         className="group"
                                     ><LuUsers className="text-xl mr-3 transition-transform duration-200" /> Profiles</TabsTrigger>
                                     )}
-                                    {currentProfile && !currentProfile.isAdmin && (
+                                    {currentProfile && (
                                     <TabsTrigger
                                         value="my-settings"
                                         className="group"
@@ -993,7 +993,7 @@ export default function Page() {
                         </TabsContent>
                         )}
 
-                        {currentProfile && !currentProfile.isAdmin && (
+                        {currentProfile && (
                         <TabsContent value="my-settings" className={tabContentClass}>
 
                             <SettingsPageHeader

@@ -27,6 +27,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-toast/toast v0.0.0-20190211030409-01e6764cf0a4
 	github.com/goccy/go-json v0.10.5
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gonutz/w32/v2 v2.12.1
 	github.com/google/go-querystring v1.2.0
 	github.com/google/uuid v1.6.0
@@ -60,8 +61,6 @@ require (
 	gopkg.in/vansante/go-ffprobe.v2 v2.3.0
 	gorm.io/gorm v1.31.1
 )
-
-require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 
 require (
 	github.com/99designs/gqlgen v0.17.73 // indirect

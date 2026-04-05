@@ -47,7 +47,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o seanime -trimpath -ldflags="-s -w"
 
 # Stage 3: CUDA Base
-FROM nvidia/cuda:CUDA_VERSION_PLACEHOLDER
+ARG CUDA_VERSION=13.0.2-base-ubuntu24.04
+FROM nvidia/cuda:${CUDA_VERSION}
 
 # Install dependencies
 RUN apt-get update && \

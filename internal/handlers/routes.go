@@ -160,6 +160,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	// Admin profile management
 	v1.POST("/admin/profiles", h.HandleCreateProfile)
 	v1.DELETE("/admin/profiles/:id", h.HandleDeleteProfile)
+	v1.POST("/admin/profiles/delete", h.HandleDeleteProfile)
 	v1.POST("/admin/access-code", h.HandleSetAccessCode)
 	v1.POST("/profiles/:id/pin", h.HandleUpdateProfilePin)
 
@@ -472,8 +473,8 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	// Direct Stream
 	//
 	v1.POST("/directstream/play/localfile", h.HandleDirectstreamPlayLocalFile)
-	v1.GET("/directstream/stream", echo.WrapHandler(h.HandleDirectstreamGetStream()))
-	v1.HEAD("/directstream/stream", echo.WrapHandler(h.HandleDirectstreamGetStream()))
+	v1.GET("/directstream/stream", h.HandleDirectstreamGetStream)
+	v1.HEAD("/directstream/stream", h.HandleDirectstreamGetStream)
 	v1.GET("/directstream/att/*", h.HandleDirectstreamGetAttachments)
 	v1.POST("/directstream/subs/convert-subs", h.HandleDirectstreamConvertSubs)
 

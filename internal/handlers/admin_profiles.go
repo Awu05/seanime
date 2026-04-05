@@ -54,6 +54,16 @@ func (h *Handler) HandleDeleteProfile(c echo.Context) error {
 	}
 
 	id := c.Param("id")
+	if id == "" {
+		// Fallback: read from body (for POST-based deletion)
+		type bodyStruct struct {
+			ID string `json:"id"`
+		}
+		var b bodyStruct
+		if err := c.Bind(&b); err == nil && b.ID != "" {
+			id = b.ID
+		}
+	}
 
 	profile, err := h.App.Database.GetProfileByID(id)
 	if err != nil {

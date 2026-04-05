@@ -18,7 +18,7 @@ export function useDeleteProfile() {
         { id: string }
     >({
         endpoint: API_ENDPOINTS.AUTH.DeleteProfile.endpoint,
-        method: "DELETE",
+        method: "POST",
         mutationKey: [API_ENDPOINTS.AUTH.DeleteProfile.key],
     })
 }
