@@ -37,6 +37,10 @@ func (m *MockWSEventManager) SendEventTo(clientId string, t string, payload inte
 	}
 }
 
+func (m *MockWSEventManager) SendToProfile(profileID string, t string, payload interface{}) {
+	m.Logger.Trace().Any("payload", payload).Str("type", t).Str("profileID", profileID).Msg("ws: Sent message to profile")
+}
+
 func (m *MockWSEventManager) SubscribeToClientEvents(id string) *ClientEventSubscriber {
 	subscriber := &ClientEventSubscriber{
 		Channel: make(chan *WebsocketClientEvent),

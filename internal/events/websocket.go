@@ -15,6 +15,7 @@ import (
 type WSEventManagerInterface interface {
 	SendEvent(t string, payload interface{})
 	SendEventTo(clientId string, t string, payload interface{}, noLog ...bool)
+	SendToProfile(profileID string, t string, payload interface{})
 	SubscribeToClientEvents(id string) *ClientEventSubscriber
 	SubscribeToClientNativePlayerEvents(id string) *ClientEventSubscriber
 	SubscribeToClientVideoCoreEvents(id string) *ClientEventSubscriber
@@ -41,6 +42,13 @@ func (w *GlobalWSEventManagerWrapper) SendEventTo(clientId string, t string, pay
 		return
 	}
 	w.WSEventManager.SendEventTo(clientId, t, payload, noLog...)
+}
+
+func (w *GlobalWSEventManagerWrapper) SendToProfile(profileID string, t string, payload interface{}) {
+	if w.WSEventManager == nil {
+		return
+	}
+	w.WSEventManager.SendToProfile(profileID, t, payload)
 }
 
 type (
