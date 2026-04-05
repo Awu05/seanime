@@ -1,0 +1,30 @@
+.git
+.github
+.gitignore
+.vscode
+.idea
+.claude
+
+# Documentation
+docs
+
+# Electron app
+seanime-denshi
+
+# Code generation
+codegen
+
+# Build artifacts
+node_modules
+dist
+build
+bin
+
+# Test files
+*_test.go
+
+# Local development
+.env*
+*.db
+local_testing
+dist-server

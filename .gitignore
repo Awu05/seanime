@@ -9,10 +9,8 @@ testdata/
 .DS_Store
 */.DS_Store
 
-Dockerfile
 Dockerfile.dev
 dev.dockerfile
-.dockerignore
 
 go.work
 
@@ -84,6 +82,7 @@ internal/extension_repo/**/test*.ts
 internal/extension_repo/goja_plugin_test
 
 *.sh
+!docker/**/*.sh
 
 seanime-web-tr/
 codegen/nonext/
