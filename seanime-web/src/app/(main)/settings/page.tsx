@@ -72,6 +72,7 @@ import { LocalSettings } from "./_containers/local-settings"
 import { NakamaSettings } from "./_containers/nakama-settings"
 import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { ProfileManagementSettings } from "./_containers/profile-management-settings"
+import { ProfileOverrideSettings } from "./_containers/profile-override-settings"
 
 const tabContentClass = cn(
     "space-y-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300",
@@ -196,6 +197,12 @@ export default function Page() {
                                         value="profiles"
                                         className="group"
                                     ><LuUsers className="text-xl mr-3 transition-transform duration-200" /> Profiles</TabsTrigger>
+                                    )}
+                                    {currentProfile && !currentProfile.isAdmin && (
+                                    <TabsTrigger
+                                        value="my-settings"
+                                        className="group"
+                                    ><LuTabletSmartphone className="text-xl mr-3 transition-transform duration-200" /> My Settings</TabsTrigger>
                                     )}
                                     {/* <TabsTrigger
                                      value="local"
@@ -982,6 +989,20 @@ export default function Page() {
                             />
 
                             <ProfileManagementSettings />
+
+                        </TabsContent>
+                        )}
+
+                        {currentProfile && !currentProfile.isAdmin && (
+                        <TabsContent value="my-settings" className={tabContentClass}>
+
+                            <SettingsPageHeader
+                                title="My Settings"
+                                description="Personal settings for your profile"
+                                icon={LuTabletSmartphone}
+                            />
+
+                            <ProfileOverrideSettings />
 
                         </TabsContent>
                         )}
