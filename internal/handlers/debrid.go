@@ -8,6 +8,7 @@ import (
 	"seanime/internal/database/models"
 	debrid_client "seanime/internal/debrid/client"
 	"seanime/internal/debrid/debrid"
+	"seanime/internal/core"
 	"seanime/internal/events"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
 
@@ -65,6 +66,8 @@ func (h *Handler) HandleSaveDebridSettings(c echo.Context) error {
 //	@route /api/v1/debrid/torrents [POST]
 func (h *Handler) HandleDebridAddTorrents(c echo.Context) error {
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	type body struct {
 		Torrents    []hibiketorrent.AnimeTorrent `json:"torrents"`
 		Media       *anilist.BaseAnime           `json:"media"`
@@ -93,7 +96,7 @@ func (h *Handler) HandleDebridAddTorrents(c echo.Context) error {
 				return h.RespondWithError(c, err)
 			} else {
 				h.App.Logger.Err(err).Msg("debrid: Failed to get magnet link")
-				h.App.WSEventManager.SendEvent(events.ErrorToast, err.Error())
+				h.App.WSEventManager.SendToProfile(profileID, events.ErrorToast, err.Error())
 				continue
 			}
 		}
@@ -112,7 +115,7 @@ func (h *Handler) HandleDebridAddTorrents(c echo.Context) error {
 			} else {
 				// If there are multiple torrents, send an error toast and continue to the next torrent
 				h.App.Logger.Err(err).Msg("debrid: Failed to add torrent to debrid")
-				h.App.WSEventManager.SendEvent(events.ErrorToast, err.Error())
+				h.App.WSEventManager.SendToProfile(profileID, events.ErrorToast, err.Error())
 				continue
 			}
 		}

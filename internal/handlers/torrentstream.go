@@ -5,6 +5,7 @@ import (
 	"os"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/events"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
@@ -37,6 +38,8 @@ func (h *Handler) HandleGetTorrentstreamSettings(c echo.Context) error {
 //	@route /api/v1/torrentstream/settings [PATCH]
 func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	type body struct {
 		Settings models.TorrentstreamSettings `json:"settings"`
 	}
@@ -51,12 +54,12 @@ func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 		dir, err := os.Stat(b.Settings.DownloadDir)
 		if err != nil {
 			h.App.Logger.Error().Err(err).Msgf("torrentstream: Download directory %s does not exist", b.Settings.DownloadDir)
-			h.App.WSEventManager.SendEvent(events.ErrorToast, "Download directory does not exist")
+			h.App.WSEventManager.SendToProfile(profileID, events.ErrorToast, "Download directory does not exist")
 			b.Settings.DownloadDir = ""
 		}
 		if !dir.IsDir() {
 			h.App.Logger.Error().Msgf("torrentstream: Download directory %s is not a directory", b.Settings.DownloadDir)
-			h.App.WSEventManager.SendEvent(events.ErrorToast, "Download directory is not a directory")
+			h.App.WSEventManager.SendToProfile(profileID, events.ErrorToast, "Download directory is not a directory")
 			b.Settings.DownloadDir = ""
 		}
 	}

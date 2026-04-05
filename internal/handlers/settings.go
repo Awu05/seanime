@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/util"
@@ -40,6 +41,8 @@ func (h *Handler) HandleGetSettings(c echo.Context) error {
 //	@route /api/v1/start [POST]
 //	@returns handlers.Status
 func (h *Handler) HandleGettingStarted(c echo.Context) error {
+
+	profileID := core.GetProfileIDFromContext(c)
 
 	type body struct {
 		Library                models.LibrarySettings      `json:"library"`
@@ -132,7 +135,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 		}()
 	}
 
-	h.App.WSEventManager.SendEvent("settings", settings)
+	h.App.WSEventManager.SendToProfile(profileID, "settings", settings)
 
 	status := h.NewStatus(c)
 
@@ -150,6 +153,8 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 //	@route /api/v1/settings [PATCH]
 //	@returns handlers.Status
 func (h *Handler) HandleSaveSettings(c echo.Context) error {
+
+	profileID := core.GetProfileIDFromContext(c)
 
 	type body struct {
 		Library       models.LibrarySettings      `json:"library"`
@@ -233,7 +238,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.WSEventManager.SendEvent("settings", settings)
+	h.App.WSEventManager.SendToProfile(profileID, "settings", settings)
 
 	status := h.NewStatus(c)
 
