@@ -14,6 +14,12 @@ type BaseModel struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+type UUIDBaseModel struct {
+	ID        string    `gorm:"primarykey;type:text" json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 type Token struct {
 	BaseModel
 	Value string `json:"value"`
