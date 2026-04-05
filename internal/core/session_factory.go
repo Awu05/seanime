@@ -87,6 +87,16 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		NativePlayer:        np,
 	})
 
+	// Initialize torrentstream with current settings (mirrors InitOrRefreshTorrentstreamSettings)
+	if a.SecondarySettings.Torrentstream != nil {
+		_ = tsr.InitModules(a.SecondarySettings.Torrentstream, a.Config.Server.Host, a.Config.Server.Port)
+	}
+
+	// Set media player repository if available (mirrors post-init in initModulesOnce)
+	if a.MediaPlayerRepository != nil {
+		tsr.SetMediaPlayerRepository(a.MediaPlayerRepository)
+	}
+
 	return &ProfileStreamSession{
 		ProfileID:           profileID,
 		LastActive:          time.Now(),
