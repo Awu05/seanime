@@ -98,6 +98,7 @@ type (
 		OnlinestreamRepository  *onlinestream.Repository
 		MediastreamRepository   *mediastream.Repository
 		TorrentstreamRepository *torrentstream.Repository
+		StreamSessionManager    *StreamSessionManager
 
 		// Players
 		NativePlayer *nativeplayer.NativePlayer

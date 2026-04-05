@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"seanime/internal/api/anilist"
+	"time"
 	"seanime/internal/continuity"
 	"seanime/internal/database/db"
 	"seanime/internal/database/db_bridge"
@@ -48,6 +49,10 @@ import (
 // This function is called once after the App instance is created.
 // The settings of these modules will be set/refreshed in InitOrRefreshModules.
 func (a *App) initModulesOnce() {
+
+	if a.StreamSessionManager == nil {
+		a.StreamSessionManager = NewStreamSessionManager(30 * time.Minute)
+	}
 
 	a.LocalManager.SetRefreshAnilistCollectionsFunc(func() {
 		_, _ = a.RefreshAnimeCollection()
