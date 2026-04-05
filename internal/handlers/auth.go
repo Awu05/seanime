@@ -83,6 +83,11 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 
 	h.App.Logger.Info().Msg("app: Authenticated to AniList")
 
+	// Invalidate the pool cache for this profile so it picks up the new token
+	if h.App.AnilistPool != nil && profileID != "" {
+		h.App.AnilistPool.InvalidateProfile(profileID)
+	}
+
 	// Update the platform
 	anilistPlatform := anilist_platform.NewAnilistPlatform(h.App.AnilistClientRef, h.App.ExtensionBankRef, h.App.Logger, h.App.Database, h.App.LogoutFromAnilist)
 	h.App.UpdatePlatform(anilistPlatform)
@@ -118,6 +123,9 @@ func (h *Handler) HandleLogout(c echo.Context) error {
 
 	if profileID != "" {
 		_ = h.App.Database.ClearAccountForProfile(profileID)
+		if h.App.AnilistPool != nil {
+			h.App.AnilistPool.InvalidateProfile(profileID)
+		}
 	} else {
 		h.App.LogoutFromAnilist()
 	}
