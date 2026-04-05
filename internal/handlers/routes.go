@@ -163,6 +163,11 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/admin/access-code", h.HandleSetAccessCode)
 	v1.POST("/profiles/:id/pin", h.HandleUpdateProfilePin)
 
+	// Profile settings
+	v1.GET("/profile-settings", h.HandleGetProfileSettings)
+	v1.POST("/profile-settings", h.HandleSaveProfileSettings)
+	v1.GET("/profile-settings/merged", h.HandleGetMergedSettings)
+
 	// Settings
 	v1.GET("/settings", h.HandleGetSettings)
 	v1.PATCH("/settings", h.HandleSaveSettings)
