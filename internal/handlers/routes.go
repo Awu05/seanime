@@ -168,6 +168,11 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/profile-settings", h.HandleSaveProfileSettings)
 	v1.GET("/profile-settings/merged", h.HandleGetMergedSettings)
 
+	// Library path management
+	v1.GET("/library-paths", h.HandleGetLibraryPaths)
+	v1.POST("/library-paths", h.HandleAddLibraryPath)
+	v1.DELETE("/library-paths/:id", h.HandleDeleteLibraryPath)
+
 	// Settings
 	v1.GET("/settings", h.HandleGetSettings)
 	v1.PATCH("/settings", h.HandleSaveSettings)
