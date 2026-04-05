@@ -60,6 +60,7 @@ type (
 		previousStreamOptions mo.Option[*StartStreamOptions]
 		preloadedStream       mo.Option[*preloadedStream]
 		shouldPreloadStream   atomic.Bool // Flag on whether the client should prepare a stream
+		currentClientId       string      // Track the client ID of the current stream for session cleanup
 	}
 
 	Settings struct {

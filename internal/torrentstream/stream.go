@@ -140,6 +140,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//
 	// Set current file & torrent
 	//
+	r.currentClientId = opts.ClientId
 	r.client.SetActiveStream(opts.ClientId, torrentToStream.Torrent, torrentToStream.File)
 	r.client.currentFile = mo.Some(torrentToStream.File)
 	r.client.currentTorrent = mo.Some(torrentToStream.Torrent)
@@ -376,6 +377,10 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 			r.client.dropTorrents()
 		}
 		r.client.repository.logger.Debug().Msg("torrentstream: Resetting current torrent and status")
+	}
+	// Remove this session's active stream
+	if r.currentClientId != "" {
+		r.client.RemoveActiveStream(r.currentClientId)
 	}
 	r.client.currentTorrent = mo.None[*torrent.Torrent]()        // Reset the current torrent
 	r.client.currentFile = mo.None[*torrent.File]()              // Reset the current file
