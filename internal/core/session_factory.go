@@ -109,6 +109,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	// Set media player repository if available
 	if a.MediaPlayerRepository != nil {
 		tsr.SetMediaPlayerRepository(a.MediaPlayerRepository)
+		pm.SetMediaPlayerRepository(a.MediaPlayerRepository)
 	}
 
 	return &ProfileStreamSession{
