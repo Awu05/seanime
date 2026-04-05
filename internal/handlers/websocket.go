@@ -40,7 +40,7 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 	}
 
 	// Add connection to manager
-	h.App.WSEventManager.AddConn(id, ws)
+	h.App.WSEventManager.AddConn(id, "", ws)
 	h.App.Logger.Debug().Str("id", id).Msg("ws: Client connected")
 
 	for {

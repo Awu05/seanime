@@ -66,8 +66,9 @@ type (
 	}
 
 	WSConn struct {
-		ID   string
-		Conn *websocket.Conn
+		ID        string
+		ProfileID string
+		Conn      *websocket.Conn
 	}
 
 	WSEvent struct {
@@ -131,12 +132,12 @@ func (m *WSEventManager) ExitIfNoConnsAsDesktopSidecar() {
 	}()
 }
 
-func (m *WSEventManager) AddConn(id string, conn *websocket.Conn) {
+func (m *WSEventManager) AddConn(id string, profileID string, conn *websocket.Conn) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Conns = append(m.Conns, &WSConn{ID: id, ProfileID: profileID, Conn: conn})
 	m.hasHadConnection = true
-	m.Conns = append(m.Conns, &WSConn{
-		ID:   id,
-		Conn: conn,
-	})
 }
 
 func (m *WSEventManager) RemoveConn(id string) {
@@ -203,6 +204,24 @@ func (m *WSEventManager) SendEventTo(clientId string, t string, payload interfac
 				Type:    t,
 				Payload: payload,
 			})
+		}
+	}
+}
+
+// SendToProfile sends a websocket event to all connections belonging to the specified profile.
+func (m *WSEventManager) SendToProfile(profileID string, t string, payload interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, conn := range m.Conns {
+		if conn.ProfileID == profileID {
+			err := conn.Conn.WriteJSON(struct {
+				Type    string      `json:"type"`
+				Payload interface{} `json:"payload"`
+			}{t, payload})
+			if err != nil {
+				m.Logger.Err(err).Str("connId", conn.ID).Msg("ws: Failed to send profile event")
+			}
 		}
 	}
 }
