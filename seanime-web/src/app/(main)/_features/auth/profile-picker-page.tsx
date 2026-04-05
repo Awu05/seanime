@@ -1,9 +1,7 @@
 import { useAuthGetProfiles, useAuthSelectProfile } from "@/api/hooks/auth.hooks"
-import { useNavigate } from "@tanstack/react-router"
 import React from "react"
 
 export function ProfilePickerPage() {
-    const navigate = useNavigate()
     const { data: profiles } = useAuthGetProfiles()
     const { mutate: selectProfile, isPending } = useAuthSelectProfile()
     const [pinFor, setPinFor] = React.useState<string | null>(null)
@@ -18,7 +16,7 @@ export function ProfilePickerPage() {
             return
         }
         selectProfile({ profileId }, {
-            onSuccess: () => navigate({ to: "/" }),
+            onSuccess: () => { window.location.href = "/" },
             onError: () => setError("Failed to select profile"),
         })
     }
@@ -27,7 +25,7 @@ export function ProfilePickerPage() {
         e.preventDefault()
         if (!pinFor) return
         selectProfile({ profileId: pinFor, pin }, {
-            onSuccess: () => navigate({ to: "/" }),
+            onSuccess: () => { window.location.href = "/" },
             onError: () => setError("Invalid PIN"),
         })
     }

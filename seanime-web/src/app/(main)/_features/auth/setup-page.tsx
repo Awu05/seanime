@@ -1,9 +1,7 @@
 import { useAuthSetup } from "@/api/hooks/auth.hooks"
-import { useNavigate } from "@tanstack/react-router"
 import React from "react"
 
 export function SetupPage() {
-    const navigate = useNavigate()
     const { mutate: setup, isPending } = useAuthSetup()
     const [username, setUsername] = React.useState("")
     const [password, setPassword] = React.useState("")
@@ -15,7 +13,7 @@ export function SetupPage() {
         setError("")
         setup({ username, password, accessCode: accessCode || undefined }, {
             onSuccess: () => {
-                navigate({ to: "/login" })
+                window.location.href = "/login"
             },
             onError: () => {
                 setError("Failed to create admin account")

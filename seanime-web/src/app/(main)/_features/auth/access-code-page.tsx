@@ -1,9 +1,7 @@
 import { useAuthAccessCode } from "@/api/hooks/auth.hooks"
-import { useNavigate } from "@tanstack/react-router"
 import React from "react"
 
 export function AccessCodePage() {
-    const navigate = useNavigate()
     const { mutate: submitCode, isPending } = useAuthAccessCode()
     const [accessCode, setAccessCode] = React.useState("")
     const [error, setError] = React.useState("")
@@ -13,7 +11,7 @@ export function AccessCodePage() {
         setError("")
         submitCode({ accessCode }, {
             onSuccess: () => {
-                navigate({ to: "/profiles" })
+                window.location.href = "/profiles"
             },
             onError: () => {
                 setError("Invalid access code")
@@ -49,7 +47,7 @@ export function AccessCodePage() {
             </form>
             <div className="text-center">
                 <button
-                    onClick={() => navigate({ to: "/login" })}
+                    onClick={() => window.location.href = "/login"}
                     className="text-sm text-gray-400 hover:text-white"
                 >
                     Admin login

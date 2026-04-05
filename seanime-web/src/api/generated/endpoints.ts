@@ -326,6 +326,56 @@ export const API_ENDPOINTS = {
             methods: ["POST"],
             endpoint: "/api/v1/auth/logout",
         },
+        SetupCheck: {
+            key: "AUTH-setup-check",
+            methods: ["GET"],
+            endpoint: "/api/v1/auth/setup-check",
+        },
+        Setup: {
+            key: "AUTH-setup",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/setup",
+        },
+        AdminLogin: {
+            key: "AUTH-admin-login",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/admin-login",
+        },
+        AccessCode: {
+            key: "AUTH-access-code",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/access-code",
+        },
+        GetProfiles: {
+            key: "AUTH-get-profiles",
+            methods: ["GET"],
+            endpoint: "/api/v1/auth/profiles",
+        },
+        SelectProfile: {
+            key: "AUTH-select-profile",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/select-profile",
+        },
+        Me: {
+            key: "AUTH-me",
+            methods: ["GET"],
+            endpoint: "/api/v1/auth/me",
+        },
+        LogoutSession: {
+            key: "AUTH-logout-session",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/logout-session",
+        },
+        CreateProfile: {
+            key: "AUTH-create-profile",
+            methods: ["POST"],
+            endpoint: "/api/v1/admin/profiles",
+        },
+        SetAccessCode: {
+            key: "AUTH-set-access-code",
+            methods: ["POST"],
+            endpoint: "/api/v1/admin/access-code",
+        },
     },
     AUTO_DOWNLOADER: {
         /**
@@ -2280,58 +2330,6 @@ export const API_ENDPOINTS = {
             key: "VIDEOCORE-video-core-in-sight-get-character-details",
             methods: ["GET"],
             endpoint: "/api/v1/videocore/insight/character/{malId}",
-        },
-    },
-    AUTH: {
-        SetupCheck: {
-            key: "AUTH-setup-check",
-            methods: ["GET"],
-            endpoint: "/api/v1/auth/setup-check",
-        },
-        Setup: {
-            key: "AUTH-setup",
-            methods: ["POST"],
-            endpoint: "/api/v1/auth/setup",
-        },
-        AdminLogin: {
-            key: "AUTH-admin-login",
-            methods: ["POST"],
-            endpoint: "/api/v1/auth/admin-login",
-        },
-        AccessCode: {
-            key: "AUTH-access-code",
-            methods: ["POST"],
-            endpoint: "/api/v1/auth/access-code",
-        },
-        GetProfiles: {
-            key: "AUTH-get-profiles",
-            methods: ["GET"],
-            endpoint: "/api/v1/auth/profiles",
-        },
-        SelectProfile: {
-            key: "AUTH-select-profile",
-            methods: ["POST"],
-            endpoint: "/api/v1/auth/select-profile",
-        },
-        Me: {
-            key: "AUTH-me",
-            methods: ["GET"],
-            endpoint: "/api/v1/auth/me",
-        },
-        LogoutSession: {
-            key: "AUTH-logout-session",
-            methods: ["POST"],
-            endpoint: "/api/v1/auth/logout-session",
-        },
-        CreateProfile: {
-            key: "AUTH-create-profile",
-            methods: ["POST"],
-            endpoint: "/api/v1/admin/profiles",
-        },
-        SetAccessCode: {
-            key: "AUTH-set-access-code",
-            methods: ["POST"],
-            endpoint: "/api/v1/admin/access-code",
         },
     },
 } satisfies ApiEndpoints

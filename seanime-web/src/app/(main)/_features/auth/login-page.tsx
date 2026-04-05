@@ -1,9 +1,7 @@
 import { useAuthAdminLogin } from "@/api/hooks/auth.hooks"
-import { useNavigate } from "@tanstack/react-router"
 import React from "react"
 
 export function LoginPage() {
-    const navigate = useNavigate()
     const { mutate: login, isPending } = useAuthAdminLogin()
     const [username, setUsername] = React.useState("")
     const [password, setPassword] = React.useState("")
@@ -14,7 +12,7 @@ export function LoginPage() {
         setError("")
         login({ username, password }, {
             onSuccess: () => {
-                navigate({ to: "/" })
+                window.location.href = "/"
             },
             onError: () => {
                 setError("Invalid credentials")
@@ -60,7 +58,7 @@ export function LoginPage() {
             </form>
             <div className="text-center">
                 <button
-                    onClick={() => navigate({ to: "/access" })}
+                    onClick={() => window.location.href = "/access"}
                     className="text-sm text-gray-400 hover:text-white"
                 >
                     Enter with access code instead

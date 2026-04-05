@@ -12,9 +12,14 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as MainRouteImport } from './routes/_main'
+import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as SplashscreenIndexRouteImport } from './routes/splashscreen/index'
 import { Route as MainIndexRouteImport } from './routes/_main/index'
 import { Route as MainErrorTestRouteImport } from './routes/_main/error-test'
+import { Route as AuthSetupRouteImport } from './routes/_auth/setup'
+import { Route as AuthProfilesRouteImport } from './routes/_auth/profiles'
+import { Route as AuthLoginRouteImport } from './routes/_auth/login'
+import { Route as AuthAccessRouteImport } from './routes/_auth/access'
 import { Route as SplashscreenCrashIndexRouteImport } from './routes/splashscreen/crash/index'
 import { Route as PublicAuthIndexRouteImport } from './routes/public/auth/index'
 import { Route as MainSettingsIndexRouteImport } from './routes/_main/settings/index'
@@ -63,6 +68,10 @@ const MainRoute = MainRouteImport.update({
   id: '/_main',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ScanLogViewerIndexLazyRoute = ScanLogViewerIndexLazyRouteImport.update({
   id: '/scan-log-viewer/',
   path: '/scan-log-viewer/',
@@ -96,6 +105,26 @@ const MainErrorTestRoute = MainErrorTestRouteImport.update({
   id: '/error-test',
   path: '/error-test',
   getParentRoute: () => MainRoute,
+} as any)
+const AuthSetupRoute = AuthSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthProfilesRoute = AuthProfilesRouteImport.update({
+  id: '/profiles',
+  path: '/profiles',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthLoginRoute = AuthLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthAccessRoute = AuthAccessRouteImport.update({
+  id: '/access',
+  path: '/access',
+  getParentRoute: () => AuthRoute,
 } as any)
 const MainWebviewIndexLazyRoute = MainWebviewIndexLazyRouteImport.update({
   id: '/webview/',
@@ -295,6 +324,10 @@ const MainOfflineEntryAnimeIndexRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof MainIndexRoute
+  '/access': typeof AuthAccessRoute
+  '/login': typeof AuthLoginRoute
+  '/profiles': typeof AuthProfilesRoute
+  '/setup': typeof AuthSetupRoute
   '/error-test': typeof MainErrorTestRoute
   '/splashscreen/': typeof SplashscreenIndexRoute
   '/docs/': typeof DocsIndexLazyRoute
@@ -329,8 +362,12 @@ export interface FileRoutesByFullPath {
   '/offline/entry/manga/': typeof MainOfflineEntryMangaIndexRoute
 }
 export interface FileRoutesByTo {
-  '/error-test': typeof MainErrorTestRoute
   '/': typeof MainIndexRoute
+  '/access': typeof AuthAccessRoute
+  '/login': typeof AuthLoginRoute
+  '/profiles': typeof AuthProfilesRoute
+  '/setup': typeof AuthSetupRoute
+  '/error-test': typeof MainErrorTestRoute
   '/splashscreen': typeof SplashscreenIndexRoute
   '/docs': typeof DocsIndexLazyRoute
   '/issue-report': typeof IssueReportIndexLazyRoute
@@ -365,7 +402,12 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/_auth': typeof AuthRouteWithChildren
   '/_main': typeof MainRouteWithChildren
+  '/_auth/access': typeof AuthAccessRoute
+  '/_auth/login': typeof AuthLoginRoute
+  '/_auth/profiles': typeof AuthProfilesRoute
+  '/_auth/setup': typeof AuthSetupRoute
   '/_main/error-test': typeof MainErrorTestRoute
   '/_main/': typeof MainIndexRoute
   '/splashscreen/': typeof SplashscreenIndexRoute
@@ -404,6 +446,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/access'
+    | '/login'
+    | '/profiles'
+    | '/setup'
     | '/error-test'
     | '/splashscreen/'
     | '/docs/'
@@ -438,8 +484,12 @@ export interface FileRouteTypes {
     | '/offline/entry/manga/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/error-test'
     | '/'
+    | '/access'
+    | '/login'
+    | '/profiles'
+    | '/setup'
+    | '/error-test'
     | '/splashscreen'
     | '/docs'
     | '/issue-report'
@@ -473,7 +523,12 @@ export interface FileRouteTypes {
     | '/offline/entry/manga'
   id:
     | '__root__'
+    | '/_auth'
     | '/_main'
+    | '/_auth/access'
+    | '/_auth/login'
+    | '/_auth/profiles'
+    | '/_auth/setup'
     | '/_main/error-test'
     | '/_main/'
     | '/splashscreen/'
@@ -510,6 +565,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  AuthRoute: typeof AuthRouteWithChildren
   MainRoute: typeof MainRouteWithChildren
   SplashscreenIndexRoute: typeof SplashscreenIndexRoute
   DocsIndexLazyRoute: typeof DocsIndexLazyRoute
@@ -526,6 +582,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof MainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scan-log-viewer/': {
@@ -569,6 +632,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/error-test'
       preLoaderRoute: typeof MainErrorTestRouteImport
       parentRoute: typeof MainRoute
+    }
+    '/_auth/setup': {
+      id: '/_auth/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof AuthSetupRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/profiles': {
+      id: '/_auth/profiles'
+      path: '/profiles'
+      fullPath: '/profiles'
+      preLoaderRoute: typeof AuthProfilesRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/login': {
+      id: '/_auth/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/access': {
+      id: '/_auth/access'
+      path: '/access'
+      fullPath: '/access'
+      preLoaderRoute: typeof AuthAccessRouteImport
+      parentRoute: typeof AuthRoute
     }
     '/_main/webview/': {
       id: '/_main/webview/'
@@ -762,6 +853,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthRouteChildren {
+  AuthAccessRoute: typeof AuthAccessRoute
+  AuthLoginRoute: typeof AuthLoginRoute
+  AuthProfilesRoute: typeof AuthProfilesRoute
+  AuthSetupRoute: typeof AuthSetupRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthAccessRoute: AuthAccessRoute,
+  AuthLoginRoute: AuthLoginRoute,
+  AuthProfilesRoute: AuthProfilesRoute,
+  AuthSetupRoute: AuthSetupRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 interface MainRouteChildren {
   MainErrorTestRoute: typeof MainErrorTestRoute
   MainIndexRoute: typeof MainIndexRoute
@@ -826,6 +933,7 @@ const MainRouteChildren: MainRouteChildren = {
 const MainRouteWithChildren = MainRoute._addFileChildren(MainRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  AuthRoute: AuthRouteWithChildren,
   MainRoute: MainRouteWithChildren,
   SplashscreenIndexRoute: SplashscreenIndexRoute,
   DocsIndexLazyRoute: DocsIndexLazyRoute,
