@@ -47,6 +47,7 @@ type Status struct {
 	DisabledFeatures      []core.FeatureKey             `json:"disabledFeatures"`
 	ServerReady           bool                          `json:"serverReady"`
 	ServerHasPassword     bool                          `json:"serverHasPassword"`
+	MultiUserEnabled      bool                          `json:"multiUserEnabled"`
 	ShowChangelogTour     string                        `json:"showChangelogTour"`
 }
 
@@ -108,6 +109,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		FeatureFlags:          h.App.FeatureFlags,
 		ServerReady:           h.App.ServerReady,
 		ServerHasPassword:     h.App.Config.Server.Password != "",
+		MultiUserEnabled:      h.App.MultiUserEnabled,
 		DisabledFeatures:      h.App.FeatureManager.DisabledFeatures,
 		ShowChangelogTour:     h.App.ShowTour,
 	}
@@ -118,6 +120,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 			User:              user.NewSimulatedUser(),
 			ServerReady:       h.App.ServerReady,
 			ServerHasPassword: h.App.Config.Server.Password != "",
+			MultiUserEnabled:  h.App.MultiUserEnabled,
 			Settings:          &models.Settings{},
 		}
 	}

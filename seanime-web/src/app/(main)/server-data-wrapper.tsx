@@ -56,6 +56,29 @@ export function ServerDataWrapper(props: ServerDataWrapperProps) {
 
     React.useEffect(() => {
         if (serverStatus) {
+            // Multi-user mode: redirect to login if no auth cookie
+            if (serverStatus?.multiUserEnabled &&
+                !pathname.startsWith("/login") &&
+                !pathname.startsWith("/access") &&
+                !pathname.startsWith("/profiles") &&
+                !pathname.startsWith("/setup") &&
+                !pathname.startsWith("/auth/callback")
+            ) {
+                // Check if we have a valid auth cookie by trying the auth/me endpoint
+                fetch("/api/v1/auth/me", { credentials: "include" })
+                    .then(res => {
+                        if (res.status === 401) {
+                            window.location.href = "/login"
+                            setAuthenticated(false)
+                        } else {
+                            setAuthenticated(true)
+                        }
+                    })
+                    .catch(() => {
+                        setAuthenticated(true) // Network error — let it through
+                    })
+                return
+            }
             if (serverStatus?.serverHasPassword && !password && pathname !== "/public/auth") {
                 window.location.href = "/public/auth"
                 setAuthenticated(false)
@@ -64,7 +87,7 @@ export function ServerDataWrapper(props: ServerDataWrapperProps) {
                 setAuthenticated(true)
             }
         }
-    }, [serverStatus?.serverHasPassword, password, pathname])
+    }, [serverStatus?.serverHasPassword, serverStatus?.multiUserEnabled, password, pathname])
 
     // Refetch the server status every 2 seconds if serverReady is false
     // This is a fallback to the websocket

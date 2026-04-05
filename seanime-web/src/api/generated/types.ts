@@ -2884,6 +2884,7 @@ export type Status = {
     disabledFeatures?: Array<INTERNAL_FeatureKey>
     serverReady: boolean
     serverHasPassword: boolean
+    multiUserEnabled: boolean
     showChangelogTour: string
 }
 
