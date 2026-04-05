@@ -42,7 +42,8 @@ func (p *AnilistClientPool) GetClientForProfile(profileID string) anilist.Anilis
 	// Create a new client from the profile's token
 	token := p.app.Database.GetAnilistTokenForProfile(profileID)
 	if token == "" {
-		return p.app.AnilistClientRef.Get() // fallback to global
+		// Return an empty client — don't fall back to global (admin's client)
+		return anilist.NewAnilistClient("", p.app.AnilistCacheDir)
 	}
 
 	client := anilist.NewAnilistClient(token, p.app.AnilistCacheDir)
@@ -71,7 +72,21 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 	// Create a new platform for this profile
 	token := p.app.Database.GetAnilistTokenForProfile(profileID)
 	if token == "" {
-		return p.app.AnilistPlatformRef.Get() // fallback to global
+		// No AniList linked for this profile — return a nil-token platform
+		// that returns empty collections, NOT the admin's global platform
+		emptyClient := anilist.NewAnilistClient("", p.app.AnilistCacheDir)
+		emptyRef := util.NewRef[anilist.AnilistClient](emptyClient)
+		plat := anilist_platform.NewAnilistPlatform(
+			emptyRef,
+			p.app.ExtensionBankRef,
+			p.app.Logger,
+			p.app.Database,
+			func() {},
+		)
+		p.mu.Lock()
+		p.platforms[profileID] = plat
+		p.mu.Unlock()
+		return plat
 	}
 
 	client := anilist.NewAnilistClient(token, p.app.AnilistCacheDir)

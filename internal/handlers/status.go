@@ -66,10 +66,12 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 	// In multi-user mode, load the profile-specific AniList account
 	profileID := core.GetProfileIDFromContext(c)
 	if h.App.MultiUserEnabled && profileID != "" {
-		if profileAcc, err := h.App.Database.GetAccountByProfileID(profileID); err == nil && profileAcc != nil {
+		if profileAcc, err := h.App.Database.GetAccountByProfileID(profileID); err == nil && profileAcc != nil && profileAcc.Token != "" {
 			currentUser, _ = user.NewUser(profileAcc)
 			if currentUser != nil {
 				currentUser.Token = "HIDDEN"
+			} else {
+				currentUser = user.NewSimulatedUser()
 			}
 		} else {
 			currentUser = user.NewSimulatedUser()
