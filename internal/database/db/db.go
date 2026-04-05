@@ -117,6 +117,7 @@ func migrateTables(db *gorm.DB) error {
 		&models.Admin{},
 		&models.InstanceConfig{},
 		&models.ProfileSettings{},
+		&models.LibraryPath{},
 		//&models.MangaChapterContainer{},
 	)
 	if err != nil {
