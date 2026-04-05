@@ -102,7 +102,7 @@ export function ProfilePickerPage() {
             <div className="text-center">
                 <h1 className="text-2xl font-bold text-white">Who's watching?</h1>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-wrap justify-center gap-4">
                 {profiles?.map((profile: any) => (
                     <button
                         key={profile.id}
