@@ -61,6 +61,8 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
+require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+
 require (
 	github.com/99designs/gqlgen v0.17.73 // indirect
 	github.com/RoaringBitmap/roaring v1.2.3 // indirect
