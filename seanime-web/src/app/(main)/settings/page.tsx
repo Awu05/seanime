@@ -1104,15 +1104,18 @@ function AnilistTokenInput({ onSubmit, isPending }: { onSubmit: (token: string) 
     return (
         <div className="space-y-2">
             <label className="block text-sm text-gray-300">Paste your AniList token</label>
-            <textarea
+            <input
+                type="text"
                 value={token}
-                onChange={e => setToken(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-brand-500 min-h-[60px]"
+                onChange={e => setToken(e.target.value.replace(/\s/g, ""))}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-brand-500"
                 placeholder="Paste token here..."
             />
             <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
                     if (token.trim()) {
                         onSubmit(token.trim())
                     }
