@@ -712,20 +712,7 @@ export default function Page() {
                                                             Get AniList Token
                                                         </a>
                                                     </div>
-                                                    <Form
-                                                        schema={defineSchema(({ z }) => z.object({
-                                                            token: z.string().min(1, "Token is required"),
-                                                        }))}
-                                                        onSubmit={data => {
-                                                            anilistLogin({ token: data.token.trim() })
-                                                        }}
-                                                    >
-                                                        <Field.Textarea
-                                                            name="token"
-                                                            label="Paste your AniList token"
-                                                        />
-                                                        <Field.Submit showLoadingOverlayOnSuccess>Connect</Field.Submit>
-                                                    </Form>
+                                                    <AnilistTokenInput onSubmit={(token) => anilistLogin({ token })} isPending={isLinkingAnilist} />
                                                 </div>
                                             )}
                                         </SettingsCard>
@@ -1109,4 +1096,32 @@ export default function Page() {
         </>
     )
 
+}
+
+function AnilistTokenInput({ onSubmit, isPending }: { onSubmit: (token: string) => void, isPending: boolean }) {
+    const [token, setToken] = React.useState("")
+
+    return (
+        <div className="space-y-2">
+            <label className="block text-sm text-gray-300">Paste your AniList token</label>
+            <textarea
+                value={token}
+                onChange={e => setToken(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-brand-500 min-h-[60px]"
+                placeholder="Paste token here..."
+            />
+            <button
+                type="button"
+                onClick={() => {
+                    if (token.trim()) {
+                        onSubmit(token.trim())
+                    }
+                }}
+                disabled={!token.trim() || isPending}
+                className="w-full py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-medium disabled:opacity-50"
+            >
+                {isPending ? "Connecting..." : "Connect"}
+            </button>
+        </div>
+    )
 }
