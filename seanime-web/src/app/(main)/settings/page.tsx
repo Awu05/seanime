@@ -71,7 +71,7 @@ import { DenshiSettings } from "./_containers/denshi-settings"
 import { DiscordRichPresenceSettings } from "./_containers/discord-rich-presence-settings"
 import { LocalSettings } from "./_containers/local-settings"
 import { NakamaSettings } from "./_containers/nakama-settings"
-import { useLogout } from "@/api/hooks/auth.hooks"
+import { useLogin, useLogout } from "@/api/hooks/auth.hooks"
 import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { useCurrentUser } from "@/app/(main)/_hooks/use-server-status"
 import { ProfileManagementSettings } from "./_containers/profile-management-settings"
@@ -104,6 +104,7 @@ export default function Page() {
     const isAdmin = currentProfile?.isAdmin ?? false
     const currentUser = useCurrentUser()
     const { mutate: anilistLogout } = useLogout()
+    const { mutate: anilistLogin } = useLogin()
 
     const { mutate: openInExplorer, isPending: isOpening } = useOpenInExplorer()
 
@@ -704,7 +705,7 @@ export default function Page() {
                                                             token: z.string().min(1, "Token is required"),
                                                         }))}
                                                         onSubmit={data => {
-                                                            router.push("/auth/callback#access_token=" + data.token.trim())
+                                                            anilistLogin({ token: data.token.trim() })
                                                         }}
                                                     >
                                                         <Field.Textarea
