@@ -1,3 +1,4 @@
+import { useServerMutation } from "@/api/client/requests"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import { useOpenInExplorer } from "@/api/hooks/explorer.hooks"
 import { useAnimeListTorrentProviderExtensions } from "@/api/hooks/extensions.hooks"
@@ -71,7 +72,7 @@ import { DenshiSettings } from "./_containers/denshi-settings"
 import { DiscordRichPresenceSettings } from "./_containers/discord-rich-presence-settings"
 import { LocalSettings } from "./_containers/local-settings"
 import { NakamaSettings } from "./_containers/nakama-settings"
-import { useLogin, useLogout } from "@/api/hooks/auth.hooks"
+import { useLogout } from "@/api/hooks/auth.hooks"
 import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { useCurrentUser } from "@/app/(main)/_hooks/use-server-status"
 import { ProfileManagementSettings } from "./_containers/profile-management-settings"
@@ -104,7 +105,18 @@ export default function Page() {
     const isAdmin = currentProfile?.isAdmin ?? false
     const currentUser = useCurrentUser()
     const { mutate: anilistLogout } = useLogout()
-    const { mutate: anilistLogin } = useLogin()
+    const { mutate: anilistLogin, isPending: isLinkingAnilist } = useServerMutation<any, { token: string }>({
+        endpoint: API_ENDPOINTS.AUTH.Login.endpoint,
+        method: API_ENDPOINTS.AUTH.Login.methods[0],
+        mutationKey: ["anilist-link"],
+        onSuccess: () => {
+            toast.success("AniList account linked")
+            setTimeout(() => window.location.reload(), 500)
+        },
+        onError: () => {
+            toast.error("Failed to link AniList account. Check that the token is valid.")
+        },
+    })
 
     const { mutate: openInExplorer, isPending: isOpening } = useOpenInExplorer()
 
