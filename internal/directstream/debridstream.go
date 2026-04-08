@@ -2,6 +2,8 @@ package directstream
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"seanime/internal/nativeplayer"
 	httputil "seanime/internal/util/http"
 	"seanime/internal/util/result"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,6 +38,7 @@ type DebridStream struct {
 	streamReadyCh chan struct{}        // Closed by the initiator when the stream is ready
 	httpStream    *httputil.FileStream // Shared file-backed cache for multiple readers
 	cacheMu       sync.RWMutex         // Protects httpStream access
+	downloader    *DebridDownloader
 }
 
 func (s *DebridStream) Type() nativeplayer.StreamType {
@@ -89,6 +93,11 @@ func (s *DebridStream) Close() error {
 
 // Terminate overrides BaseStream.Terminate to also clean up the HTTP cache
 func (s *DebridStream) Terminate() {
+	// Clean up background downloader
+	if s.downloader != nil {
+		s.downloader.Cleanup()
+		s.downloader = nil
+	}
 	// Clean up HTTP cache first
 	if err := s.Close(); err != nil {
 		s.logger.Error().Err(err).Msg("directstream(debrid): Failed to clean up HTTP cache during termination")
@@ -162,6 +171,41 @@ func (s *DebridStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err e
 
 			playbackInfo.MkvMetadata = metadata
 			playbackInfo.MkvMetadataParser = mo.Some(parser)
+
+			// Browsers can't play MKV containers or unsupported audio codecs directly.
+			// Route through the HLS transcoder which remuxes to MPEG-TS segments.
+			if s.manager.transcodeRequester != nil {
+				needsTranscode := s.needsAudioTranscode(metadata)
+				isMkv := isEbmlContent(contentType) || contentType == "application/octet-stream" || contentType == "application/force-download"
+
+				if needsTranscode || isMkv {
+					reason := "MKV container"
+					if needsTranscode {
+						reason = "unsupported audio codec"
+					}
+					s.logger.Info().Str("reason", reason).Msg("directstream(debrid): Using HLS transcode")
+					if tErr := s.manager.transcodeRequester.RequestTranscodeStream(s.streamUrl, s.clientId); tErr != nil {
+						s.logger.Warn().Err(tErr).Msg("directstream(debrid): Failed to request transcode, falling back to direct stream")
+					} else {
+						// Preload the first segments so they're ready when the player starts
+						s.manager.transcodeRequester.PreloadFirstSegments(s.streamUrl, s.clientId)
+						playbackInfo.StreamUrl = "{{SERVER_URL}}/api/v1/mediastream/transcode/master.m3u8"
+						playbackInfo.MimeType = "application/x-mpegURL"
+						// Start background download for local file switchover
+						s.startBackgroundDownload()
+
+						// Start subtitle stream for the HLS transcode path
+						go func() {
+							subReader, subErr := httputil.NewHttpReadSeekerFromURL(s.streamUrl)
+							if subErr != nil {
+								s.logger.Warn().Err(subErr).Msg("directstream(debrid): Failed to create subtitle reader for transcode path")
+								return
+							}
+							s.StartSubtitleStream(s, s.manager.playbackCtx, subReader, 0)
+						}()
+					}
+				}
+			}
 		}
 
 		s.playbackInfo = &playbackInfo
@@ -184,9 +228,74 @@ var videoProxyClient = &http.Client{
 	Timeout: 60 * time.Second,
 }
 
+// needsAudioTranscode checks if the MKV metadata contains audio codecs that browsers can't decode.
+func (s *DebridStream) needsAudioTranscode(metadata *mkvparser.Metadata) bool {
+	if metadata == nil {
+		return false
+	}
+	unsupportedCodecs := []string{"A_AC3", "A_EAC3", "A_DTS", "A_TRUEHD", "A_MLP", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"}
+	for _, track := range metadata.Tracks {
+		if track.Type == mkvparser.TrackTypeAudio {
+			for _, codec := range unsupportedCodecs {
+				if strings.EqualFold(track.CodecID, codec) {
+					s.logger.Debug().Str("codecID", track.CodecID).Msg("directstream(debrid): Detected unsupported audio codec")
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// startBackgroundDownload begins downloading the debrid file to local storage.
+// When complete, it notifies the transcoder so new encoder heads use the local file.
+func (s *DebridStream) startBackgroundDownload() {
+	if s.manager.transcodeRequester == nil {
+		return
+	}
+
+	downloadDir := s.manager.transcodeRequester.GetTranscodeDir()
+	if downloadDir == "" {
+		return
+	}
+
+	hashBytes := sha1.Sum([]byte(s.streamUrl))
+	hash := hex.EncodeToString(hashBytes[:])
+
+	d := NewDebridDownloader(s.streamUrl, hash, downloadDir, s.contentLength, s.logger)
+	if !d.ShouldDownload() {
+		s.logger.Info().Int64("size", s.contentLength).Msg("directstream(debrid): File exceeds download cap, using remote-only with estimated keyframes")
+		return
+	}
+
+	s.downloader = d
+	d.Start(s.manager.playbackCtx)
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.manager.playbackCtx.Done():
+				return
+			case <-ticker.C:
+				if d.IsComplete() {
+					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.LocalPath())
+					s.logger.Info().Msg("directstream(debrid): Background download complete, transcoder notified")
+					return
+				}
+				if d.Error() != nil {
+					s.logger.Warn().Err(d.Error()).Msg("directstream(debrid): Background download failed, continuing with remote stream")
+					return
+				}
+				s.logger.Debug().Msgf("directstream(debrid): Download progress: %.1f%%", d.Progress()*100)
+			}
+		}
+	}()
+}
+
 func (s *DebridStream) GetStreamHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//s.logger.Trace().Str("range", r.Header.Get("Range")).Str("method", r.Method).Msg("directstream(debrid): Stream endpoint hit")
 
 		if s.streamUrl == "" {
 			s.logger.Error().Msg("directstream(debrid): No URL to stream")
@@ -282,6 +391,7 @@ func (s *DebridStream) GetStreamHandler() http.Handler {
 	})
 }
 
+
 type PlayDebridStreamOptions struct {
 	StreamUrl    string
 	MediaId      int
@@ -327,6 +437,54 @@ func (m *Manager) PlayDebridStream(ctx context.Context, filepath string, opts Pl
 			episode:               episode,
 			episodeCollection:     episodeCollection,
 			subtitleEventCache:    result.NewMap[string, *mkvparser.SubtitleEvent](),
+			activeSubtitleStreams: result.NewMap[string, *SubtitleStream](),
+		},
+		streamReadyCh: make(chan struct{}),
+	}
+
+	go func() {
+		m.loadStream(stream)
+	}()
+
+	return nil
+}
+
+// PlayDebridStreamDirect plays a debrid stream URL through the native player without anime metadata.
+// Used by the torrent list play button.
+func (m *Manager) PlayDebridStreamDirect(clientId string, streamUrl string, title string) error {
+	m.playbackMu.Lock()
+	defer m.playbackMu.Unlock()
+
+	// Create minimal stub media and episode
+	stubMedia := &anilist.BaseAnime{
+		ID: 0,
+	}
+
+	stubEpisode := &anime.Episode{
+		Type:           anime.LocalFileTypeMain,
+		DisplayTitle:   title,
+		EpisodeTitle:   "",
+		EpisodeNumber:  1,
+		ProgressNumber: 1,
+		AniDBEpisode:   "1",
+	}
+
+	stubCollection := &anime.EpisodeCollection{
+		Episodes: []*anime.Episode{stubEpisode},
+	}
+
+	stream := &DebridStream{
+		streamUrl: streamUrl,
+		filepath:  title,
+		BaseStream: BaseStream{
+			manager:              m,
+			logger:               m.Logger,
+			clientId:             clientId,
+			media:                stubMedia,
+			filename:             title,
+			episode:              stubEpisode,
+			episodeCollection:    stubCollection,
+			subtitleEventCache:   result.NewMap[string, *mkvparser.SubtitleEvent](),
 			activeSubtitleStreams: result.NewMap[string, *SubtitleStream](),
 		},
 		streamReadyCh: make(chan struct{}),
