@@ -209,6 +209,43 @@ func (r *Repository) RequestPreloadTranscodeStream(filepath string) (err error) 
 	return
 }
 
+// PreloadFirstSegments triggers generation of the first video and audio segments
+// so they're ready by the time the player starts requesting them.
+func (r *Repository) PreloadFirstSegments(filepath string, clientId string) {
+	if !r.IsInitialized() || !r.transcoder.IsPresent() {
+		return
+	}
+
+	mc, ok := r.playbackManager.currentMediaContainer.Get()
+	if !ok || mc.MediaInfo == nil {
+		return
+	}
+
+	tc := r.transcoder.MustGet()
+
+	// Trigger first video segment (original quality)
+	go func() {
+		_, err := tc.GetVideoSegment(filepath, mc.Hash, mc.MediaInfo, transcoder.Original, 0, clientId)
+		if err != nil {
+			r.logger.Warn().Err(err).Msg("mediastream: Failed to preload first video segment")
+		} else {
+			r.logger.Debug().Msg("mediastream: First video segment preloaded")
+		}
+	}()
+
+	// Trigger first audio segment (first audio track)
+	if len(mc.MediaInfo.Audios) > 0 {
+		go func() {
+			_, err := tc.GetAudioSegment(filepath, mc.Hash, mc.MediaInfo, int32(mc.MediaInfo.Audios[0].Index), 0, clientId)
+			if err != nil {
+				r.logger.Warn().Err(err).Msg("mediastream: Failed to preload first audio segment")
+			} else {
+				r.logger.Debug().Msg("mediastream: First audio segment preloaded")
+			}
+		}()
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Direct Play
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,6 +275,18 @@ func (r *Repository) RequestPreloadDirectPlay(filepath string) (err error) {
 	_, err = r.playbackManager.PreloadPlayback(filepath, StreamTypeDirect)
 
 	return
+}
+
+// NotifyDownloadComplete forwards download completion to the active transcoder.
+func (r *Repository) NotifyDownloadComplete(remotePath string, localPath string) {
+	if tc, ok := r.transcoder.Get(); ok {
+		tc.NotifyDownloadComplete(remotePath, localPath)
+	}
+}
+
+// GetTranscodeDir returns the transcode directory path.
+func (r *Repository) GetTranscodeDir() string {
+	return r.transcodeDir
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

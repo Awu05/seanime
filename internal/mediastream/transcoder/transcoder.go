@@ -55,6 +55,10 @@ func NewTranscoder(opts *NewTranscoderOptions) (*Transcoder, error) {
 		_ = os.RemoveAll(path.Join(streamDir, d.Name()))
 	}
 
+	// Clear old downloads
+	downloadDir := filepath.Join(opts.TempOutDir, "downloads")
+	_ = os.RemoveAll(downloadDir)
+
 	ret := &Transcoder{
 		streams:    result.NewMap[string, *FileStream](),
 		clientChan: make(chan ClientInfo, 1000),
@@ -98,6 +102,17 @@ func (t *Transcoder) Destroy() {
 	t.streams = result.NewMap[string, *FileStream]()
 	t.clientChan = make(chan ClientInfo, 10)
 	t.logger.Debug().Msg("transcoder: Transcoder destroyed")
+}
+
+// NotifyDownloadComplete updates the FileStream for the given remote path to use a local file.
+func (t *Transcoder) NotifyDownloadComplete(remotePath string, localPath string) {
+	stream, ok := t.streams.Get(remotePath)
+	if !ok {
+		t.logger.Warn().Str("remotePath", remotePath).Msg("transcoder: FileStream not found for download notification")
+		return
+	}
+	stream.SetLocalPath(localPath)
+	t.logger.Info().Str("localPath", localPath).Msg("transcoder: Download complete, new encoder heads will use local file")
 }
 
 func (t *Transcoder) getFileStream(path string, hash string, mediaInfo *videofile.MediaInfo) (*FileStream, error) {
