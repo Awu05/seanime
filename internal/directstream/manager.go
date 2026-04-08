@@ -62,13 +62,23 @@ type (
 		animeCollection mo.Option[*anilist.AnimeCollection]
 		animeCache      *result.Cache[int, *anilist.BaseAnime]
 
-		parserCache *result.Cache[string, *mkvparser.MetadataParser]
+		parserCache        *result.Cache[string, *mkvparser.MetadataParser]
+		transcodeRequester TranscodeRequester
 		//playbackStatusSubscribers *result.Map[string, *PlaybackStatusSubscriber]
 	}
 
 	Settings struct {
 		AutoPlayNextEpisode bool
 		AutoUpdateProgress  bool
+	}
+
+	// TranscodeRequester is an interface for requesting transcode streams.
+	// This avoids a direct dependency on the mediastream package.
+	TranscodeRequester interface {
+		RequestTranscodeStream(filepath string, clientId string) error
+		PreloadFirstSegments(filepath string, clientId string)
+		NotifyDownloadComplete(remotePath string, localPath string)
+		GetTranscodeDir() string
 	}
 
 	NewManagerOptions struct {
@@ -83,6 +93,7 @@ type (
 		NativePlayer               *nativeplayer.NativePlayer
 		VideoCore                  *videocore.VideoCore
 		HMACTokenFunc              func(endpoint string, symbol string) string
+		TranscodeRequester         TranscodeRequester // Optional: used for debrid stream audio transcoding
 	}
 )
 
@@ -101,6 +112,7 @@ func NewManager(options NewManagerOptions) *Manager {
 		nativePlayer:               options.NativePlayer,
 		parserCache:                result.NewCache[string, *mkvparser.MetadataParser](),
 		videoCore:                  options.VideoCore,
+		transcodeRequester:         options.TranscodeRequester,
 	}
 	ret.videoCoreSubscriber = ret.videoCore.Subscribe("directstream")
 	ret.listenToPlayerEvents()

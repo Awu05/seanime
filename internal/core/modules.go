@@ -217,6 +217,7 @@ func (a *App) initModulesOnce() {
 			}
 			return qp
 		},
+		TranscodeRequester: &mediastreamTranscodeAdapter{repo: a.MediastreamRepository},
 	})
 
 	// +---------------------+
@@ -945,4 +946,26 @@ func (a *App) ensureDefaultProfile() {
 		return
 	}
 	_, _ = a.Database.CloneSettingsForProfile(profile.ID)
+}
+
+// mediastreamTranscodeAdapter adapts MediastreamRepository to the directstream.TranscodeRequester interface.
+type mediastreamTranscodeAdapter struct {
+	repo *mediastream.Repository
+}
+
+func (a *mediastreamTranscodeAdapter) RequestTranscodeStream(filepath string, clientId string) error {
+	_, err := a.repo.RequestTranscodeStream(filepath, clientId)
+	return err
+}
+
+func (a *mediastreamTranscodeAdapter) PreloadFirstSegments(filepath string, clientId string) {
+	a.repo.PreloadFirstSegments(filepath, clientId)
+}
+
+func (a *mediastreamTranscodeAdapter) NotifyDownloadComplete(remotePath string, localPath string) {
+	a.repo.NotifyDownloadComplete(remotePath, localPath)
+}
+
+func (a *mediastreamTranscodeAdapter) GetTranscodeDir() string {
+	return a.repo.GetTranscodeDir()
 }
