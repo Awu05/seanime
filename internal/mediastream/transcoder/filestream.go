@@ -26,8 +26,33 @@ type FileStream struct {
 	Info      *videofile.MediaInfo               // The media information of the file.
 	videos    *result.Map[Quality, *VideoStream] // A map of video streams.
 	audios    *result.Map[int32, *AudioStream]   // A map of audio streams.
-	logger    *zerolog.Logger
-	settings  *Settings
+	logger      *zerolog.Logger
+	settings    *Settings
+	localPathMu sync.RWMutex
+	localPath   string
+}
+
+// SetLocalPath sets a local file path for ffmpeg to use instead of the remote URL.
+func (fs *FileStream) SetLocalPath(path string) {
+	fs.localPathMu.Lock()
+	defer fs.localPathMu.Unlock()
+	fs.localPath = path
+	fs.logger.Info().Str("localPath", path).Msg("filestream: Local path set, new encoder heads will use local file")
+}
+
+// GetInputPath returns the local path if available, otherwise the original remote path.
+func (fs *FileStream) GetInputPath() string {
+	fs.localPathMu.RLock()
+	localPath := fs.localPath
+	fs.localPathMu.RUnlock()
+	if localPath != "" {
+		return localPath
+	}
+	return fs.Path
+}
+
+func isRemoteURL(path string) bool {
+	return strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://")
 }
 
 // NewFileStream creates a new FileStream.
@@ -48,11 +73,17 @@ func NewFileStream(
 		Info:     mediaInfo,
 	}
 
-	ret.ready.Add(1)
-	go func() {
-		defer ret.ready.Done()
-		ret.Keyframes = GetKeyframes(path, sha, logger, settings)
-	}()
+	// Use estimated keyframes for remote URLs to skip the slow 10-60s keyframe extraction
+	if isRemoteURL(path) && mediaInfo.Duration > 0 {
+		logger.Info().Float64("duration", float64(mediaInfo.Duration)).Msg("filestream: Using estimated keyframes for remote URL (fast start)")
+		ret.Keyframes = GetEstimatedKeyframes(float64(mediaInfo.Duration), 4.0, sha)
+	} else {
+		ret.ready.Add(1)
+		go func() {
+			defer ret.ready.Done()
+			ret.Keyframes = GetKeyframes(path, sha, logger, settings)
+		}()
+	}
 
 	return ret
 }

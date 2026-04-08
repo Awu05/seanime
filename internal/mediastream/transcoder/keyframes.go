@@ -197,6 +197,23 @@ func getKeyframes(ffprobePath string, path string, kf *Keyframe, hash string, lo
 	return nil
 }
 
+// GetEstimatedKeyframes generates evenly-spaced keyframe timestamps for fast start.
+// Used for remote URLs where real keyframe extraction would block for 10-60+ seconds.
+// FFmpeg's segment muxer with -c:v copy auto-adjusts to actual keyframes in the source.
+func GetEstimatedKeyframes(duration float64, interval float64, hash string) *Keyframe {
+	count := int(duration/interval) + 1
+	kfs := make([]float64, count)
+	for i := 0; i < count; i++ {
+		kfs[i] = float64(i) * interval
+	}
+	return &Keyframe{
+		Sha:       hash,
+		Keyframes: kfs,
+		IsDone:    true,
+		info:      &KeyframeInfo{},
+	}
+}
+
 func getDummyKeyframes(ffprobePath string, path string, sha string) ([]float64, error) {
 	dummyKeyframeDuration := float64(2)
 	info, err := videofile.FfprobeGetInfo(ffprobePath, path, sha)
