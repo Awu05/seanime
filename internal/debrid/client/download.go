@@ -149,7 +149,7 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, destina
 				defer wg.Done()
 
 				// Download the file
-				ok := r.downloadFile(ctx, tId, url, destination, downloadMap)
+				ok := r.downloadFile(ctx, tId, url, destination, torrentName, downloadMap)
 				if !ok {
 					return
 				}
@@ -173,7 +173,7 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, destina
 	return nil
 }
 
-func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl string, destination string, downloadMap *result.Map[string, downloadStatus]) (ok bool) {
+func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl string, destination string, torrentName string, downloadMap *result.Map[string, downloadStatus]) (ok bool) {
 	defer util.HandlePanicInModuleThen("debrid/client/downloadFile", func() {
 		ok = false
 	})
@@ -214,48 +214,84 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 	}
 	defer resp.Body.Close()
 
-	// e.g. "Torrent Name.zip", "downloaded_torrent"
-	// defaults to downloaded_torrent.{ext} if we can't guess the name
-	filename := "downloaded_torrent"
+	// Determine the filename for the downloaded file.
+	// Priority: torrent name > Content-Disposition header > URL path > fallback
+	filename := ""
 	ext := ""
 
-	// Try to get the file name from the Content-Disposition header
-	// Probably doesn't work for any provider
-	hFilename, err := getFilenameFromHeaders(downloadUrl)
-	if err == nil {
-		r.logger.Warn().Str("newFilename", hFilename).Str("defaultFilename", filename).Msg("debrid: Filename found in headers, overriding default")
-		filename = hFilename
-	}
-
-	// The case for TorBox(?)
-	// RD will return application/force-download so ext will still be empty
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		mediaType, _, err := mime.ParseMediaType(ct)
-		if err == nil {
-			switch mediaType {
-			case "application/zip":
-				ext = ".zip"
-			case "application/x-rar-compressed":
-				ext = ".rar"
-			default:
+	// 1. Use the torrent name from the debrid provider (most reliable)
+	if torrentName != "" {
+		filename = torrentName
+		// Ensure the torrent name has a file extension
+		if filepath.Ext(filename) == "" {
+			// Try to detect extension from Content-Type or URL
+			if ct := resp.Header.Get("Content-Type"); ct != "" {
+				mediaType, _, ctErr := mime.ParseMediaType(ct)
+				if ctErr == nil {
+					switch mediaType {
+					case "application/zip":
+						ext = ".zip"
+					case "application/x-rar-compressed":
+						ext = ".rar"
+					case "video/x-matroska":
+						ext = ".mkv"
+					case "video/mp4":
+						ext = ".mp4"
+					}
+				}
 			}
-			r.logger.Debug().Str("mediaType", mediaType).Str("ext", ext).Msg("debrid: Detected media type and extension")
+			if ext == "" {
+				// Try URL path extension
+				if parsed, urlErr := url.Parse(downloadUrl); urlErr == nil {
+					urlExt := filepath.Ext(parsed.Path)
+					if urlExt != "" {
+						ext = urlExt
+					}
+				}
+			}
+			if ext != "" {
+				filename = filename + ext
+			}
 		}
 	}
 
-	// add the file extension to downloaded_torrent if we couldn't guess the name from headers
-	if filename == "downloaded_torrent" && ext != "" {
-		filename = fmt.Sprintf("%s%s", filename, ext)
+	// 2. Try Content-Disposition header
+	if filename == "" {
+		hFilename, hErr := getFilenameFromHeaders(downloadUrl)
+		if hErr == nil && hFilename != "" {
+			filename = hFilename
+			r.logger.Debug().Str("filename", filename).Msg("debrid: Filename found in Content-Disposition header")
+		}
 	}
 
-	// Check if the download URL has the extension
-	// This works for RD, by that point we should have "Torrent Name.zip" or "Episode.mkv"
-	urlExt := filepath.Ext(downloadUrl)
-	if filename == "downloaded_torrent" && urlExt != "" {
-		filename = filepath.Base(downloadUrl)
-		filename, _ = url.PathUnescape(filename)
-		ext = urlExt
-		r.logger.Debug().Str("urlExt", urlExt).Str("filename", filename).Str("downloadUrl", downloadUrl).Msg("debrid: Extension found in URL, using it as file extension and file name")
+	// 3. Try URL path
+	if filename == "" {
+		if parsed, urlErr := url.Parse(downloadUrl); urlErr == nil {
+			base := filepath.Base(parsed.Path)
+			if base != "" && base != "." && base != "/" && filepath.Ext(base) != "" {
+				filename, _ = url.PathUnescape(base)
+				r.logger.Debug().Str("filename", filename).Msg("debrid: Filename extracted from URL path")
+			}
+		}
+	}
+
+	// 4. Fallback
+	if filename == "" {
+		filename = "downloaded_torrent"
+		if ct := resp.Header.Get("Content-Type"); ct != "" {
+			mediaType, _, ctErr := mime.ParseMediaType(ct)
+			if ctErr == nil {
+				switch mediaType {
+				case "application/zip":
+					ext = ".zip"
+				case "application/x-rar-compressed":
+					ext = ".rar"
+				}
+			}
+		}
+		if ext != "" {
+			filename = filename + ext
+		}
 	}
 
 	r.logger.Debug().Str("filename", filename).Str("ext", ext).Msg("debrid: Starting download")
