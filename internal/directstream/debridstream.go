@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"seanime/internal/api/anilist"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
 	"seanime/internal/library/anime"
@@ -194,15 +195,19 @@ func (s *DebridStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err e
 						// Start background download for local file switchover
 						s.startBackgroundDownload()
 
-						// Start subtitle stream for the HLS transcode path
-						go func() {
-							subReader, subErr := httputil.NewHttpReadSeekerFromURL(s.streamUrl)
-							if subErr != nil {
-								s.logger.Warn().Err(subErr).Msg("directstream(debrid): Failed to create subtitle reader for transcode path")
-								return
-							}
-							s.StartSubtitleStream(s, s.manager.playbackCtx, subReader, 0)
-						}()
+						// Subtitle stream is deferred until the local file is available
+						// (remote URLs often don't support range requests needed for MKV subtitle extraction).
+						// If no background download is running, try the remote URL as a fallback.
+						if s.downloader == nil {
+							go func() {
+								subReader, subErr := httputil.NewHttpReadSeekerFromURL(s.streamUrl)
+								if subErr != nil {
+									s.logger.Warn().Err(subErr).Msg("directstream(debrid): Failed to create subtitle reader for transcode path")
+									return
+								}
+								s.StartSubtitleStream(s, s.manager.playbackCtx, subReader, 0)
+							}()
+						}
 					}
 				}
 			}
@@ -280,8 +285,19 @@ func (s *DebridStream) startBackgroundDownload() {
 				return
 			case <-ticker.C:
 				if d.IsComplete() {
-					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.LocalPath())
+					localPath := d.LocalPath()
+					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, localPath)
 					s.logger.Info().Msg("directstream(debrid): Background download complete, transcoder notified")
+
+					// Start subtitle extraction from the local file
+					go func() {
+						f, err := os.Open(localPath)
+						if err != nil {
+							s.logger.Warn().Err(err).Msg("directstream(debrid): Failed to open local file for subtitle extraction")
+							return
+						}
+						s.StartSubtitleStream(s, s.manager.playbackCtx, f, 0)
+					}()
 					return
 				}
 				if d.Error() != nil {
