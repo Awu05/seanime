@@ -219,24 +219,79 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 	filename := ""
 	ext := ""
 
-	// 1. Use the torrent name from the debrid provider (most reliable)
+	// Helper: extract extension from Content-Disposition header of the GET response
+	getExtFromContentDisposition := func() string {
+		cd := resp.Header.Get("Content-Disposition")
+		if cd == "" {
+			return ""
+		}
+		_, params, cdErr := mime.ParseMediaType(cd)
+		if cdErr != nil {
+			// Fallback: try regex for filename="..." or filename=...
+			re := regexp.MustCompile(`filename\*?=(?:UTF-8''|"?)([^";\s]+)`)
+			if matches := re.FindStringSubmatch(cd); len(matches) > 1 {
+				decoded, _ := url.PathUnescape(matches[1])
+				if e := filepath.Ext(decoded); e != "" {
+					return e
+				}
+			}
+			return ""
+		}
+		if fn, ok := params["filename"]; ok {
+			if e := filepath.Ext(fn); e != "" {
+				return e
+			}
+		}
+		return ""
+	}
+
+	// Helper: get full filename from Content-Disposition header
+	getFilenameFromContentDisposition := func() string {
+		cd := resp.Header.Get("Content-Disposition")
+		if cd == "" {
+			return ""
+		}
+		_, params, cdErr := mime.ParseMediaType(cd)
+		if cdErr != nil {
+			re := regexp.MustCompile(`filename\*?=(?:UTF-8''|"?)([^";\s]+)`)
+			if matches := re.FindStringSubmatch(cd); len(matches) > 1 {
+				decoded, _ := url.PathUnescape(matches[1])
+				return decoded
+			}
+			return ""
+		}
+		if fn, ok := params["filename"]; ok {
+			return fn
+		}
+		return ""
+	}
+
+	// 1. Use the torrent name from the debrid provider (most reliable for the base name)
 	if torrentName != "" {
 		filename = torrentName
 		// Ensure the torrent name has a file extension
 		if filepath.Ext(filename) == "" {
-			// Try to detect extension from Content-Type or URL
-			if ct := resp.Header.Get("Content-Type"); ct != "" {
-				mediaType, _, ctErr := mime.ParseMediaType(ct)
-				if ctErr == nil {
-					switch mediaType {
-					case "application/zip":
-						ext = ".zip"
-					case "application/x-rar-compressed":
-						ext = ".rar"
-					case "video/x-matroska":
-						ext = ".mkv"
-					case "video/mp4":
-						ext = ".mp4"
+			// Try Content-Disposition from the GET response (most reliable for extension)
+			ext = getExtFromContentDisposition()
+			if ext == "" {
+				// Try Content-Type
+				if ct := resp.Header.Get("Content-Type"); ct != "" {
+					mediaType, _, ctErr := mime.ParseMediaType(ct)
+					if ctErr == nil {
+						switch mediaType {
+						case "application/zip":
+							ext = ".zip"
+						case "application/x-rar-compressed":
+							ext = ".rar"
+						case "video/x-matroska":
+							ext = ".mkv"
+						case "video/mp4":
+							ext = ".mp4"
+						case "video/webm":
+							ext = ".webm"
+						case "video/x-msvideo":
+							ext = ".avi"
+						}
 					}
 				}
 			}
@@ -255,11 +310,10 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 		}
 	}
 
-	// 2. Try Content-Disposition header
+	// 2. Try full filename from Content-Disposition header
 	if filename == "" {
-		hFilename, hErr := getFilenameFromHeaders(downloadUrl)
-		if hErr == nil && hFilename != "" {
-			filename = hFilename
+		if cdFilename := getFilenameFromContentDisposition(); cdFilename != "" {
+			filename = cdFilename
 			r.logger.Debug().Str("filename", filename).Msg("debrid: Filename found in Content-Disposition header")
 		}
 	}
