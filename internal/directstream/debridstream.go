@@ -275,16 +275,23 @@ func (s *DebridStream) startBackgroundDownload() {
 	s.downloader = d
 	d.Start(s.manager.playbackCtx)
 
+	// Early switch threshold: only switch before download completes for smaller files
+	// where the download finishes quickly and seeking past the range is unlikely.
+	const earlySwitchMaxSize int64 = 5 * 1024 * 1024 * 1024 // 5GB
+
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+		switchedToLocal := false
 		for {
 			select {
 			case <-s.manager.playbackCtx.Done():
 				return
 			case <-ticker.C:
 				if d.IsComplete() {
-					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), 0)
+					if !switchedToLocal {
+						s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), 0)
+					}
 					s.logger.Info().Msg("directstream(debrid): Background download complete, switched to local file")
 
 					// Start subtitle extraction from the local file
@@ -302,6 +309,14 @@ func (s *DebridStream) startBackgroundDownload() {
 					s.logger.Warn().Err(d.Error()).Msg("directstream(debrid): Background download failed, continuing with remote stream")
 					d.Cleanup()
 					return
+				}
+				// Switch to local file early for smaller files (under 5GB).
+				// Download completes quickly so seeking past the range is rare.
+				// Larger files wait for full download to avoid choppy remote URL fallback.
+				if !switchedToLocal && s.contentLength <= earlySwitchMaxSize && d.Progress() >= 0.05 {
+					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), s.contentLength)
+					switchedToLocal = true
+					s.logger.Info().Msgf("directstream(debrid): Switched to local file at %.1f%% downloaded", d.Progress()*100)
 				}
 				s.logger.Debug().Msgf("directstream(debrid): Download progress: %.1f%%", d.Progress()*100)
 			}
