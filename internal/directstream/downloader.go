@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -64,7 +66,15 @@ func (d *DebridDownloader) Start(parentCtx context.Context) {
 		return
 	}
 
-	d.localPath = filepath.Join(dir, "video")
+	// Preserve the original filename from the URL
+	filename := "video"
+	if parsed, err := url.Parse(d.url); err == nil {
+		base := path.Base(parsed.Path)
+		if base != "" && base != "." && base != "/" {
+			filename = base
+		}
+	}
+	d.localPath = filepath.Join(dir, filename)
 
 	go d.download(ctx)
 }
