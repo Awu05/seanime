@@ -256,7 +256,7 @@ func (fs *FileStream) getVideoStream(quality Quality) *VideoStream {
 func (fs *FileStream) GetVideoSegment(quality Quality, segment int32) (string, error) {
 	streamLogger.Debug().Msgf("filestream: Retrieving video segment %d (%s)", segment, quality)
 	// Debug
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*65)
 	defer cancel()
 	debugStreamRequest(fmt.Sprintf("video %s, segment %d", quality, segment), ctx)
 

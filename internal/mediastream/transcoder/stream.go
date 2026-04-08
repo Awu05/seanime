@@ -197,7 +197,7 @@ func (ts *Stream) GetSegment(segment int32) (string, error) {
 			return "", fmt.Errorf("transcoder: Stream killed while waiting for segment %d", segment)
 		case <-readyChan:
 			break
-		case <-time.After(25 * time.Second):
+		case <-time.After(60 * time.Second):
 			streamLogger.Error().Msgf("transcoder: Could not retrieve %s segment %d (timeout)", ts.kind, segment)
 			return "", errors.New("could not retrieve segment (timeout)")
 		}
