@@ -14,10 +14,11 @@ import (
 )
 
 type Keyframe struct {
-	Sha       string
-	Keyframes []float64
-	IsDone    bool
-	info      *KeyframeInfo
+	Sha         string
+	Keyframes   []float64
+	IsDone      bool
+	IsEstimated bool // true when using evenly-spaced estimated keyframes (not from ffprobe)
+	info        *KeyframeInfo
 }
 type KeyframeInfo struct {
 	mutex     sync.RWMutex
@@ -207,10 +208,11 @@ func GetEstimatedKeyframes(duration float64, interval float64, hash string) *Key
 		kfs[i] = float64(i) * interval
 	}
 	return &Keyframe{
-		Sha:       hash,
-		Keyframes: kfs,
-		IsDone:    true,
-		info:      &KeyframeInfo{},
+		Sha:         hash,
+		Keyframes:   kfs,
+		IsDone:      true,
+		IsEstimated: true,
+		info:        &KeyframeInfo{},
 	}
 }
 

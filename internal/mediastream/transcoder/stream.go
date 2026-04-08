@@ -385,7 +385,10 @@ func (ts *Stream) run(start int32) error {
 		//  - Video: if a segment is really short (between 20 and 100ms), the padding given in the else block bellow is not enough and
 		// the previous segment is played another time. the -segment_times is way more precise, so it does not do the same with this one
 		startSeg = start - 1
-		if ts.handle.getFlags()&AudioF != 0 {
+		if ts.handle.getFlags()&AudioF != 0 || ts.file.Keyframes.IsEstimated {
+			// For audio: need context before the starting point to avoid ~100ms silence gap.
+			// For estimated keyframes: skip the midpoint hack since the 4-second intervals would
+			// create a ~2 second offset between audio and video seek positions, causing desync.
 			startRef = ts.file.Keyframes.Get(startSeg)
 		} else {
 			// the param for the -ss takes the keyframe before the specified time
