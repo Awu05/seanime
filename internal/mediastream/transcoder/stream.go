@@ -447,7 +447,7 @@ func (ts *Stream) run(start int32) error {
 		)
 	}
 	args = append(args,
-		"-i", ts.file.Path,
+		"-i", ts.file.GetInputPath(),
 		// this makes behaviors consistent between soft and hardware decodes.
 		// this also means that after a -ss 50, the output video will start at 50s
 		"-start_at_zero",
