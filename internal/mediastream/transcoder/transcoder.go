@@ -55,10 +55,6 @@ func NewTranscoder(opts *NewTranscoderOptions) (*Transcoder, error) {
 		_ = os.RemoveAll(path.Join(streamDir, d.Name()))
 	}
 
-	// Clear old downloads
-	downloadDir := filepath.Join(opts.TempOutDir, "downloads")
-	_ = os.RemoveAll(downloadDir)
-
 	ret := &Transcoder{
 		streams:    result.NewMap[string, *FileStream](),
 		clientChan: make(chan ClientInfo, 1000),

@@ -286,6 +286,7 @@ func (s *DebridStream) startBackgroundDownload() {
 				}
 				if d.Error() != nil {
 					s.logger.Warn().Err(d.Error()).Msg("directstream(debrid): Background download failed, continuing with remote stream")
+					d.Cleanup()
 					return
 				}
 				s.logger.Debug().Msgf("directstream(debrid): Download progress: %.1f%%", d.Progress()*100)
