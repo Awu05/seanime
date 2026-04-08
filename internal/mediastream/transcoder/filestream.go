@@ -73,10 +73,12 @@ func NewFileStream(
 		Info:     mediaInfo,
 	}
 
-	// Use estimated keyframes for remote URLs to skip the slow 10-60s keyframe extraction
+	// Use estimated keyframes for remote URLs to skip the slow 10-60s keyframe extraction.
+	// Interval must be large enough to guarantee at least one real keyframe per segment —
+	// high-quality encodes can have keyframe intervals of 10-30 seconds.
 	if isRemoteURL(path) && mediaInfo.Duration > 0 {
 		logger.Info().Float64("duration", float64(mediaInfo.Duration)).Msg("filestream: Using estimated keyframes for remote URL (fast start)")
-		ret.Keyframes = GetEstimatedKeyframes(float64(mediaInfo.Duration), 4.0, sha)
+		ret.Keyframes = GetEstimatedKeyframes(float64(mediaInfo.Duration), 10.0, sha)
 	} else {
 		ret.ready.Add(1)
 		go func() {
