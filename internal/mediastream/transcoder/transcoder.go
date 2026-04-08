@@ -101,13 +101,14 @@ func (t *Transcoder) Destroy() {
 }
 
 // NotifyDownloadComplete updates the FileStream for the given remote path to use a local file.
-func (t *Transcoder) NotifyDownloadComplete(remotePath string, localPath string) {
+// expectedSize is the total file size (for partial download checks). Pass 0 if fully downloaded.
+func (t *Transcoder) NotifyDownloadComplete(remotePath string, localPath string, expectedSize int64) {
 	stream, ok := t.streams.Get(remotePath)
 	if !ok {
 		t.logger.Warn().Str("remotePath", remotePath).Msg("transcoder: FileStream not found for download notification")
 		return
 	}
-	stream.SetLocalPath(localPath)
+	stream.SetLocalPath(localPath, expectedSize)
 	t.logger.Info().Str("localPath", localPath).Msg("transcoder: Download complete, new encoder heads will use local file")
 }
 

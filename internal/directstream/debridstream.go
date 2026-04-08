@@ -286,7 +286,7 @@ func (s *DebridStream) startBackgroundDownload() {
 			case <-ticker.C:
 				if d.IsComplete() {
 					if !switchedToLocal {
-						s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath())
+						s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), 0)
 					}
 					s.logger.Info().Msg("directstream(debrid): Background download complete")
 
@@ -310,7 +310,7 @@ func (s *DebridStream) startBackgroundDownload() {
 				// Sequential playback works because the download runs faster than ffmpeg reads.
 				// If ffmpeg hits EOF (seeking past downloaded range), HLS.js retries the segment.
 				if !switchedToLocal && d.Progress() >= 0.05 {
-					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath())
+					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), s.contentLength)
 					switchedToLocal = true
 					s.logger.Info().Msgf("directstream(debrid): Switched to local file at %.1f%% downloaded", d.Progress()*100)
 				}

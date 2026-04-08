@@ -278,9 +278,9 @@ func (r *Repository) RequestPreloadDirectPlay(filepath string) (err error) {
 }
 
 // NotifyDownloadComplete forwards download completion to the active transcoder.
-func (r *Repository) NotifyDownloadComplete(remotePath string, localPath string) {
+func (r *Repository) NotifyDownloadComplete(remotePath string, localPath string, expectedSize int64) {
 	if tc, ok := r.transcoder.Get(); ok {
-		tc.NotifyDownloadComplete(remotePath, localPath)
+		tc.NotifyDownloadComplete(remotePath, localPath, expectedSize)
 	}
 }
 

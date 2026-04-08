@@ -28,26 +28,68 @@ type FileStream struct {
 	audios    *result.Map[int32, *AudioStream]   // A map of audio streams.
 	logger      *zerolog.Logger
 	settings    *Settings
-	localPathMu sync.RWMutex
-	localPath   string
+	localPathMu  sync.RWMutex
+	localPath    string
+	expectedSize int64 // total file size, used to check partial download coverage
 }
 
 // SetLocalPath sets a local file path for ffmpeg to use instead of the remote URL.
-func (fs *FileStream) SetLocalPath(path string) {
+// expectedSize is the total file size — used to determine if a seek position is within the downloaded range.
+// Pass 0 if the file is already fully downloaded.
+func (fs *FileStream) SetLocalPath(path string, expectedSize int64) {
 	fs.localPathMu.Lock()
 	defer fs.localPathMu.Unlock()
 	fs.localPath = path
-	fs.logger.Info().Str("localPath", path).Msg("filestream: Local path set, new encoder heads will use local file")
+	fs.expectedSize = expectedSize
+	fs.logger.Info().Str("localPath", path).Int64("expectedSize", expectedSize).Msg("filestream: Local path set, new encoder heads will use local file")
 }
 
-// GetInputPath returns the local path if available, otherwise the original remote path.
-func (fs *FileStream) GetInputPath() string {
+// GetInputPath returns the best input path for ffmpeg at the given seek time.
+// If a local file exists and covers the seek position, it returns the local path.
+// Otherwise it returns the remote URL.
+func (fs *FileStream) GetInputPath(seekTime float64) string {
 	fs.localPathMu.RLock()
 	localPath := fs.localPath
+	expectedSize := fs.expectedSize
 	fs.localPathMu.RUnlock()
-	if localPath != "" {
+
+	if localPath == "" {
+		return fs.Path
+	}
+
+	// If no expected size set, assume file is complete
+	if expectedSize <= 0 {
 		return localPath
 	}
+
+	// Check if the seek position is within the downloaded range
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return fs.Path
+	}
+
+	fileSize := info.Size()
+	if fileSize >= expectedSize {
+		return localPath // fully downloaded
+	}
+
+	// Estimate whether the local file covers the seek position
+	duration := float64(fs.Info.Duration)
+	if duration <= 0 {
+		return fs.Path
+	}
+	downloadedFraction := float64(fileSize) / float64(expectedSize)
+	seekFraction := seekTime / duration
+
+	// Use local file only if the seek position is safely within the downloaded range (2% buffer)
+	if seekFraction < downloadedFraction-0.02 {
+		return localPath
+	}
+
+	fs.logger.Debug().
+		Float64("seekTime", seekTime).
+		Float64("downloadedPct", downloadedFraction*100).
+		Msg("filestream: Seek position beyond downloaded range, using remote URL")
 	return fs.Path
 }
 

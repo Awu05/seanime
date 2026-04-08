@@ -962,8 +962,8 @@ func (a *mediastreamTranscodeAdapter) PreloadFirstSegments(filepath string, clie
 	a.repo.PreloadFirstSegments(filepath, clientId)
 }
 
-func (a *mediastreamTranscodeAdapter) NotifyDownloadComplete(remotePath string, localPath string) {
-	a.repo.NotifyDownloadComplete(remotePath, localPath)
+func (a *mediastreamTranscodeAdapter) NotifyDownloadComplete(remotePath string, localPath string, expectedSize int64) {
+	a.repo.NotifyDownloadComplete(remotePath, localPath, expectedSize)
 }
 
 func (a *mediastreamTranscodeAdapter) GetTranscodeDir() string {
