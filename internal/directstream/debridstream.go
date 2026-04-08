@@ -195,19 +195,18 @@ func (s *DebridStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err e
 						// Start background download for local file switchover
 						s.startBackgroundDownload()
 
-						// Subtitle stream is deferred until the local file is available
-						// (remote URLs often don't support range requests needed for MKV subtitle extraction).
-						// If no background download is running, try the remote URL as a fallback.
-						if s.downloader == nil {
-							go func() {
-								subReader, subErr := httputil.NewHttpReadSeekerFromURL(s.streamUrl)
-								if subErr != nil {
-									s.logger.Warn().Err(subErr).Msg("directstream(debrid): Failed to create subtitle reader for transcode path")
-									return
-								}
-								s.StartSubtitleStream(s, s.manager.playbackCtx, subReader, 0)
-							}()
-						}
+						// Start subtitle extraction from the remote URL immediately.
+						// It may fail partway through if the CDN doesn't support range requests,
+						// but we'll get partial subtitles. Once the background download completes,
+						// subtitle extraction restarts from the local file for full coverage.
+						go func() {
+							subReader, subErr := httputil.NewHttpReadSeekerFromURL(s.streamUrl)
+							if subErr != nil {
+								s.logger.Warn().Err(subErr).Msg("directstream(debrid): Failed to create subtitle reader for transcode path")
+								return
+							}
+							s.StartSubtitleStream(s, s.manager.playbackCtx, subReader, 0)
+						}()
 					}
 				}
 			}
