@@ -174,6 +174,12 @@ func (d *DebridDownloader) Error() error {
 	return d.err
 }
 
+// FilePath returns the download file path regardless of completion state.
+// Returns "" if Start() hasn't been called yet.
+func (d *DebridDownloader) FilePath() string {
+	return d.localPath
+}
+
 // Cleanup cancels the download and removes the downloaded file.
 func (d *DebridDownloader) Cleanup() {
 	if d.cancel != nil {

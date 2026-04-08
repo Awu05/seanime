@@ -278,19 +278,21 @@ func (s *DebridStream) startBackgroundDownload() {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+		switchedToLocal := false
 		for {
 			select {
 			case <-s.manager.playbackCtx.Done():
 				return
 			case <-ticker.C:
 				if d.IsComplete() {
-					localPath := d.LocalPath()
-					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, localPath)
-					s.logger.Info().Msg("directstream(debrid): Background download complete, transcoder notified")
+					if !switchedToLocal {
+						s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath())
+					}
+					s.logger.Info().Msg("directstream(debrid): Background download complete")
 
 					// Start subtitle extraction from the local file
 					go func() {
-						f, err := os.Open(localPath)
+						f, err := os.Open(d.FilePath())
 						if err != nil {
 							s.logger.Warn().Err(err).Msg("directstream(debrid): Failed to open local file for subtitle extraction")
 							return
@@ -303,6 +305,14 @@ func (s *DebridStream) startBackgroundDownload() {
 					s.logger.Warn().Err(d.Error()).Msg("directstream(debrid): Background download failed, continuing with remote stream")
 					d.Cleanup()
 					return
+				}
+				// Switch to local file early once 5% is downloaded.
+				// Sequential playback works because the download runs faster than ffmpeg reads.
+				// If ffmpeg hits EOF (seeking past downloaded range), HLS.js retries the segment.
+				if !switchedToLocal && d.Progress() >= 0.05 {
+					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath())
+					switchedToLocal = true
+					s.logger.Info().Msgf("directstream(debrid): Switched to local file at %.1f%% downloaded", d.Progress()*100)
 				}
 				s.logger.Debug().Msgf("directstream(debrid): Download progress: %.1f%%", d.Progress()*100)
 			}
