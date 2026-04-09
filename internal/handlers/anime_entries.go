@@ -57,13 +57,14 @@ func (h *Handler) getAnimeEntry(c echo.Context, lfs []*anime.LocalFile, mId int)
 	}
 
 	// Get the user's anilist collection
+	// If AniList is disconnected, use an empty collection so the entry page still loads
 	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
-	if err != nil {
-		return nil, err
-	}
-
-	if animeCollection == nil {
-		return nil, errors.New("anime collection not found")
+	if err != nil || animeCollection == nil {
+		animeCollection = &anilist.AnimeCollection{
+			MediaListCollection: &anilist.AnimeCollection_MediaListCollection{
+				Lists: []*anilist.AnimeCollection_MediaListCollection_Lists{},
+			},
+		}
 	}
 
 	// Create a new media entry
