@@ -93,9 +93,15 @@ func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cac
 	// Set the optimizer settings
 	r.optimizer.SetLibraryDir(settings.PreTranscodeLibraryDir)
 
-	// Initialize the transcoder
+	// Initialize the transcoder only if not already running with active sessions
 	r.initMu.Lock()
-	r.initializeTranscoder(r.settings)
+	if r.transcoder.IsPresent() && r.playbackManager.HasActiveSessions() {
+		// Transcoder is running with active sessions — don't destroy it, just mark settings dirty
+		r.settingsDirty = true
+		r.logger.Info().Msg("mediastream: Transcoder has active sessions, deferring reinitialization")
+	} else {
+		r.initializeTranscoder(r.settings)
+	}
 	r.initMu.Unlock()
 
 	r.logger.Info().Msg("mediastream: Module initialized")
