@@ -126,9 +126,11 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 		// Fetch the media
 		fetchedMedia, err := opts.PlatformRef.Get().GetAnime(ctx, opts.MediaId) // DEVNOTE: Maybe cache it?
 		if err != nil {
-			return nil, err
+			// If we can't fetch from AniList (disconnected/expired token), create a minimal media entry
+			entry.Media = &anilist.BaseAnime{ID: opts.MediaId}
+		} else {
+			entry.Media = fetchedMedia
 		}
-		entry.Media = fetchedMedia
 	} else {
 		animeEvent := new(platform.GetAnimeEvent)
 		animeEvent.Anime = anilistEntry.Media
@@ -142,12 +144,11 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 	// If the account is simulated and the media was in the library, we will still fetch
 	// the media from AniList to ensure we have the latest data
 	if opts.IsSimulated && found {
-		// Fetch the media
-		fetchedMedia, err := opts.PlatformRef.Get().GetAnime(ctx, opts.MediaId) // DEVNOTE: Maybe cache it?
-		if err != nil {
-			return nil, err
+		// Fetch the media — ignore errors if AniList is disconnected
+		fetchedMedia, err := opts.PlatformRef.Get().GetAnime(ctx, opts.MediaId)
+		if err == nil {
+			entry.Media = fetchedMedia
 		}
-		entry.Media = fetchedMedia
 	}
 
 	entry.CurrentEpisodeCount = entry.Media.GetCurrentEpisodeCount()
