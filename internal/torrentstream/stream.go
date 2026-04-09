@@ -360,22 +360,9 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	// This is to prevent the client from downloading the whole torrent when the user stops watching
 	// Also, the torrent might be a batch - so we don't want to download the whole thing
 	if r.client.currentTorrent.IsPresent() {
-		currentTorrent := r.client.currentTorrent.MustGet()
-		shouldDrop := r.client.currentTorrentStatus.ProgressPercentage < 70
-
-		// Don't drop if this is the prepared torrent
-		if r.preloadedStream.IsPresent() {
-			prepared := r.preloadedStream.MustGet()
-			if currentTorrent.InfoHash() == prepared.Torrent.InfoHash() {
-				r.client.repository.logger.Debug().Msg("torrentstream: Not dropping torrent as it's being prepared for next episode")
-				shouldDrop = false
-			}
-		}
-
-		if shouldDrop {
-			r.client.repository.logger.Debug().Msg("torrentstream: Dropping torrent, completion is less than 70%")
-			r.client.dropTorrents()
-		}
+		// Always drop the torrent when stream is closed — don't keep seeding
+		r.client.repository.logger.Debug().Msg("torrentstream: Dropping torrent on stream close")
+		r.client.dropTorrents()
 		r.client.repository.logger.Debug().Msg("torrentstream: Resetting current torrent and status")
 	}
 	// Remove this session's active stream
