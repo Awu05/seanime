@@ -147,7 +147,7 @@ Multi-user support with per-profile settings, StremThru debrid integration, nati
 
 ## Known Issues / Future Work
 
-1. **Multi-session transcoder** — Only one user can transcode at a time. Design spec at `docs/superpowers/specs/2026-04-08-multi-session-transcoder-design.md`
+1. **Multi-session transcoder** — Mediastream layer done (per-client containers, shared FileStreams, clientId routing). **Remaining:** `directstream.Manager` is still single-stream (`currentStream` singleton, shared `playbackCtx`). Needs per-client stream map + per-stream context to support concurrent debrid streams end-to-end. Design spec at `docs/superpowers/specs/2026-04-08-multi-session-transcoder-design.md`
 2. **AIOStreams integration** — Stream search provider from Stremio addons. See `memory/project_aiostreams.md`
 3. **Play from downloaded file** — When a debrid torrent has been downloaded locally, the play button on the debrid torrent list should stream from the local file instead of the remote debrid URL. Check the download destination for the torrent, and if the file exists locally, use the local file path for playback instead of calling `GetTorrentStreamUrl`. This avoids unnecessary network usage and gives instant, smooth playback with full seeking.
 4. **`master.m3u8&thumbnail=true` 500 error** — Thumbnail preview generator appends invalid query param. Cosmetic, doesn't affect playback
