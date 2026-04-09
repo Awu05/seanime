@@ -146,9 +146,6 @@ func (r *Repository) ShutdownTranscodeStream(clientId string) {
 
 	r.logger.Warn().Str("clientId", clientId).Msg("mediastream: Shutting down transcode stream for client")
 
-	// Remove only this client's media container
+	// Remove only this client's media container — no broadcast event
 	r.playbackManager.KillPlayback(clientId)
-
-	// Send event
-	r.wsEventManager.SendEvent(events.MediastreamShutdownStream, nil)
 }
