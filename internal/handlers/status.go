@@ -80,6 +80,9 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		currentUser, _ = user.NewUser(dbAcc)
 		if currentUser != nil {
 			currentUser.Token = "HIDDEN"
+		} else {
+			// Account exists but AniList is disconnected — use simulated user
+			currentUser = user.NewSimulatedUser()
 		}
 	} else {
 		currentUser = user.NewSimulatedUser()
