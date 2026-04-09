@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/samber/mo"
-
 	"github.com/labstack/echo/v4"
 )
 
@@ -141,35 +139,15 @@ func (r *Repository) ServeEchoTranscodeStream(c echo.Context, clientId string) e
 	return errors.New("invalid path")
 }
 
-// ShutdownTranscodeStream It should be called when unmounting the player (playback is no longer needed).
-// This will also send an events.MediastreamShutdownStream event.
 func (r *Repository) ShutdownTranscodeStream(clientId string) {
-	r.reqMu.Lock()
-	defer r.reqMu.Unlock()
-
 	if !r.IsInitialized() {
 		return
 	}
 
-	if !r.TranscoderIsInitialized() {
-		return
-	}
+	r.logger.Warn().Str("clientId", clientId).Msg("mediastream: Shutting down transcode stream for client")
 
-	r.logger.Warn().Str("client_id", clientId).Msg("mediastream: Received shutdown transcode stream request")
-
-	if !r.playbackManager.currentMediaContainer.IsPresent() {
-		return
-	}
-
-	// Kill playback
-	r.playbackManager.KillPlayback()
-
-	// Destroy the current transcoder
-	r.transcoder.MustGet().Destroy()
-
-	// Load a new transcoder
-	r.transcoder = mo.None[*transcoder.Transcoder]()
-	r.initializeTranscoder(r.settings)
+	// Remove only this client's media container
+	r.playbackManager.KillPlayback(clientId)
 
 	// Send event
 	r.wsEventManager.SendEvent(events.MediastreamShutdownStream, nil)
