@@ -71,6 +71,7 @@ export function useAnimeEntryPageView() {
     return {
         currentView,
         setView,
+        preferredMode,
         isLibraryView,
         isTorrentStreamingView,
         isDebridStreamingView,
@@ -94,7 +95,7 @@ export function AnimeEntryPage() {
 
     const vc_fullscreen = useAtomValue(vc_isFullscreen)
 
-    const { currentView, isLibraryView, setView } = useAnimeEntryPageView()
+    const { currentView, isLibraryView, setView, preferredMode } = useAnimeEntryPageView()
     const switchedView = React.useRef(false)
 
     React.useLayoutEffect(() => {
