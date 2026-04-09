@@ -293,12 +293,17 @@ func (c *Client) monitorLoop(ctx context.Context) {
 				}
 			}
 
-			// Send state event if there is any active torrent
+			// Send state event only if there is an active torrent being streamed
 			c.streamsMu.RLock()
 			hasStreams := len(c.activeStreams) > 0
 			c.streamsMu.RUnlock()
-			if hasStreams || (c.currentTorrent.IsPresent() && c.currentFile.IsPresent()) {
+			hasTorrent := c.currentTorrent.IsPresent() && c.currentFile.IsPresent()
+			if hasStreams || hasTorrent {
 				c.repository.sendStateEvent(eventTorrentStatus, c.currentTorrentStatus)
+			} else if c.currentTorrentStatus.ProgressPercentage > 0 {
+				// Stream was stopped but status wasn't cleared — reset it
+				c.currentTorrentStatus = TorrentStatus{}
+				c.repository.sendStateEvent(eventTorrentStopped, nil)
 				c.repository.logger.Trace().Msgf("torrentstream: Progress: %.2f%%, Download speed: %s, Upload speed: %s, Size: %s",
 					c.currentTorrentStatus.ProgressPercentage,
 					c.currentTorrentStatus.DownloadSpeed,
