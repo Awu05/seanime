@@ -60,11 +60,19 @@ type Stream interface {
 
 func (m *Manager) getStreamHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Find the stream by looking at the request's client ID or use any active stream
+		// Look up the stream by clientId query param
+		clientId := r.URL.Query().Get("clientId")
+		if clientId != "" {
+			if stream, ok := m.streams.Get(clientId); ok {
+				stream.GetStreamHandler().ServeHTTP(w, r)
+				return
+			}
+		}
+		// Fallback: try to find any active stream (backward compatibility for single-stream)
 		var activeStream Stream
 		m.streams.Range(func(_ string, s Stream) bool {
 			activeStream = s
-			return false // take first active stream for direct stream handler
+			return false
 		})
 		if activeStream == nil {
 			http.Error(w, "no stream", http.StatusInternalServerError)
@@ -347,9 +355,8 @@ func (s *BaseStream) StreamError(err error) {
 	s.logger.Error().Err(err).Msg("directstream: Stream error occurred")
 	s.manager.nativePlayer.Error(s.clientId, err)
 	s.Terminate()
-	s.manager.playbackMu.Lock()
-	s.manager.unloadStreamByClientId(s.clientId)
-	s.manager.playbackMu.Unlock()
+	// Remove from the map without calling Terminate again
+	s.manager.streams.Delete(s.clientId)
 }
 
 func (s *BaseStream) GetSubtitleEventCache() *result.Map[string, *mkvparser.SubtitleEvent] {

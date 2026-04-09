@@ -106,7 +106,7 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 			StreamType:        s.Type(),
 			StreamPath:        s.localFile.Path,
 			MimeType:          s.LoadContentType(),
-			StreamUrl:         "{{SERVER_URL}}/api/v1/directstream/stream?id=" + id + s.manager.GetHMACTokenQueryParam("/api/v1/directstream/stream", "&"),
+			StreamUrl:         "{{SERVER_URL}}/api/v1/directstream/stream?id=" + id + "&clientId=" + s.clientId + s.manager.GetHMACTokenQueryParam("/api/v1/directstream/stream", "&"),
 			ContentLength:     size,
 			MkvMetadata:       nil,
 			MkvMetadataParser: mo.None[*mkvparser.MetadataParser](),
@@ -317,7 +317,9 @@ func (m *Manager) PlayLocalFile(ctx context.Context, opts PlayLocalFileOptions) 
 		},
 	}
 
-	m.loadStream(stream)
+	go func() {
+		m.loadStream(stream)
+	}()
 
 	return nil
 }
