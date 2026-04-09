@@ -112,12 +112,44 @@ Multi-user support with per-profile settings, StremThru debrid integration, nati
 
 ---
 
+### 10. Debrid Stream Smoothness — Hybrid Adaptive Optimization (Session 2)
+
+**Problem:** HLS transcoding from remote debrid URLs was 15-60s initial load, jittery playback, 5-25s seeking.
+
+**Solution — three optimizations:**
+1. **Estimated keyframes** — generates evenly-spaced keyframe timestamps (every 10s) based on video duration, skipping the slow 10-60s remote ffprobe keyframe extraction. Added `IsEstimated` flag to skip the video midpoint seek hack that caused A/V desync with wide intervals.
+2. **Background file downloader** — `DebridDownloader` in `internal/directstream/downloader.go` downloads the debrid file to local temp storage. 10GB size cap. Files under 5GB switch to local file at 5% downloaded; larger files wait for full completion.
+3. **Local file switchover** — `FileStream.GetInputPath(seekTime)` returns the local path when the file is downloaded far enough, falls back to remote URL otherwise. New encoder heads read locally.
+
+**Key files:**
+- `internal/directstream/downloader.go` — NEW: DebridDownloader
+- `internal/mediastream/transcoder/keyframes.go` — `GetEstimatedKeyframes()`, `IsEstimated` flag
+- `internal/mediastream/transcoder/filestream.go` — `SetLocalPath()`, `GetInputPath(seekTime)`, estimated keyframes in `NewFileStream`
+- `internal/mediastream/transcoder/stream.go` — `GetInputPath(startRef)` in `run()`, skip midpoint hack for estimated keyframes
+- `internal/mediastream/transcoder/transcoder.go` — `NotifyDownloadComplete()`
+- `internal/directstream/manager.go` — Extended `TranscodeRequester` interface
+- `internal/directstream/debridstream.go` — Download lifecycle, subtitle extraction from local file
+
+**Additional fixes:**
+- Subtitle extraction deferred to local file (avoids range request errors from CDNs)
+- Remote URL subtitle extraction still attempted immediately for partial coverage
+- Segment timeout increased from 25s to 60s for remote URL seeking
+- Estimated keyframe interval increased from 4s to 10s (prevents empty segments with long-GOP videos)
+- Debrid download preserves original filename (torrent name + extension from Content-Disposition)
+
+### 11. Debrid Download Filename Fix (Session 2)
+
+**Problem:** Downloading debrid torrents from the UI saved with generic filename, no extension.
+
+**Solution:** Changed filename priority to: torrent name → Content-Disposition header → URL path → fallback. Extension extracted from Content-Disposition of the GET response.
+
+---
+
 ## Known Issues / Future Work
 
 1. **Multi-session transcoder** — Only one user can transcode at a time. See `memory/project_multi_transcode.md`
 2. **AIOStreams integration** — Stream search provider from Stremio addons. See `memory/project_aiostreams.md`
-3. **Debrid stream smoothness** — HLS transcode from remote URLs is slower than torrent streaming (2 network hops per segment vs local file)
-4. **`master.m3u8&thumbnail=true` 500 error** — Thumbnail preview generator appends invalid query param. Cosmetic, doesn't affect playback
+3. **`master.m3u8&thumbnail=true` 500 error** — Thumbnail preview generator appends invalid query param. Cosmetic, doesn't affect playback
 
 ---
 
