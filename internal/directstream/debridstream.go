@@ -209,7 +209,7 @@ func (s *DebridStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err e
 								s.logger.Warn().Err(subErr).Msg("directstream(debrid): Failed to create subtitle reader for transcode path")
 								return
 							}
-							s.StartSubtitleStream(s, s.manager.playbackCtx, subReader, 0)
+							s.StartSubtitleStream(s, s.streamCtx, subReader, 0)
 						}()
 					}
 				}
@@ -223,7 +223,7 @@ func (s *DebridStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err e
 }
 
 func (s *DebridStream) GetAttachmentByName(filename string) (*mkvparser.AttachmentInfo, bool) {
-	return getAttachmentByName(s.manager.playbackCtx, s, filename)
+	return getAttachmentByName(s.streamCtx, s, filename)
 }
 
 var videoProxyClient = &http.Client{
@@ -277,7 +277,7 @@ func (s *DebridStream) startBackgroundDownload() {
 	}
 
 	s.downloader = d
-	d.Start(s.manager.playbackCtx)
+	d.Start(s.streamCtx)
 
 	// Early switch threshold: only switch before download completes for smaller files
 	// where the download finishes quickly and seeking past the range is unlikely.
@@ -289,7 +289,7 @@ func (s *DebridStream) startBackgroundDownload() {
 		switchedToLocal := false
 		for {
 			select {
-			case <-s.manager.playbackCtx.Done():
+			case <-s.streamCtx.Done():
 				return
 			case <-ticker.C:
 				if d.IsComplete() {
@@ -305,7 +305,7 @@ func (s *DebridStream) startBackgroundDownload() {
 							s.logger.Warn().Err(err).Msg("directstream(debrid): Failed to open local file for subtitle extraction")
 							return
 						}
-						s.StartSubtitleStream(s, s.manager.playbackCtx, f, 0)
+						s.StartSubtitleStream(s, s.streamCtx, f, 0)
 					}()
 					return
 				}
@@ -384,7 +384,7 @@ func (s *DebridStream) GetStreamHandler() http.Handler {
 				return
 			}
 			if ra.Start < s.contentLength-1024*1024 {
-				go s.StartSubtitleStreamP(s, s.manager.playbackCtx, subReader, ra.Start, 0)
+				go s.StartSubtitleStreamP(s, s.streamCtx, subReader, ra.Start, 0)
 			}
 		}
 
@@ -558,7 +558,7 @@ func (s *DebridStream) initializeStream() error {
 	s.logger.Debug().Msgf("directstream(debrid): Initializing FileStream for stream URL: %s", s.streamUrl)
 
 	// Create a file-backed stream with the known content length
-	cache, err := httputil.NewFileStream(s.manager.playbackCtx, s.logger, s.contentLength)
+	cache, err := httputil.NewFileStream(s.streamCtx, s.logger, s.contentLength)
 	if err != nil {
 		return fmt.Errorf("failed to create FileStream: %w", err)
 	}

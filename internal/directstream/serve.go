@@ -17,12 +17,16 @@ func (m *Manager) ServeEchoStream() http.Handler {
 	return m.getStreamHandler()
 }
 
-// ServeEchoAttachments serves the attachments loaded into memory from the current stream.
+// ServeEchoAttachments serves the attachments loaded into memory from a client's stream.
 func (m *Manager) ServeEchoAttachments(c echo.Context) error {
-	// Get the current stream
-	stream, ok := m.currentStream.Get()
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+
+	stream, ok := m.streams.Get(clientId)
 	if !ok {
-		return errors.New("no stream")
+		return errors.New("no stream for client")
 	}
 
 	filename := c.Param("*")

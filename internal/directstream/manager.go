@@ -7,7 +7,6 @@ import (
 	"seanime/internal/continuity"
 	discordrpc_presence "seanime/internal/discordrpc/presence"
 	"seanime/internal/events"
-	"seanime/internal/library/anime"
 	"seanime/internal/mkvparser"
 	"seanime/internal/nativeplayer"
 	"seanime/internal/platforms/platform"
@@ -44,17 +43,11 @@ type (
 
 		// --------- Playback Context -------- //
 
-		playbackMu            sync.Mutex
-		playbackCtx           context.Context
-		playbackCtxCancelFunc context.CancelFunc
+		playbackMu sync.Mutex
 
 		// ---------- Playback State ---------- //
 
-		currentStream mo.Option[Stream] // The current stream being played
-
-		// \/ Stream playback
-		// This is set by [SetStreamEpisodeCollection]
-		currentStreamEpisodeCollection mo.Option[*anime.EpisodeCollection]
+		streams *result.Map[string, Stream] // Active streams keyed by clientId
 
 		settings *Settings
 
@@ -109,7 +102,7 @@ func NewManager(options NewManagerOptions) *Manager {
 		refreshAnimeCollectionFunc: options.RefreshAnimeCollectionFunc,
 		hmacTokenFunc:              options.HMACTokenFunc,
 		isOfflineRef:               options.IsOfflineRef,
-		currentStream:              mo.None[Stream](),
+		streams:                    result.NewMap[string, Stream](),
 		nativePlayer:               options.NativePlayer,
 		parserCache:                result.NewCache[string, *mkvparser.MetadataParser](),
 		videoCore:                  options.VideoCore,

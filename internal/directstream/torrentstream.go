@@ -104,7 +104,7 @@ func (s *TorrentStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err 
 }
 
 func (s *TorrentStream) GetAttachmentByName(filename string) (*mkvparser.AttachmentInfo, bool) {
-	return getAttachmentByName(s.manager.playbackCtx, s, filename)
+	return getAttachmentByName(s.streamCtx, s, filename)
 }
 
 func (s *TorrentStream) GetStreamHandler() http.Handler {
@@ -160,11 +160,11 @@ func (s *TorrentStream) GetStreamHandler() http.Handler {
 				// Start a subtitle stream from the current position
 				subReader := s.file.NewReader()
 				subReader.SetResponsive()
-				s.StartSubtitleStream(s, s.manager.playbackCtx, subReader, ra.Start)
+				s.StartSubtitleStream(s, s.streamCtx, subReader, ra.Start)
 			}
 		}()
 
-		serveContentRange(w, r, s.manager.playbackCtx, tr, name, size, s.LoadContentType(), ra)
+		serveContentRange(w, r, s.streamCtx, tr, name, size, s.LoadContentType(), ra)
 	})
 }
 

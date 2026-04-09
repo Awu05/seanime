@@ -146,7 +146,7 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 }
 
 func (s *LocalFileStream) GetAttachmentByName(filename string) (*mkvparser.AttachmentInfo, bool) {
-	return getAttachmentByName(s.manager.playbackCtx, s, filename)
+	return getAttachmentByName(s.streamCtx, s, filename)
 }
 
 func (s *LocalFileStream) GetStreamHandler() http.Handler {
@@ -205,7 +205,7 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request, lfStream *LocalFileS
 		lfStream.serveContentCancelFunc()
 	}
 
-	ct, cancel := context.WithCancel(lfStream.manager.playbackCtx)
+	ct, cancel := context.WithCancel(lfStream.streamCtx)
 	lfStream.serveContentCancelFunc = cancel
 
 	reader, err := lfStream.newReader()
@@ -228,7 +228,7 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request, lfStream *LocalFileS
 			http.Error(w, "Failed to create subtitle reader", http.StatusInternalServerError)
 			return
 		}
-		go lfStream.StartSubtitleStream(lfStream, lfStream.manager.playbackCtx, subReader, ra.Start)
+		go lfStream.StartSubtitleStream(lfStream, lfStream.streamCtx, subReader, ra.Start)
 	}
 
 	serveContentRange(w, r, ct, reader, lfStream.localFile.Path, size, playbackInfo.MimeType, ra)
