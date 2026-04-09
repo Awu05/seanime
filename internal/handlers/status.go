@@ -85,7 +85,12 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		currentUser = user.NewSimulatedUser()
 	}
 
-	if settings, _ = h.App.Database.GetSettings(); settings != nil {
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, _ = h.App.Database.GetSettingsForProfile(profileID)
+	} else {
+		settings, _ = h.App.Database.GetSettings()
+	}
+	if settings != nil {
 		if settings.ID == 0 || settings.Library == nil || settings.Torrent == nil || settings.MediaPlayer == nil {
 			settings = nil
 		}
@@ -364,7 +369,7 @@ func (h *Handler) HandleGetAnnouncements(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	settings, _ := h.App.Database.GetSettings()
+	settings, _ := h.getSettings(c)
 
 	announcements := h.App.Updater.GetAnnouncements(h.App.Version, b.Platform, settings)
 

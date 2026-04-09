@@ -28,6 +28,9 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 		path := c.Request().URL.Path
 		for _, p := range publicPaths {
 			if path == p || strings.HasPrefix(path, p) {
+				// For public paths, still try to extract profile from JWT if present
+				// This allows status endpoint to return per-profile settings
+				h.tryExtractProfile(c)
 				return next(c)
 			}
 		}
@@ -79,5 +82,32 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 		c.Set("authScope", claims.Scope)
 
 		return next(c)
+	}
+}
+
+// tryExtractProfile attempts to read the JWT from the request and set profile context.
+// Used on public paths so endpoints like /status can return per-profile data when authenticated.
+func (h *Handler) tryExtractProfile(c echo.Context) {
+	var tokenString string
+	cookie, err := c.Cookie("seanime-auth")
+	if err == nil && cookie.Value != "" {
+		tokenString = cookie.Value
+	} else {
+		auth := c.Request().Header.Get("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") {
+			tokenString = strings.TrimPrefix(auth, "Bearer ")
+		}
+	}
+	if tokenString == "" {
+		return
+	}
+	claims, err := core.ParseToken(h.App.JWTSecret, tokenString)
+	if err != nil {
+		return
+	}
+	if claims.Scope == "profile" || claims.Scope == "admin" {
+		c.Set("profileId", claims.ProfileID)
+		c.Set("isAdmin", claims.IsAdmin)
+		c.Set("authScope", claims.Scope)
 	}
 }

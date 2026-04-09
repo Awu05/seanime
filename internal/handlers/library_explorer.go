@@ -18,7 +18,7 @@ func (h *Handler) HandleGetLibraryExplorerFileTree(c echo.Context) error {
 	}
 
 	// Get library paths from settings
-	settings, err := h.App.Database.GetSettings()
+	settings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -49,7 +49,7 @@ func (h *Handler) HandleRefreshLibraryExplorerFileTree(c echo.Context) error {
 	}
 
 	// Get library paths from settings
-	settings, err := h.App.Database.GetSettings()
+	settings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -89,7 +89,7 @@ func (h *Handler) HandleLoadLibraryExplorerDirectoryChildren(c echo.Context) err
 	}
 
 	// Get library paths from settings
-	settings, err := h.App.Database.GetSettings()
+	settings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

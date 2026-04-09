@@ -1802,6 +1802,7 @@ export type GettingStarted_Variables = {
     enableTorrentStreaming: boolean
     debridProvider: string
     debridApiKey: string
+    debridApiUrl: string
 }
 
 /**

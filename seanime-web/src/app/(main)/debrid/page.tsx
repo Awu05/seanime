@@ -1,3 +1,4 @@
+import { useServerMutation } from "@/api/client/requests"
 import { Debrid_TorrentItem } from "@/api/generated/types"
 import { useDebridCancelDownload, useDebridDeleteTorrent, useDebridDownloadTorrent, useDebridGetTorrents } from "@/api/hooks/debrid.hooks"
 import { CustomLibraryBanner } from "@/app/(main)/_features/anime-library/_containers/custom-library-banner"
@@ -16,16 +17,18 @@ import { cn } from "@/components/ui/core/styling"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Modal } from "@/components/ui/modal"
 import { Tooltip } from "@/components/ui/tooltip"
+import { clientIdAtom } from "@/app/websocket-provider"
 import { WSEvents } from "@/lib/server/ws-events"
 import { formatDate } from "date-fns"
 import { atom } from "jotai"
-import { useAtom } from "jotai/react"
+import { useAtom, useAtomValue } from "jotai/react"
 import capitalize from "lodash/capitalize"
 import React from "react"
 import { BiDownArrow, BiLinkExternal, BiRefresh, BiTime, BiTrash, BiX } from "react-icons/bi"
 import { FcFolder } from "react-icons/fc"
 import { FiDownload } from "react-icons/fi"
 import { HiFolderDownload } from "react-icons/hi"
+import { IoPlayCircle } from "react-icons/io5"
 import { toast } from "sonner"
 
 
@@ -37,6 +40,8 @@ function getServiceName(provider: string) {
             return "TorBox"
         case "alldebrid":
             return "AllDebrid"
+        case "stremthru":
+            return "StremThru"
         default:
             return provider
     }
@@ -75,6 +80,7 @@ export default function Page() {
                 <Content />
             </PageWrapper>
             <TorrentItemModal />
+            <PlayTorrentModal />
         </>
     )
 }
@@ -169,6 +175,7 @@ function Content() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const selectedTorrentItemAtom = atom<Debrid_TorrentItem | null>(null)
+const playTorrentItemAtom = atom<Debrid_TorrentItem | null>(null)
 
 
 type TorrentItemProps = {
@@ -191,6 +198,7 @@ const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: Torr
     const { mutate: cancelDownload, isPending: isCancelling } = useDebridCancelDownload()
 
     const [_, setSelectedTorrentItem] = useAtom(selectedTorrentItemAtom)
+    const [__, setPlayTorrentItem] = useAtom(playTorrentItemAtom)
 
     const confirmDeleteTorrentProps = useConfirmationDialog({
         title: "Remove torrent",
@@ -276,16 +284,30 @@ const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: Torr
                     </div>}
             </div>
             <div className="flex-none flex gap-2 items-center">
-                {(torrent.isReady && !progress) && <IconButton
-                    icon={<FiDownload />}
-                    size="sm"
-                    intent="gray-subtle"
-                    className="flex-none"
-                    disabled={isDeleting || isCancelling}
-                    onClick={() => {
-                        setSelectedTorrentItem(torrent)
-                    }}
-                />}
+                {(torrent.isReady && !progress) && <>
+                    <Tooltip trigger={
+                        <IconButton
+                            icon={<IoPlayCircle className="text-lg" />}
+                            size="sm"
+                            intent="primary-subtle"
+                            className="flex-none"
+                            disabled={isDeleting || isCancelling}
+                            onClick={() => setPlayTorrentItem(torrent)}
+                        />
+                    }>
+                        Play
+                    </Tooltip>
+                    <IconButton
+                        icon={<FiDownload />}
+                        size="sm"
+                        intent="gray-subtle"
+                        className="flex-none"
+                        disabled={isDeleting || isCancelling}
+                        onClick={() => {
+                            setSelectedTorrentItem(torrent)
+                        }}
+                    />
+                </>}
                 {(!!progress && progress.itemID === torrent.id) && <div className="flex gap-2 items-center">
                     <Tooltip
                         trigger={<p>
@@ -406,4 +428,38 @@ function TorrentItemModal(props: TorrentItemModalProps) {
             </div>
         </Modal>
     )
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function PlayTorrentModal() {
+    const [playTorrentItem, setPlayTorrentItem] = useAtom(playTorrentItemAtom)
+    const clientId = useAtomValue(clientIdAtom)
+
+    const { mutate: playTorrent, isPending } = useServerMutation<boolean, { torrentId: string, fileId: string, title: string, clientId: string }>({
+        endpoint: "/api/v1/debrid/torrents/play",
+        method: "POST",
+        mutationKey: ["debrid-play-torrent"],
+    })
+
+    React.useEffect(() => {
+        if (playTorrentItem) {
+            playTorrent({
+                torrentId: playTorrentItem.id,
+                fileId: "",
+                title: playTorrentItem.name,
+                clientId: clientId || "",
+            }, {
+                onSuccess: () => {
+                    setPlayTorrentItem(null)
+                },
+                onError: () => {
+                    toast.error("Failed to play torrent")
+                    setPlayTorrentItem(null)
+                },
+            })
+        }
+    }, [playTorrentItem])
+
+    return null
 }

@@ -30,6 +30,7 @@ export const _gettingStartedSchema = z.object({
     enableTorrentStreaming: z.boolean().optional().default(false),
     debridProvider: z.string().optional().default("none"),
     debridApiKey: z.string().optional().default(""),
+    debridApiUrl: z.string().optional().default(""),
 })
 
 export const settingsSchema = z.object({
@@ -230,6 +231,7 @@ export const getDefaultSettings = (data: z.infer<typeof gettingStartedSchema>): 
     },
     debridProvider: data.debridProvider,
     debridApiKey: data.debridApiKey,
+    debridApiUrl: data.debridApiUrl,
 })
 
 

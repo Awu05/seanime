@@ -237,6 +237,45 @@ func (h *Handler) HandleDebridGetTorrents(c echo.Context) error {
 	return h.RespondWithData(c, torrents)
 }
 
+// HandleDebridPlayTorrent
+//
+//	@summary play a torrent file from debrid via native player.
+//	@returns bool
+//	@route /api/v1/debrid/torrents/stream-url [POST]
+func (h *Handler) HandleDebridPlayTorrent(c echo.Context) error {
+	type body struct {
+		TorrentId string `json:"torrentId"`
+		FileId    string `json:"fileId"`
+		Title     string `json:"title"`
+		ClientId  string `json:"clientId"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	provider, err := h.App.DebridClientRepository.GetProvider()
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	downloadUrl, err := provider.GetTorrentDownloadUrl(debrid.DownloadTorrentOptions{
+		ID:     b.TorrentId,
+		FileId: b.FileId,
+	})
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	err = h.App.DirectStreamManager.PlayDebridStreamDirect(b.ClientId, downloadUrl, b.Title)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	return h.RespondWithData(c, true)
+}
+
 // HandleDebridGetTorrentInfo
 //
 //	@summary get torrent info from debrid.

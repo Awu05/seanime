@@ -11,6 +11,7 @@ import (
 	"seanime/internal/debrid/alldebrid"
 	"seanime/internal/debrid/debrid"
 	"seanime/internal/debrid/realdebrid"
+	"seanime/internal/debrid/stremthru"
 	"seanime/internal/debrid/torbox"
 	"seanime/internal/directstream"
 	"seanime/internal/events"
@@ -130,6 +131,8 @@ func (r *Repository) InitializeProvider(settings *models.DebridSettings) error {
 		r.provider = mo.Some(realdebrid.NewRealDebrid(r.logger))
 	case "alldebrid":
 		r.provider = mo.Some(alldebrid.NewAllDebrid(r.logger))
+	case "stremthru":
+		r.provider = mo.Some(stremthru.NewStremThru(r.logger, settings.ApiUrl, settings.StoreName))
 	default:
 		r.provider = mo.None[debrid.Provider]()
 	}

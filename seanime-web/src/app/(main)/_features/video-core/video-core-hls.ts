@@ -60,6 +60,7 @@ export function useVideoCoreHls({
     onFatalError?: (error: ErrorData) => void
 }) {
     const hlsRef = useRef<Hls | null>(null)
+    const hlsAutoPlayTriggered = useRef(false)
 
     const audioManager = useAtomValue(vc_audioManager)
     const autoPlay = useAtomValue(vc_autoPlayVideoAtom)
@@ -99,6 +100,7 @@ export function useVideoCoreHls({
             if (hlsRef.current) {
                 hlsRef.current.destroy()
             }
+            hlsAutoPlayTriggered.current = false
 
             // Create new HLS instance
             const hls = new Hls({
@@ -107,6 +109,19 @@ export function useVideoCoreHls({
                 backBufferLength: 90,
                 enableWebVTT: true,
                 renderTextTracksNatively: false, // don't use native text tracks for subtitles
+                maxBufferLength: 30, // Buffer up to 30 seconds ahead
+                maxMaxBufferLength: 60,
+                maxBufferHole: 2, // Tolerate up to 2 second gaps in buffer
+                highBufferWatchdogPeriod: 3, // Wait 3 seconds before stall detection
+                nudgeMaxRetry: 10, // More retries before giving up
+                fragLoadPolicy: {
+                    default: {
+                        maxTimeToFirstByteMs: 30000,
+                        maxLoadTimeMs: 120000,
+                        timeoutRetry: { maxNumRetry: 5, retryDelayMs: 2000, maxRetryDelayMs: 16000 },
+                        errorRetry: { maxNumRetry: 5, retryDelayMs: 2000, maxRetryDelayMs: 16000 },
+                    },
+                },
             })
 
             hlsRef.current = hls
@@ -188,9 +203,15 @@ export function useVideoCoreHls({
                     setCurrentAudioTrack(-1)
                 }
 
-                if (autoPlay) {
-                    videoElement.play().catch(err => {
-                        hlsLog.error("Failed to autoplay", err)
+                // Defer autoplay until first fragment is buffered
+                if (autoPlay && !hlsAutoPlayTriggered.current) {
+                    hls.once(Events.FRAG_BUFFERED, () => {
+                        if (!hlsAutoPlayTriggered.current) {
+                            hlsAutoPlayTriggered.current = true
+                            videoElement.play().catch(err => {
+                                hlsLog.error("Failed to autoplay", err)
+                            })
+                        }
                     })
                 }
             })

@@ -8,6 +8,8 @@ testdata/
 .cursor
 .DS_Store
 */.DS_Store
+.env
+./seanime-data/
 
 Dockerfile.dev
 dev.dockerfile

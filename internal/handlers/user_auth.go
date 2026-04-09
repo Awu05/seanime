@@ -44,13 +44,31 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	profile, err := h.App.Database.CreateProfile(&models.Profile{
-		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
-		Name:          b.Username,
-		IsAdmin:       true,
-	})
-	if err != nil {
-		return h.RespondWithError(c, err)
+	// In Electron sidecar mode, ensureDefaultProfile may have already created a "Default" admin profile.
+	// Reuse it instead of creating a duplicate.
+	var profile *models.Profile
+	if h.App.IsDesktopSidecar {
+		existingProfiles, _ := h.App.Database.GetAllProfiles()
+		for _, p := range existingProfiles {
+			if p.IsAdmin {
+				p.Name = b.Username
+				profile, _ = h.App.Database.UpdateProfile(p)
+				break
+			}
+		}
+	}
+
+	if profile == nil {
+		profile, err = h.App.Database.CreateProfile(&models.Profile{
+			UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+			Name:          b.Username,
+			IsAdmin:       true,
+		})
+		if err != nil {
+			return h.RespondWithError(c, err)
+		}
+		// Clone global settings for the new admin profile
+		_, _ = h.App.Database.CloneSettingsForProfile(profile.ID)
 	}
 
 	_, err = h.App.Database.CreateAdmin(&models.Admin{
@@ -62,9 +80,6 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
-
-	// Clone global settings for the admin profile
-	_, _ = h.App.Database.CloneSettingsForProfile(profile.ID)
 
 	if b.AccessCode != "" {
 		accessCodeHash, err := bcrypt.GenerateFromPassword([]byte(b.AccessCode), bcrypt.DefaultCost)

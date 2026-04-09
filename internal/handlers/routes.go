@@ -564,6 +564,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.DELETE("/debrid/torrent", h.HandleDebridDeleteTorrent)
 	v1.GET("/debrid/torrents", h.HandleDebridGetTorrents)
 	v1.POST("/debrid/torrents/info", h.HandleDebridGetTorrentInfo)
+	v1.POST("/debrid/torrents/play", h.HandleDebridPlayTorrent)
 	v1.POST("/debrid/torrents/file-previews", h.HandleDebridGetTorrentFilePreviews)
 	v1.POST("/debrid/stream/start", h.HandleDebridStartStream)
 	v1.POST("/debrid/stream/cancel", h.HandleDebridCancelStream)

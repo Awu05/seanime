@@ -3746,6 +3746,8 @@ export type Models_DebridSettings = {
     enabled: boolean
     provider: string
     apiKey: string
+    apiUrl: string
+    storeName: string
     includeDebridStreamInLibrary: boolean
     streamAutoSelect: boolean
     streamPreferredResolution: string

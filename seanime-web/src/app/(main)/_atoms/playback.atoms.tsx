@@ -55,6 +55,12 @@ export const playbackTorrentStreamingOptions = [
     },
     {
         label: <div className="flex items-center gap-4 md:gap-2 w-full">
+            <PiVideoFill className="text-2xl flex-none" />
+            <p className="max-w-[90%]">Native player (in-browser)</p>
+        </div>, value: PlaybackTorrentStreaming.NativePlayer,
+    },
+    {
+        label: <div className="flex items-center gap-4 md:gap-2 w-full">
             <FaShareFromSquare className="text-2xl flex-none" />
             <p className="max-w-[90%]">External player link</p>
         </div>, value: PlaybackTorrentStreaming.ExternalPlayerLink,

@@ -541,6 +541,8 @@ type DebridSettings struct {
 	Enabled  bool   `gorm:"column:enabled" json:"enabled"`
 	Provider string `gorm:"column:provider" json:"provider"`
 	ApiKey   string `gorm:"column:api_key" json:"apiKey"`
+	ApiUrl    string `gorm:"column:api_url" json:"apiUrl"`       // StremThru: base URL of the self-hosted instance
+	StoreName string `gorm:"column:store_name" json:"storeName"` // StremThru: debrid store name (e.g. torbox, realdebrid, pikpak)
 	//FallbackToDebridStreamingView bool   `gorm:"column:fallback_to_debrid_streaming_view" json:"fallbackToDebridStreamingView"` // DEPRECATED
 	IncludeDebridStreamInLibrary bool   `gorm:"column:include_debrid_stream_in_library" json:"includeDebridStreamInLibrary"`
 	StreamAutoSelect             bool   `gorm:"column:stream_auto_select" json:"streamAutoSelect"`

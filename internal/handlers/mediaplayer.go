@@ -12,7 +12,7 @@ import (
 func (h *Handler) HandleStartDefaultMediaPlayer(c echo.Context) error {
 
 	// Retrieve settings
-	settings, err := h.App.Database.GetSettings()
+	settings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

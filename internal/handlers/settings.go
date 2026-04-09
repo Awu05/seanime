@@ -21,16 +21,7 @@ import (
 //	@route /api/v1/settings [GET]
 //	@returns models.Settings
 func (h *Handler) HandleGetSettings(c echo.Context) error {
-	profileID := core.GetProfileIDFromContext(c)
-
-	var settings *models.Settings
-	var err error
-
-	if h.App.MultiUserEnabled && profileID != "" {
-		settings, err = h.App.Database.GetSettingsForProfile(profileID)
-	} else {
-		settings, err = h.App.Database.GetSettings()
-	}
+	settings, err := h.getSettings(c)
 
 	if err != nil {
 		return h.RespondWithError(c, err)
@@ -66,6 +57,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 		EnableTorrentStreaming bool                        `json:"enableTorrentStreaming"`
 		DebridProvider         string                      `json:"debridProvider"`
 		DebridApiKey           string                      `json:"debridApiKey"`
+		DebridApiUrl           string                      `json:"debridApiUrl"`
 	}
 	var b body
 
@@ -138,6 +130,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 				prev.Enabled = true
 				prev.Provider = b.DebridProvider
 				prev.ApiKey = b.DebridApiKey
+				prev.ApiUrl = b.DebridApiUrl
 				prev.IncludeDebridStreamInLibrary = true
 				_, _ = h.App.Database.UpsertDebridSettings(prev)
 			}
@@ -217,7 +210,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	}
 
 	autoDownloaderSettings := models.AutoDownloaderSettings{}
-	prevSettings, err := h.App.Database.GetSettings()
+	prevSettings, err := h.getSettings(c)
 	if err == nil && prevSettings.AutoDownloader != nil {
 		autoDownloaderSettings = *prevSettings.AutoDownloader
 	}
@@ -287,7 +280,7 @@ func (h *Handler) HandleSaveAutoDownloaderSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	currSettings, err := h.App.Database.GetSettings()
+	currSettings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -307,13 +300,18 @@ func (h *Handler) HandleSaveAutoDownloaderSettings(c echo.Context) error {
 		UseDebrid:             b.UseDebrid,
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
 	currSettings.AutoDownloader = autoDownloaderSettings
-	currSettings.BaseModel = models.BaseModel{
-		ID:        1,
-		UpdatedAt: time.Now(),
-	}
 
-	_, err = h.App.Database.UpsertSettings(currSettings)
+	if h.App.MultiUserEnabled && profileID != "" {
+		_, err = h.App.Database.UpsertSettingsForProfile(profileID, currSettings)
+	} else {
+		currSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		_, err = h.App.Database.UpsertSettings(currSettings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -341,18 +339,23 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	currSettings, err := h.App.Database.GetSettings()
+	currSettings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
 	currSettings.MediaPlayer = b.MediaPlayer
-	currSettings.BaseModel = models.BaseModel{
-		ID:        1,
-		UpdatedAt: time.Now(),
-	}
 
-	_, err = h.App.Database.UpsertSettings(currSettings)
+	if h.App.MultiUserEnabled && profileID != "" {
+		_, err = h.App.Database.UpsertSettingsForProfile(profileID, currSettings)
+	} else {
+		currSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		_, err = h.App.Database.UpsertSettings(currSettings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

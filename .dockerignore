@@ -28,3 +28,4 @@ bin
 *.db
 local_testing
 dist-server
+./seanime-data/

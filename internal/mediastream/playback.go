@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"seanime/internal/mediastream/videofile"
+	"strings"
 	"seanime/internal/util/result"
 
 	"github.com/rs/zerolog"
@@ -134,16 +135,20 @@ func (p *PlaybackManager) newMediaContainer(filepath string, streamType StreamTy
 		return nil, err
 	}
 
-	p.logger.Debug().Msg("mediastream: Extracted media info, extracting attachments")
+	// Skip attachment extraction for remote URLs (too slow for large files)
+	if !strings.HasPrefix(filepath, "http://") && !strings.HasPrefix(filepath, "https://") {
+		p.logger.Debug().Msg("mediastream: Extracted media info, extracting attachments")
 
-	// Extract the attachments from the file.
-	err = videofile.ExtractAttachment(p.repository.settings.MustGet().FfmpegPath, filepath, hash, ret.MediaInfo, p.repository.cacheDir, p.logger)
-	if err != nil {
-		p.logger.Error().Err(err).Msg("mediastream: Failed to extract attachments")
-		return nil, err
+		err = videofile.ExtractAttachment(p.repository.settings.MustGet().FfmpegPath, filepath, hash, ret.MediaInfo, p.repository.cacheDir, p.logger)
+		if err != nil {
+			p.logger.Error().Err(err).Msg("mediastream: Failed to extract attachments")
+			return nil, err
+		}
+
+		p.logger.Debug().Msg("mediastream: Extracted attachments")
+	} else {
+		p.logger.Debug().Msg("mediastream: Skipping attachment extraction for remote URL")
 	}
-
-	p.logger.Debug().Msg("mediastream: Extracted attachments")
 
 	streamUrl := ""
 	switch streamType {

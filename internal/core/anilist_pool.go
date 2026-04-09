@@ -70,7 +70,15 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 	p.mu.RUnlock()
 
 	// Create a new platform for this profile
-	token := p.app.Database.GetAnilistTokenForProfile(profileID)
+	acc, _ := p.app.Database.GetAccountByProfileID(profileID)
+
+	token := ""
+	username := ""
+	if acc != nil {
+		token = acc.Token
+		username = acc.Username
+	}
+
 	if token == "" {
 		// No AniList linked for this profile — return a nil-token platform
 		// that returns empty collections, NOT the admin's global platform
@@ -99,6 +107,9 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 		p.app.Database,
 		func() {}, // no auto-logout for pool clients
 	)
+
+	// Set the username so collection fetches work
+	plat.SetUsername(username)
 
 	p.mu.Lock()
 	p.clients[profileID] = client
