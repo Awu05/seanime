@@ -496,7 +496,10 @@ func (h *Handler) HandleGetMissingEpisodes(c echo.Context) error {
 	// A cron job will refresh the cache every 10 minutes
 	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
-		return h.RespondWithError(c, err)
+		return h.RespondWithData(c, &anime.MissingEpisodes{
+			Episodes:         []*anime.Episode{},
+			SilencedEpisodes: []*anime.Episode{},
+		})
 	}
 
 	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
@@ -549,7 +552,9 @@ func (h *Handler) HandleGetUpcomingEpisodes(c echo.Context) error {
 	// Get the user's anilist collection
 	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
-		return h.RespondWithError(c, err)
+		return h.RespondWithData(c, &anime.UpcomingEpisodes{
+			Episodes: []*anime.UpcomingEpisode{},
+		})
 	}
 	upcomingEps := anime.NewUpcomingEpisodes(&anime.NewUpcomingEpisodesOptions{
 		AnimeCollection:     animeCollection,

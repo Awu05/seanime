@@ -26,8 +26,12 @@ func (h *Handler) HandleGetAnimeCollection(c echo.Context) error {
 	plat := h.getAnilistPlatform(c)
 
 	animeCollection, err := plat.GetAnimeCollection(c.Request().Context(), bypassCache)
-	if err != nil {
-		return h.RespondWithError(c, err)
+	if err != nil || animeCollection == nil {
+		animeCollection = &anilist.AnimeCollection{
+			MediaListCollection: &anilist.AnimeCollection_MediaListCollection{
+				Lists: []*anilist.AnimeCollection_MediaListCollection_Lists{},
+			},
+		}
 	}
 
 	if bypassCache {

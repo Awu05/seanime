@@ -76,13 +76,17 @@ func (h *Handler) HandleGetRawAnilistMangaCollection(c echo.Context) error {
 //	@returns manga.Collection
 func (h *Handler) HandleGetMangaCollection(c echo.Context) error {
 
-	animeCollection, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
-	if err != nil {
-		return h.RespondWithError(c, err)
+	mangaCol, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
+	if err != nil || mangaCol == nil {
+		mangaCol = &anilist.MangaCollection{
+			MediaListCollection: &anilist.MangaCollection_MediaListCollection{
+				Lists: []*anilist.MangaCollection_MediaListCollection_Lists{},
+			},
+		}
 	}
 
 	collection, err := manga.NewCollection(&manga.NewCollectionOptions{
-		MangaCollection: animeCollection,
+		MangaCollection: mangaCol,
 		PlatformRef:     h.App.AnilistPlatformRef,
 	})
 	if err != nil {
@@ -106,9 +110,13 @@ func (h *Handler) HandleGetMangaEntry(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	animeCollection, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
-	if err != nil {
-		return h.RespondWithError(c, err)
+	mangaCol, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
+	if err != nil || mangaCol == nil {
+		mangaCol = &anilist.MangaCollection{
+			MediaListCollection: &anilist.MangaCollection_MediaListCollection{
+				Lists: []*anilist.MangaCollection_MediaListCollection_Lists{},
+			},
+		}
 	}
 
 	entry, err := manga.NewEntry(c.Request().Context(), &manga.NewEntryOptions{
@@ -116,7 +124,7 @@ func (h *Handler) HandleGetMangaEntry(c echo.Context) error {
 		Logger:          h.App.Logger,
 		FileCacher:      h.App.FileCacher,
 		PlatformRef:     h.App.AnilistPlatformRef,
-		MangaCollection: animeCollection,
+		MangaCollection: mangaCol,
 	})
 	if err != nil {
 		return h.RespondWithError(c, err)

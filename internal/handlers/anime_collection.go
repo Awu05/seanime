@@ -244,12 +244,12 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 
 	animeSchedule, err := h.getAnilistPlatform(c).GetAnimeAiringSchedule(c.Request().Context())
 	if err != nil {
-		return h.RespondWithError(c, err)
+		return h.RespondWithData(c, []*anime.ScheduleItem{})
 	}
 
 	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
-		return h.RespondWithError(c, err)
+		return h.RespondWithData(c, []*anime.ScheduleItem{})
 	}
 
 	ret := anime.GetScheduleItems(animeSchedule, animeCollection)
