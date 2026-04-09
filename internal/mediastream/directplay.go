@@ -60,7 +60,7 @@ func (r *Repository) ServeEchoDirectPlay(c echo.Context, clientId string) error 
 	}
 
 	// Get current media
-	mediaContainer, found := r.playbackManager.currentMediaContainer.Get()
+	mediaContainer, found := r.playbackManager.GetMediaContainer(clientId)
 	if !found {
 		r.wsEventManager.SendEvent(events.MediastreamShutdownStream, "no file has been loaded")
 		return errors.New("no file has been loaded")

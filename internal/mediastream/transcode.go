@@ -28,7 +28,7 @@ func (r *Repository) ServeEchoTranscodeStream(c echo.Context, clientId string) e
 
 	path := c.Param("*")
 
-	mediaContainer, found := r.playbackManager.currentMediaContainer.Get()
+	mediaContainer, found := r.playbackManager.GetMediaContainer(clientId)
 	if !found {
 		return errors.New("no file has been loaded")
 	}

@@ -131,7 +131,11 @@ func (h *Handler) HandleMediastreamGetSubtitles(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
-	return h.App.MediastreamRepository.ServeEchoExtractedSubtitles(c)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoExtractedSubtitles(c, clientId)
 }
 
 func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
@@ -139,7 +143,11 @@ func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
-	return h.App.MediastreamRepository.ServeEchoExtractedAttachments(c)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoExtractedAttachments(c, clientId)
 }
 
 //
@@ -147,8 +155,11 @@ func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
 //
 
 func (h *Handler) HandleMediastreamDirectPlay(c echo.Context) error {
-	client := "1"
-	return h.App.MediastreamRepository.ServeEchoDirectPlay(c, client)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoDirectPlay(c, clientId)
 }
 
 //
@@ -156,8 +167,11 @@ func (h *Handler) HandleMediastreamDirectPlay(c echo.Context) error {
 //
 
 func (h *Handler) HandleMediastreamTranscode(c echo.Context) error {
-	client := "1"
-	return h.App.MediastreamRepository.ServeEchoTranscodeStream(c, client)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoTranscodeStream(c, clientId)
 }
 
 // HandleMediastreamShutdownTranscodeStream
@@ -169,8 +183,16 @@ func (h *Handler) HandleMediastreamTranscode(c echo.Context) error {
 //	@returns bool
 //	@route /api/v1/mediastream/shutdown-transcode [POST]
 func (h *Handler) HandleMediastreamShutdownTranscodeStream(c echo.Context) error {
-	client := "1"
-	h.App.MediastreamRepository.ShutdownTranscodeStream(client)
+	type body struct {
+		ClientId string `json:"clientId"`
+	}
+	var b body
+	_ = c.Bind(&b)
+	clientId := b.ClientId
+	if clientId == "" {
+		clientId = "default"
+	}
+	h.App.MediastreamRepository.ShutdownTranscodeStream(clientId)
 	return h.RespondWithData(c, true)
 }
 

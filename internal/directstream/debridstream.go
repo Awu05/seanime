@@ -190,7 +190,7 @@ func (s *DebridStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err e
 					} else {
 						// Preload the first segments so they're ready when the player starts
 						s.manager.transcodeRequester.PreloadFirstSegments(s.streamUrl, s.clientId)
-						playbackInfo.StreamUrl = "{{SERVER_URL}}/api/v1/mediastream/transcode/master.m3u8"
+						playbackInfo.StreamUrl = "{{SERVER_URL}}/api/v1/mediastream/transcode/master.m3u8?clientId=" + s.clientId
 						playbackInfo.MimeType = "application/x-mpegURL"
 						// Start background download for local file switchover
 						s.startBackgroundDownload()
