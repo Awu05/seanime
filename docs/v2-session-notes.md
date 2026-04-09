@@ -147,10 +147,16 @@ Multi-user support with per-profile settings, StremThru debrid integration, nati
 
 ## Known Issues / Future Work
 
-1. **Multi-session transcoder** — Mediastream layer done (per-client containers, shared FileStreams, clientId routing). **Remaining:** `directstream.Manager` is still single-stream (`currentStream` singleton, shared `playbackCtx`). Needs per-client stream map + per-stream context to support concurrent debrid streams end-to-end. Design spec at `docs/superpowers/specs/2026-04-08-multi-session-transcoder-design.md`
+1. **Multi-session streaming** — Mediastream transcoder layer done. Directstream Manager done (per-client streams map, per-stream contexts). Needs end-to-end testing with multiple concurrent users.
 2. **AIOStreams integration** — Stream search provider from Stremio addons. See `memory/project_aiostreams.md`
 3. **Play from downloaded file** — When a debrid torrent has been downloaded locally, the play button on the debrid torrent list should stream from the local file instead of the remote debrid URL. Check the download destination for the torrent, and if the file exists locally, use the local file path for playback instead of calling `GetTorrentStreamUrl`. This avoids unnecessary network usage and gives instant, smooth playback with full seeking.
-4. **`master.m3u8&thumbnail=true` 500 error** — Thumbnail preview generator appends invalid query param. Cosmetic, doesn't affect playback
+4. **`master.m3u8&thumbnail=true` 500 error** — Thumbnail preview generator appends invalid query param. Cosmetic, doesn't affect playback.
+5. **Backend architecture cleanup** — Targeted improvements to codebase maintainability:
+   - **Split `modules.go`** (977 lines) into domain-specific init files: `modules_streaming.go`, `modules_library.go`, `modules_players.go`. Easier to navigate and modify.
+   - **Add typed errors** for HTTP status mapping. Currently all errors are string-based `error` interface — handlers can't distinguish bad input (400) from server failures (500) from external API errors (503). Define `AppError{Code, Status, Msg}` and use across packages.
+   - **Extract `PlaybackManager` concerns** — currently handles stream playback + Discord presence + progress tracking + episode collection. Split into `PlaybackOrchestrator`, `ProgressTracker`, `PresenceUpdater`.
+   - **Consolidate event system** — 5 separate subscriber maps (`clientEventSubscribers`, `clientNativePlayerEventSubscribers`, etc.) should be a single generic pub/sub with topic filtering.
+   - **Long-term: break App god object** — 180+ field struct where every handler has access to every subsystem. Group into domain services (`StreamingService`, `LibraryService`, `DebridService`, `PlayerService`, `AccountService`). Handlers receive only what they need.
 
 ---
 
