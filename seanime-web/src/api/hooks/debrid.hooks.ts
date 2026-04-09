@@ -92,8 +92,11 @@ export function useDebridGetTorrents(enabled: boolean, refetchInterval: number) 
         method: API_ENDPOINTS.DEBRID.DebridGetTorrents.methods[0],
         queryKey: [API_ENDPOINTS.DEBRID.DebridGetTorrents.key],
         enabled: enabled,
-        retry: 3,
+        retry: 2,
         refetchInterval: refetchInterval,
+        gcTime: 0, // Don't cache — remove query data immediately when component unmounts
+        refetchOnWindowFocus: false,
+        refetchIntervalInBackground: false, // Stop polling when tab is not focused
     })
 }
 

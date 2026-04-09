@@ -231,8 +231,7 @@ func (h *Handler) HandleDebridGetTorrents(c echo.Context) error {
 	torrents, err := provider.GetTorrents()
 	if err != nil {
 		h.App.Logger.Err(err).Msg("debrid: Failed to get torrents")
-		// Return empty list instead of error — debrid subscription may have expired
-		return h.RespondWithData(c, []debrid.TorrentItem{})
+		return h.RespondWithError(c, err)
 	}
 
 	return h.RespondWithData(c, torrents)
