@@ -102,6 +102,14 @@ export function useVideoCoreHls({
             }
             hlsAutoPlayTriggered.current = false
 
+            // Extract clientId from the stream URL to propagate to all HLS sub-requests
+            let clientIdParam = ""
+            try {
+                const urlObj = new URL(streamUrl, window.location.origin)
+                const cid = urlObj.searchParams.get("clientId")
+                if (cid) clientIdParam = cid
+            } catch {}
+
             // Create new HLS instance
             const hls = new Hls({
                 enableWorker: true,
@@ -122,6 +130,13 @@ export function useVideoCoreHls({
                         errorRetry: { maxNumRetry: 5, retryDelayMs: 2000, maxRetryDelayMs: 16000 },
                     },
                 },
+                // Propagate clientId to all HLS sub-requests (index.m3u8, segments.ts)
+                xhrSetup: clientIdParam ? (xhr, url) => {
+                    if (!url.includes("clientId=")) {
+                        const sep = url.includes("?") ? "&" : "?"
+                        xhr.open("GET", `${url}${sep}clientId=${clientIdParam}`, true)
+                    }
+                } : undefined,
             })
 
             hlsRef.current = hls
