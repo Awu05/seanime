@@ -79,6 +79,7 @@ type (
 		PreloadFirstSegments(filepath string, clientId string)
 		NotifyDownloadComplete(remotePath string, localPath string, expectedSize int64)
 		GetTranscodeDir() string
+		ShutdownTranscodeStream(clientId string)
 	}
 
 	NewManagerOptions struct {

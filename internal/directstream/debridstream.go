@@ -92,14 +92,18 @@ func (s *DebridStream) Close() error {
 	return nil
 }
 
-// Terminate overrides BaseStream.Terminate to also clean up the HTTP cache
+// Terminate overrides BaseStream.Terminate to also clean up the HTTP cache and transcode session
 func (s *DebridStream) Terminate() {
 	// Clean up background downloader
 	if s.downloader != nil {
 		s.downloader.Cleanup()
 		s.downloader = nil
 	}
-	// Clean up HTTP cache first
+	// Clean up transcode session for this client
+	if s.manager.transcodeRequester != nil {
+		s.manager.transcodeRequester.ShutdownTranscodeStream(s.clientId)
+	}
+	// Clean up HTTP cache
 	if err := s.Close(); err != nil {
 		s.logger.Error().Err(err).Msg("directstream(debrid): Failed to clean up HTTP cache during termination")
 	}

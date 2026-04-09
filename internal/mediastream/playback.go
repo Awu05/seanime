@@ -73,11 +73,22 @@ func (p *PlaybackManager) RequestPlayback(filepath string, streamType StreamType
 		return nil, fmt.Errorf("failed to create media container: %v", err)
 	}
 
+	// Create a client-specific copy with clientId in the stream URL
+	clientContainer := *ret
+	if clientContainer.StreamType == StreamTypeTranscode && !strings.Contains(clientContainer.StreamUrl, "clientId=") {
+		if strings.Contains(clientContainer.StreamUrl, "?") {
+			clientContainer.StreamUrl += "&clientId=" + clientId
+		} else {
+			clientContainer.StreamUrl += "?clientId=" + clientId
+		}
+	}
+
 	// Store the media container for this client.
-	p.clientContainers.Set(clientId, ret)
+	p.clientContainers.Set(clientId, &clientContainer)
 
 	p.logger.Info().Str("filepath", filepath).Str("clientId", clientId).Msg("mediastream: Ready to play media")
 
+	ret = &clientContainer
 	return
 }
 

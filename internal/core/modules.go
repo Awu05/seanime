@@ -970,3 +970,7 @@ func (a *mediastreamTranscodeAdapter) NotifyDownloadComplete(remotePath string, 
 func (a *mediastreamTranscodeAdapter) GetTranscodeDir() string {
 	return a.repo.GetTranscodeDir()
 }
+
+func (a *mediastreamTranscodeAdapter) ShutdownTranscodeStream(clientId string) {
+	a.repo.ShutdownTranscodeStream(clientId)
+}

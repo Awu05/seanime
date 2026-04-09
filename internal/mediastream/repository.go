@@ -62,7 +62,7 @@ func (r *Repository) IsInitialized() bool {
 }
 
 func (r *Repository) OnCleanup() {
-
+	r.ShutdownAllTranscode()
 }
 
 func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cacheDir string, transcodeDir string) {
@@ -94,8 +94,9 @@ func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cac
 	r.optimizer.SetLibraryDir(settings.PreTranscodeLibraryDir)
 
 	// Initialize the transcoder
-	if ok := r.initializeTranscoder(r.settings); ok {
-	}
+	r.initMu.Lock()
+	r.initializeTranscoder(r.settings)
+	r.initMu.Unlock()
 
 	r.logger.Info().Msg("mediastream: Module initialized")
 }
