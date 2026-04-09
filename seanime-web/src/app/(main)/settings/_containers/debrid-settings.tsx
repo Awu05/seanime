@@ -19,6 +19,7 @@ const debridSettingsSchema = defineSchema(({ z }) => z.object({
     apiKey: z.string().optional().default(""),
     apiUrl: z.string().optional().default(""),
     storeName: z.string().optional().default(""),
+    storeApiKey: z.string().optional().default(""),
     includeDebridStreamInLibrary: z.boolean().default(false),
     streamAutoSelect: z.boolean().default(false),
     streamPreferredResolution: z.string(),
@@ -81,6 +82,7 @@ export function DebridSettings(props: DebridSettingsProps) {
                     apiKey: settings?.apiKey,
                     apiUrl: settings?.apiUrl || "",
                     storeName: settings?.storeName || "-",
+                    storeApiKey: settings?.storeApiKey || "",
                     includeDebridStreamInLibrary: settings?.includeDebridStreamInLibrary,
                     streamAutoSelect: settings?.streamAutoSelect ?? false,
                     streamPreferredResolution: settings?.streamPreferredResolution || "-",
@@ -155,6 +157,15 @@ export function DebridSettings(props: DebridSettingsProps) {
                                             { label: "TorBox", value: "torbox" },
                                         ]}
                                     />
+                                    {f.watch("storeName") !== "-" && (
+                                        <Field.Text
+                                            name="storeApiKey"
+                                            label="Store API Key"
+                                            type="password"
+                                            placeholder="Your debrid service API key"
+                                            help="Required for public StremThru instances. Your debrid provider's API key (e.g. TorBox API key). Leave blank for self-hosted instances where the store auth is configured server-side."
+                                        />
+                                    )}
                                 </>
                             )}
 

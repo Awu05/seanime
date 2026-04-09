@@ -132,7 +132,7 @@ func (r *Repository) InitializeProvider(settings *models.DebridSettings) error {
 	case "alldebrid":
 		r.provider = mo.Some(alldebrid.NewAllDebrid(r.logger))
 	case "stremthru":
-		r.provider = mo.Some(stremthru.NewStremThru(r.logger, settings.ApiUrl, settings.StoreName))
+		r.provider = mo.Some(stremthru.NewStremThru(r.logger, settings.ApiUrl, settings.StoreName, settings.StoreApiKey))
 	default:
 		r.provider = mo.None[debrid.Provider]()
 	}

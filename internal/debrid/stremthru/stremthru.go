@@ -22,11 +22,12 @@ import (
 
 type (
 	StremThru struct {
-		baseUrl   string
-		storeName string
-		apiKey    mo.Option[string]
-		client    *http.Client
-		logger    *zerolog.Logger
+		baseUrl     string
+		storeName   string
+		storeApiKey string
+		apiKey      mo.Option[string]
+		client      *http.Client
+		logger      *zerolog.Logger
 	}
 
 	Response struct {
@@ -98,15 +99,16 @@ type (
 	}
 )
 
-func NewStremThru(logger *zerolog.Logger, apiUrl string, storeName string) debrid.Provider {
+func NewStremThru(logger *zerolog.Logger, apiUrl string, storeName string, storeApiKey string) debrid.Provider {
 	baseUrl := strings.TrimRight(apiUrl, "/")
 	if baseUrl == "" {
 		baseUrl = "http://localhost:8080"
 	}
 
 	return &StremThru{
-		baseUrl:   baseUrl,
-		storeName: storeName,
+		baseUrl:     baseUrl,
+		storeName:   storeName,
+		storeApiKey: storeApiKey,
 		apiKey:    mo.None[string](),
 		client: &http.Client{
 			Timeout: 60 * time.Second,
@@ -147,6 +149,9 @@ func (s *StremThru) doQueryCtx(ctx context.Context, method, uri string, body io.
 	req.Header.Set("X-StremThru-Authorization", "Basic "+apiKey)
 	if s.storeName != "" {
 		req.Header.Set("X-StremThru-Store-Name", s.storeName)
+	}
+	if s.storeApiKey != "" {
+		req.Header.Set("X-StremThru-Store-Authorization", "Bearer "+s.storeApiKey)
 	}
 	req.Header.Set("User-Agent", "Seanime/"+constants.Version)
 
