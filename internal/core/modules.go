@@ -700,6 +700,7 @@ func (a *App) InitOrRefreshMediastreamSettings() {
 	}
 
 	a.MediastreamRepository.InitializeModules(settings, a.Config.Cache.Dir, a.Config.Cache.TranscodeDir)
+	a.MediastreamRepository.MarkSettingsDirty()
 
 	// Cleanup cache
 	go func() {
