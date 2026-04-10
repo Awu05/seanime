@@ -140,6 +140,18 @@ func (a *App) RefreshAnimeCollection() (*anilist.AnimeCollection, error) {
 	// Save the collection to DirectStreamManager
 	a.DirectStreamManager.SetAnimeCollection(ret)
 
+	// Propagate collection to all active per-profile stream sessions
+	if a.StreamSessionManager != nil {
+		a.StreamSessionManager.ForEachSession(func(session *ProfileStreamSession) {
+			if session.PlaybackManager != nil {
+				session.PlaybackManager.SetAnimeCollection(ret)
+			}
+			if session.DirectStreamManager != nil {
+				session.DirectStreamManager.SetAnimeCollection(ret)
+			}
+		})
+	}
+
 	// Save the collection to LibraryExplorer
 	a.LibraryExplorer.SetAnimeCollection(ret)
 

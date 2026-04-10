@@ -268,7 +268,8 @@ func (h *Handler) HandleDebridPlayTorrent(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err = h.App.DirectStreamManager.PlayDebridStreamDirect(b.ClientId, downloadUrl, b.Title)
+	session := h.getStreamSession(c)
+	err = session.DirectStreamManager.PlayDebridStreamDirect(b.ClientId, downloadUrl, b.Title)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

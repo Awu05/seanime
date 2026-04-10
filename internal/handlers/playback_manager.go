@@ -135,27 +135,7 @@ func (h *Handler) HandlePlaybackAutoPlayNextEpisode(c echo.Context) error {
 //	@route /api/v1/playback-manager/start-playlist [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackStartPlaylist(c echo.Context) error {
-
-	//type body struct {
-	//	DbId uint `json:"dbId"`
-	//}
-	//
-	//var b body
-	//if err := c.Bind(&b); err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-	//
-	//// Get playlist
-	//playlist, err := db_bridge.GetLegacyPlaylist(h.App.Database, b.DbId)
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-	//
-	//err = h.App.PlaybackManager.StartPlaylist(playlist)
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-
+	// Legacy playlist feature is disabled.
 	return h.RespondWithData(c, true)
 }
 
@@ -166,12 +146,7 @@ func (h *Handler) HandlePlaybackStartPlaylist(c echo.Context) error {
 //	@route /api/v1/playback-manager/cancel-playlist [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackCancelCurrentPlaylist(c echo.Context) error {
-
-	//err := h.App.PlaybackManager.CancelCurrentPlaylist()
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-
+	// Legacy playlist feature is disabled.
 	return h.RespondWithData(c, true)
 }
 
@@ -182,12 +157,7 @@ func (h *Handler) HandlePlaybackCancelCurrentPlaylist(c echo.Context) error {
 //	@route /api/v1/playback-manager/playlist-next [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackPlaylistNext(c echo.Context) error {
-
-	//err := h.App.PlaybackManager.RequestNextPlaylistFile()
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-
+	// Legacy playlist feature is disabled.
 	return h.RespondWithData(c, true)
 }
 

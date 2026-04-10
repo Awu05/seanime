@@ -56,21 +56,9 @@ func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory fun
 	return session
 }
 
-func (sm *StreamSessionManager) GetSession(profileID string) *ProfileStreamSession {
-	if profileID == "" {
-		profileID = "_default"
-	}
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	return sm.sessions[profileID]
-}
-
-func (sm *StreamSessionManager) RemoveSession(profileID string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	delete(sm.sessions, profileID)
-}
-
+// GetActiveSessions returns a snapshot of all active sessions.
+// The returned slice is safe to iterate but callers must only invoke thread-safe methods
+// on session components, as the lock is released before returning.
 func (sm *StreamSessionManager) GetActiveSessions() []*ProfileStreamSession {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -79,6 +67,14 @@ func (sm *StreamSessionManager) GetActiveSessions() []*ProfileStreamSession {
 		sessions = append(sessions, s)
 	}
 	return sessions
+}
+
+// ForEachSession applies fn to each active session under a read lock snapshot.
+// fn must only invoke thread-safe methods on the session components.
+func (sm *StreamSessionManager) ForEachSession(fn func(*ProfileStreamSession)) {
+	for _, session := range sm.GetActiveSessions() {
+		fn(session)
+	}
 }
 
 func (sm *StreamSessionManager) cleanupLoop() {

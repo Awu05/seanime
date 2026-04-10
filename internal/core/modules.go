@@ -52,6 +52,9 @@ func (a *App) initModulesOnce() {
 
 	if a.StreamSessionManager == nil {
 		a.StreamSessionManager = NewStreamSessionManager(30 * time.Minute)
+		a.Cleanups = append(a.Cleanups, func() {
+			a.StreamSessionManager.Stop()
+		})
 	}
 
 	if a.AnilistPool == nil {
@@ -524,6 +527,27 @@ func (a *App) InitOrRefreshModules() {
 
 		a.TorrentstreamRepository.SetMediaPlayerRepository(a.MediaPlayerRepository)
 
+		// Propagate media player and settings to all active per-profile stream sessions
+		if a.StreamSessionManager != nil {
+			a.StreamSessionManager.ForEachSession(func(session *ProfileStreamSession) {
+				if session.PlaybackManager != nil {
+					session.PlaybackManager.SetMediaPlayerRepository(a.MediaPlayerRepository)
+					session.PlaybackManager.SetSettings(&playbackmanager.Settings{
+						AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
+					})
+				}
+				if session.DirectStreamManager != nil {
+					session.DirectStreamManager.SetSettings(&directstream.Settings{
+						AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
+						AutoUpdateProgress:  a.Settings.GetLibrary().AutoUpdateProgress,
+					})
+				}
+				if session.TorrentStream != nil {
+					session.TorrentStream.SetMediaPlayerRepository(a.MediaPlayerRepository)
+				}
+			})
+		}
+
 		plugin.GlobalAppContext.SetModulesPartial(plugin.AppContextModules{
 			MediaPlayerRepository: a.MediaPlayerRepository,
 		})
@@ -533,6 +557,15 @@ func (a *App) InitOrRefreshModules() {
 
 	if a.VideoCore != nil {
 		a.VideoCore.SetSettings(settings)
+	}
+
+	// Propagate VideoCore settings to all active per-profile stream sessions
+	if a.StreamSessionManager != nil {
+		a.StreamSessionManager.ForEachSession(func(session *ProfileStreamSession) {
+			if session.VideoCore != nil {
+				session.VideoCore.SetSettings(settings)
+			}
+		})
 	}
 
 	// +---------------------+
@@ -769,6 +802,15 @@ func (a *App) InitOrRefreshTorrentstreamSettings() {
 	// Set torrent streaming settings in secondary settings
 	// so the client can use them
 	a.SecondarySettings.Torrentstream = settings
+
+	// Propagate torrentstream settings to all active per-profile stream sessions
+	if a.StreamSessionManager != nil {
+		a.StreamSessionManager.ForEachSession(func(session *ProfileStreamSession) {
+			if session.TorrentStream != nil {
+				session.TorrentStream.SetSettings(settings, a.Config.Server.Host, a.Config.Server.Port)
+			}
+		})
+	}
 }
 
 func (a *App) InitOrRefreshDebridSettings() {
