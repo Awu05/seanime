@@ -253,14 +253,18 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 	// "Show all" mode or not authenticated — fetch all currently airing anime (public API, no auth required)
 	if showAll {
 		now := time.Now()
+		nowUnix := int(now.Unix())
 		weekAgo := int(now.AddDate(0, 0, -7).Unix())
 		weekAhead := int(now.AddDate(0, 0, 7).Unix())
 		page := 1
 		perPage := 50
-		notYetAired := false
+		notYetAiredFalse := false
+		notYetAiredTrue := true
 
-		recentAired, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &weekAgo, nil, &notYetAired)
-		upcoming, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, nil, &weekAhead, nil)
+		// Recently aired: episodes that aired in the past 7 days
+		recentAired, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &weekAgo, &nowUnix, &notYetAiredFalse)
+		// Upcoming: episodes airing in the next 7 days
+		upcoming, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &nowUnix, &weekAhead, &notYetAiredTrue)
 
 		allItems := make([]*anime.ScheduleItem, 0)
 		if recentAired != nil {
@@ -281,14 +285,16 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 	if !hasCollection {
 		// Not authenticated — fall back to all airing
 		now := time.Now()
+		nowUnix := int(now.Unix())
 		weekAgo := int(now.AddDate(0, 0, -7).Unix())
 		weekAhead := int(now.AddDate(0, 0, 7).Unix())
 		page := 1
 		perPage := 50
-		notYetAired := false
+		notYetAiredFalse := false
+		notYetAiredTrue := true
 
-		recentAired, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &weekAgo, nil, &notYetAired)
-		upcoming, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, nil, &weekAhead, nil)
+		recentAired, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &weekAgo, &nowUnix, &notYetAiredFalse)
+		upcoming, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &nowUnix, &weekAhead, &notYetAiredTrue)
 
 		allItems := make([]*anime.ScheduleItem, 0)
 		if recentAired != nil {
