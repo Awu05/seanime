@@ -56,23 +56,13 @@ func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory fun
 	return session
 }
 
-// GetActiveSessions returns a snapshot of all active sessions.
-// The returned slice is safe to iterate but callers must only invoke thread-safe methods
-// on session components, as the lock is released before returning.
-func (sm *StreamSessionManager) GetActiveSessions() []*ProfileStreamSession {
+// ForEachSession applies fn to each active session while holding a read lock.
+// fn must only invoke thread-safe methods on the session components and must not
+// call back into StreamSessionManager methods that take the write lock (deadlock).
+func (sm *StreamSessionManager) ForEachSession(fn func(*ProfileStreamSession)) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	sessions := make([]*ProfileStreamSession, 0, len(sm.sessions))
-	for _, s := range sm.sessions {
-		sessions = append(sessions, s)
-	}
-	return sessions
-}
-
-// ForEachSession applies fn to each active session under a read lock snapshot.
-// fn must only invoke thread-safe methods on the session components.
-func (sm *StreamSessionManager) ForEachSession(fn func(*ProfileStreamSession)) {
-	for _, session := range sm.GetActiveSessions() {
+	for _, session := range sm.sessions {
 		fn(session)
 	}
 }

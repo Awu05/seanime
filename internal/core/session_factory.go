@@ -15,18 +15,20 @@ import (
 // wrapper (with its own currentTorrent/currentFile tracking) but shares the single anacrolix
 // torrent engine from the App's singleton.
 func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
+	refreshAnimeCollection := func() {
+		_, _ = a.RefreshAnimeCollection()
+	}
+
 	// Create VideoCore
 	vc := videocore.New(videocore.NewVideoCoreOptions{
-		WsEventManager:      a.WSEventManager,
-		Logger:              a.Logger,
-		ContinuityManager:   a.ContinuityManager,
-		MetadataProviderRef: a.MetadataProviderRef,
-		DiscordPresence:     a.DiscordPresence,
-		PlatformRef:         a.AnilistPlatformRef,
-		RefreshAnimeCollectionFunc: func() {
-			_, _ = a.RefreshAnimeCollection()
-		},
-		IsOfflineRef: a.IsOfflineRef(),
+		WsEventManager:             a.WSEventManager,
+		Logger:                     a.Logger,
+		ContinuityManager:          a.ContinuityManager,
+		MetadataProviderRef:        a.MetadataProviderRef,
+		DiscordPresence:            a.DiscordPresence,
+		PlatformRef:                a.AnilistPlatformRef,
+		RefreshAnimeCollectionFunc: refreshAnimeCollection,
+		IsOfflineRef:               a.IsOfflineRef(),
 	})
 
 	// Create NativePlayer (depends on VideoCore)
@@ -38,33 +40,29 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 
 	// Create PlaybackManager
 	pm := playbackmanager.New(&playbackmanager.NewPlaybackManagerOptions{
-		WSEventManager:      a.WSEventManager,
-		Logger:              a.Logger,
-		PlatformRef:         a.AnilistPlatformRef,
-		MetadataProviderRef: a.MetadataProviderRef,
-		Database:            a.Database,
-		RefreshAnimeCollectionFunc: func() {
-			_, _ = a.RefreshAnimeCollection()
-		},
-		DiscordPresence:   a.DiscordPresence,
-		IsOfflineRef:      a.IsOfflineRef(),
-		ContinuityManager: a.ContinuityManager,
+		WSEventManager:             a.WSEventManager,
+		Logger:                     a.Logger,
+		PlatformRef:                a.AnilistPlatformRef,
+		MetadataProviderRef:        a.MetadataProviderRef,
+		Database:                   a.Database,
+		RefreshAnimeCollectionFunc: refreshAnimeCollection,
+		DiscordPresence:            a.DiscordPresence,
+		IsOfflineRef:               a.IsOfflineRef(),
+		ContinuityManager:          a.ContinuityManager,
 	})
 
 	// Create DirectStreamManager (depends on NativePlayer + VideoCore)
 	dsm := directstream.NewManager(directstream.NewManagerOptions{
-		Logger:              a.Logger,
-		WSEventManager:      a.WSEventManager,
-		ContinuityManager:   a.ContinuityManager,
-		MetadataProviderRef: a.MetadataProviderRef,
-		DiscordPresence:     a.DiscordPresence,
-		PlatformRef:         a.AnilistPlatformRef,
-		RefreshAnimeCollectionFunc: func() {
-			_, _ = a.RefreshAnimeCollection()
-		},
-		IsOfflineRef: a.IsOfflineRef(),
-		NativePlayer: np,
-		VideoCore:    vc,
+		Logger:                     a.Logger,
+		WSEventManager:             a.WSEventManager,
+		ContinuityManager:          a.ContinuityManager,
+		MetadataProviderRef:        a.MetadataProviderRef,
+		DiscordPresence:            a.DiscordPresence,
+		PlatformRef:                a.AnilistPlatformRef,
+		RefreshAnimeCollectionFunc: refreshAnimeCollection,
+		IsOfflineRef:               a.IsOfflineRef(),
+		NativePlayer:               np,
+		VideoCore:                  vc,
 		HMACTokenFunc: func(endpoint string, symbol string) string {
 			qp, err := a.GetServerPasswordHMACAuth().GenerateQueryParam(endpoint, symbol)
 			if err != nil {
