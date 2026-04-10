@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"seanime/internal/api/anilist"
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
@@ -108,6 +109,15 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	if a.MediaPlayerRepository != nil {
 		tsr.SetMediaPlayerRepository(a.MediaPlayerRepository)
 		pm.SetMediaPlayerRepository(a.MediaPlayerRepository)
+	}
+
+	// Seed the session with the current anime collection (from cache, no network call)
+	// so collection-dependent features work immediately without waiting for next refresh.
+	if platform := a.AnilistPlatformRef.Get(); platform != nil {
+		if collection, err := platform.GetAnimeCollection(context.Background(), false); err == nil && collection != nil {
+			pm.SetAnimeCollection(collection)
+			dsm.SetAnimeCollection(collection)
+		}
 	}
 
 	return &ProfileStreamSession{

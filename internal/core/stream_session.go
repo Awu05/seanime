@@ -22,7 +22,7 @@ type ProfileStreamSession struct {
 
 type StreamSessionManager struct {
 	sessions          map[string]*ProfileStreamSession
-	mu                sync.RWMutex
+	mu                sync.Mutex
 	cleanupTicker     *time.Ticker
 	cleanupDone       chan struct{}
 	inactivityTimeout time.Duration
@@ -56,15 +56,18 @@ func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory fun
 	return session
 }
 
-// ForEachSession applies fn to each active session while holding a read lock.
-// fn must only invoke thread-safe methods on the session components and must not
-// call back into StreamSessionManager methods that take the write lock (deadlock).
-func (sm *StreamSessionManager) ForEachSession(fn func(*ProfileStreamSession)) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	for _, session := range sm.sessions {
-		fn(session)
+// WithSessionsLocked runs fn while holding the write lock, passing in a snapshot of
+// the current sessions. Use this to atomically update external state AND propagate to
+// existing sessions, serializing against concurrent session creation.
+// fn must not call back into StreamSessionManager methods (deadlock).
+func (sm *StreamSessionManager) WithSessionsLocked(fn func(sessions []*ProfileStreamSession)) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sessions := make([]*ProfileStreamSession, 0, len(sm.sessions))
+	for _, s := range sm.sessions {
+		sessions = append(sessions, s)
 	}
+	fn(sessions)
 }
 
 func (sm *StreamSessionManager) cleanupLoop() {

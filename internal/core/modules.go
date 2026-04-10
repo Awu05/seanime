@@ -503,50 +503,49 @@ func (a *App) InitOrRefreshModules() {
 		a.MediaPlayer.Mpv = mpv.New(a.Logger, settings.MediaPlayer.MpvSocket, settings.MediaPlayer.MpvPath, settings.MediaPlayer.MpvArgs)
 		a.MediaPlayer.Iina = iina.New(a.Logger, settings.MediaPlayer.IinaSocket, settings.MediaPlayer.IinaPath, settings.MediaPlayer.IinaArgs)
 
-		// Set media player repository
-		a.MediaPlayerRepository = mediaplayer.NewRepository(&mediaplayer.NewRepositoryOptions{
-			Logger:            a.Logger,
-			Default:           settings.MediaPlayer.Default,
-			VLC:               a.MediaPlayer.VLC,
-			MpcHc:             a.MediaPlayer.MpcHc,
-			Mpv:               a.MediaPlayer.Mpv, // Socket
-			Iina:              a.MediaPlayer.Iina,
-			WSEventManager:    a.WSEventManager,
-			ContinuityManager: a.ContinuityManager,
-		})
+		// Atomically update shared state and propagate to all active sessions.
+		// Holding the session manager write lock serializes against concurrent session creation,
+		// so newly-created sessions observe either the full old state or the full new state.
+		a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+			// Set media player repository
+			a.MediaPlayerRepository = mediaplayer.NewRepository(&mediaplayer.NewRepositoryOptions{
+				Logger:            a.Logger,
+				Default:           settings.MediaPlayer.Default,
+				VLC:               a.MediaPlayer.VLC,
+				MpcHc:             a.MediaPlayer.MpcHc,
+				Mpv:               a.MediaPlayer.Mpv, // Socket
+				Iina:              a.MediaPlayer.Iina,
+				WSEventManager:    a.WSEventManager,
+				ContinuityManager: a.ContinuityManager,
+			})
 
-		a.PlaybackManager.SetMediaPlayerRepository(a.MediaPlayerRepository)
-		a.PlaybackManager.SetSettings(&playbackmanager.Settings{
-			AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
-		})
+			pmSettings := &playbackmanager.Settings{
+				AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
+			}
+			dsmSettings := &directstream.Settings{
+				AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
+				AutoUpdateProgress:  a.Settings.GetLibrary().AutoUpdateProgress,
+			}
 
-		a.DirectStreamManager.SetSettings(&directstream.Settings{
-			AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
-			AutoUpdateProgress:  a.Settings.GetLibrary().AutoUpdateProgress,
-		})
+			a.PlaybackManager.SetMediaPlayerRepository(a.MediaPlayerRepository)
+			a.PlaybackManager.SetSettings(pmSettings)
+			a.DirectStreamManager.SetSettings(dsmSettings)
+			a.TorrentstreamRepository.SetMediaPlayerRepository(a.MediaPlayerRepository)
 
-		a.TorrentstreamRepository.SetMediaPlayerRepository(a.MediaPlayerRepository)
-
-		// Propagate media player and settings to all active per-profile stream sessions
-		if a.StreamSessionManager != nil {
-			a.StreamSessionManager.ForEachSession(func(session *ProfileStreamSession) {
+			// Propagate to active per-profile stream sessions
+			for _, session := range sessions {
 				if session.PlaybackManager != nil {
 					session.PlaybackManager.SetMediaPlayerRepository(a.MediaPlayerRepository)
-					session.PlaybackManager.SetSettings(&playbackmanager.Settings{
-						AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
-					})
+					session.PlaybackManager.SetSettings(pmSettings)
 				}
 				if session.DirectStreamManager != nil {
-					session.DirectStreamManager.SetSettings(&directstream.Settings{
-						AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
-						AutoUpdateProgress:  a.Settings.GetLibrary().AutoUpdateProgress,
-					})
+					session.DirectStreamManager.SetSettings(dsmSettings)
 				}
 				if session.TorrentStream != nil {
 					session.TorrentStream.SetMediaPlayerRepository(a.MediaPlayerRepository)
 				}
-			})
-		}
+			}
+		})
 
 		plugin.GlobalAppContext.SetModulesPartial(plugin.AppContextModules{
 			MediaPlayerRepository: a.MediaPlayerRepository,
@@ -555,15 +554,14 @@ func (a *App) InitOrRefreshModules() {
 		a.Logger.Warn().Msg("app: Did not initialize media player module, no settings found")
 	}
 
+	// Atomically update VideoCore settings and propagate to all active sessions.
 	if a.VideoCore != nil {
-		a.VideoCore.SetSettings(settings)
-	}
-
-	// Propagate VideoCore settings to all active per-profile stream sessions
-	if a.StreamSessionManager != nil {
-		a.StreamSessionManager.ForEachSession(func(session *ProfileStreamSession) {
-			if session.VideoCore != nil {
-				session.VideoCore.SetSettings(settings)
+		a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+			a.VideoCore.SetSettings(settings)
+			for _, session := range sessions {
+				if session.VideoCore != nil {
+					session.VideoCore.SetSettings(settings)
+				}
 			}
 		})
 	}
@@ -799,18 +797,18 @@ func (a *App) InitOrRefreshTorrentstreamSettings() {
 		a.TorrentstreamRepository.Shutdown()
 	})
 
-	// Set torrent streaming settings in secondary settings
-	// so the client can use them
-	a.SecondarySettings.Torrentstream = settings
-
-	// Propagate torrentstream settings to all active per-profile stream sessions
-	if a.StreamSessionManager != nil {
-		a.StreamSessionManager.ForEachSession(func(session *ProfileStreamSession) {
+	// Atomically update secondary settings and propagate to all active sessions.
+	// Holding the session manager write lock serializes against concurrent session creation
+	// (which reads a.SecondarySettings.Torrentstream in the factory), so new sessions either
+	// see the old settings + get propagated the new ones, or observe the new settings directly.
+	a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+		a.SecondarySettings.Torrentstream = settings
+		for _, session := range sessions {
 			if session.TorrentStream != nil {
 				session.TorrentStream.SetSettings(settings, a.Config.Server.Host, a.Config.Server.Port)
 			}
-		})
-	}
+		}
+	})
 }
 
 func (a *App) InitOrRefreshDebridSettings() {
