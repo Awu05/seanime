@@ -38,6 +38,7 @@ export const calendarParamsAtom = atomWithStorage("sea-release-calendar-params",
 type ScheduleCalendarProps = {
     children?: React.ReactNode
     items?: Anime_ScheduleItem[]
+    showAll?: boolean
 }
 
 export function ScheduleCalendar(props: ScheduleCalendarProps) {
@@ -45,14 +46,15 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
     const {
         children,
         items,
+        showAll = false,
         ...rest
     } = props
 
     const anilistListData = useAtomValue(__anilist_userAnimeListDataAtom)
 
-    const { data: _schedule } = useGetAnimeCollectionSchedule({ enabled: !items })
+    const { data: _schedule } = useGetAnimeCollectionSchedule({ enabled: !items, showAll })
     const schedule = items ?? _schedule
-    const isUserSchedule = !items
+    const isUserSchedule = !items && !showAll
 
     // State for the current displayed month
     const [currentDate, setCurrentDate] = React.useState(new Date())

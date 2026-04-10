@@ -34,11 +34,14 @@ export function useAddUnknownMedia() {
     })
 }
 
-export function useGetAnimeCollectionSchedule({ enabled }: { enabled?: boolean } = { enabled: true }) {
+export function useGetAnimeCollectionSchedule({ enabled, showAll }: { enabled?: boolean, showAll?: boolean } = { enabled: true }) {
+    const endpoint = showAll
+        ? API_ENDPOINTS.ANIME_COLLECTION.GetAnimeCollectionSchedule.endpoint + "?showAll=true"
+        : API_ENDPOINTS.ANIME_COLLECTION.GetAnimeCollectionSchedule.endpoint
     return useServerQuery<Array<Anime_ScheduleItem>>({
-        endpoint: API_ENDPOINTS.ANIME_COLLECTION.GetAnimeCollectionSchedule.endpoint,
+        endpoint: endpoint,
         method: API_ENDPOINTS.ANIME_COLLECTION.GetAnimeCollectionSchedule.methods[0],
-        queryKey: [API_ENDPOINTS.ANIME_COLLECTION.GetAnimeCollectionSchedule.key],
+        queryKey: [API_ENDPOINTS.ANIME_COLLECTION.GetAnimeCollectionSchedule.key, showAll ? "all" : "my-list"],
         enabled: enabled,
     })
 }
