@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"seanime/internal/api/anilist"
 	"seanime/internal/customsource"
@@ -252,27 +253,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 
 	// "Show all" mode or not authenticated — fetch all currently airing anime (public API, no auth required)
 	if showAll {
-		now := time.Now()
-		nowUnix := int(now.Unix())
-		weekAgo := int(now.AddDate(0, 0, -7).Unix())
-		weekAhead := int(now.AddDate(0, 0, 7).Unix())
-		page := 1
-		perPage := 50
-		notYetAiredFalse := false
-		notYetAiredTrue := true
-
-		// Recently aired: episodes that aired in the past 7 days
-		recentAired, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &weekAgo, &nowUnix, &notYetAiredFalse)
-		// Upcoming: episodes airing in the next 7 days
-		upcoming, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &nowUnix, &weekAhead, &notYetAiredTrue)
-
-		allItems := make([]*anime.ScheduleItem, 0)
-		if recentAired != nil {
-			allItems = append(allItems, anime.GetPublicScheduleItems(recentAired)...)
-		}
-		if upcoming != nil {
-			allItems = append(allItems, anime.GetPublicScheduleItems(upcoming)...)
-		}
+		allItems := h.fetchAllAiringScheduleItems(c.Request().Context())
 
 		animeScheduleCache.SetT(cacheKey, allItems, 1*time.Hour)
 		return h.RespondWithData(c, allItems)
@@ -284,26 +265,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 
 	if !hasCollection {
 		// Not authenticated — fall back to all airing
-		now := time.Now()
-		nowUnix := int(now.Unix())
-		weekAgo := int(now.AddDate(0, 0, -7).Unix())
-		weekAhead := int(now.AddDate(0, 0, 7).Unix())
-		page := 1
-		perPage := 50
-		notYetAiredFalse := false
-		notYetAiredTrue := true
-
-		recentAired, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &weekAgo, &nowUnix, &notYetAiredFalse)
-		upcoming, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &nowUnix, &weekAhead, &notYetAiredTrue)
-
-		allItems := make([]*anime.ScheduleItem, 0)
-		if recentAired != nil {
-			allItems = append(allItems, anime.GetPublicScheduleItems(recentAired)...)
-		}
-		if upcoming != nil {
-			allItems = append(allItems, anime.GetPublicScheduleItems(upcoming)...)
-		}
-
+		allItems := h.fetchAllAiringScheduleItems(c.Request().Context())
 		animeScheduleCache.SetT(cacheKey, allItems, 1*time.Hour)
 		return h.RespondWithData(c, allItems)
 	}
@@ -351,4 +313,46 @@ func (h *Handler) HandleAddUnknownMedia(c echo.Context) error {
 
 	return h.RespondWithData(c, animeCollection)
 
+}
+
+// fetchAllAiringScheduleItems fetches all currently airing anime from the public AniList API,
+// paginating to get complete coverage for the past 7 days and next 7 days.
+func (h *Handler) fetchAllAiringScheduleItems(ctx context.Context) []*anime.ScheduleItem {
+	now := time.Now()
+	nowUnix := int(now.Unix())
+	weekAgo := int(now.AddDate(0, 0, -7).Unix())
+	weekAhead := int(now.AddDate(0, 0, 7).Unix())
+	perPage := 50
+	notYetAiredFalse := false
+	notYetAiredTrue := true
+
+	allItems := make([]*anime.ScheduleItem, 0)
+
+	// Fetch recently aired (past 7 days) — paginate
+	for page := 1; page <= 4; page++ {
+		p := page
+		res, err := h.App.AnilistClientRef.Get().ListRecentAnime(ctx, &p, &perPage, &weekAgo, &nowUnix, &notYetAiredFalse)
+		if err != nil || res == nil {
+			break
+		}
+		allItems = append(allItems, anime.GetPublicScheduleItems(res)...)
+		if res.GetPage().PageInfo == nil || res.GetPage().PageInfo.GetHasNextPage() == nil || !*res.GetPage().PageInfo.GetHasNextPage() {
+			break
+		}
+	}
+
+	// Fetch upcoming (next 7 days) — paginate
+	for page := 1; page <= 4; page++ {
+		p := page
+		res, err := h.App.AnilistClientRef.Get().ListRecentAnime(ctx, &p, &perPage, &nowUnix, &weekAhead, &notYetAiredTrue)
+		if err != nil || res == nil {
+			break
+		}
+		allItems = append(allItems, anime.GetPublicScheduleItems(res)...)
+		if res.GetPage().PageInfo == nil || res.GetPage().PageInfo.GetHasNextPage() == nil || !*res.GetPage().PageInfo.GetHasNextPage() {
+			break
+		}
+	}
+
+	return allItems
 }
