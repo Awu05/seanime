@@ -245,6 +245,53 @@ func (r *Repository) Shutdown() {
 	r.client.Shutdown()
 }
 
+// CleanupSession releases per-session resources without touching the shared
+// anacrolix torrent engine or other sessions' state. Safe to call from the
+// StreamSessionManager cleanup loop on idle session eviction.
+//
+// It drops the torrent started by this session (if any), removes the session's
+// activeStreams entry, cancels any preloaded stream, and resets playback state.
+func (r *Repository) CleanupSession() {
+	defer func() {
+		if rec := recover(); rec != nil {
+			r.logger.Warn().Interface("panic", rec).Msg("torrentstream: Panic in CleanupSession")
+		}
+	}()
+	r.logger.Debug().Msg("torrentstream: Cleaning up session resources")
+
+	if r.client == nil {
+		return
+	}
+
+	r.client.mu.Lock()
+	defer r.client.mu.Unlock()
+
+	// Drop this session's torrent (if any) and remove its activeStreams entry.
+	// Only affects the torrent this session was streaming, not the shared engine.
+	if r.currentClientId != "" {
+		if stream := r.client.GetActiveStream(r.currentClientId); stream != nil && stream.Torrent != nil {
+			stream.Torrent.Drop()
+		}
+		r.client.RemoveActiveStream(r.currentClientId)
+	}
+
+	// Cancel any preloaded stream for this session
+	if r.preloadedStream.IsPresent() {
+		ps := r.preloadedStream.MustGet()
+		if ps.CancelFunc != nil {
+			ps.CancelFunc()
+		}
+		r.preloadedStream = mo.None[*preloadedStream]()
+	}
+
+	// Reset per-session playback state
+	r.playback.currentVideoDuration = 0
+	if r.playback.mediaPlayerCtxCancelFunc != nil {
+		r.playback.mediaPlayerCtxCancelFunc()
+		r.playback.mediaPlayerCtxCancelFunc = nil
+	}
+}
+
 //// Cleanup shuts down the module and removes the download directory
 //func (r *Repository) Cleanup() {
 //	if r.settings.IsAbsent() {

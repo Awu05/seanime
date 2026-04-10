@@ -109,7 +109,7 @@ func (s *Nakama) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err error) 
 		id := uuid.New().String()
 
 		var entryListData *anime.EntryListData
-		if animeCollection, ok := s.manager.animeCollection.Get(); ok {
+		if animeCollection := s.manager.animeCollection.Load(); animeCollection != nil {
 			if listEntry, ok := animeCollection.GetListEntryFromAnimeId(s.media.ID); ok {
 				entryListData = anime.NewEntryListData(listEntry)
 			}

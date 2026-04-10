@@ -85,11 +85,12 @@ func (pm *PlaybackManager) getLocalFilePlaybackDetails(path string) (*anilist.An
 		return nil, nil, nil, errors.New("local file has not been matched")
 	}
 
-	if pm.animeCollection.IsAbsent() {
+	collection := pm.animeCollection.Load()
+	if collection == nil {
 		return nil, nil, nil, fmt.Errorf("error getting anime collection: %w", err)
 	}
 
-	ret, ok := pm.animeCollection.MustGet().GetListEntryFromAnimeId(lf.MediaId)
+	ret, ok := collection.GetListEntryFromAnimeId(lf.MediaId)
 	if !ok {
 		return nil, nil, nil, errors.New("anilist list entry not found")
 	}
@@ -109,12 +110,13 @@ func (pm *PlaybackManager) getStreamPlaybackDetails(mId int) mo.Option[*anilist.
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	if pm.animeCollection.IsAbsent() {
+	collection := pm.animeCollection.Load()
+	if collection == nil {
 		return mo.None[*anilist.AnimeListEntry]()
 	}
 
 	reqEvent := &PlaybackStreamDetailsRequestedEvent{
-		AnimeCollection: pm.animeCollection.MustGet(),
+		AnimeCollection: collection,
 		MediaId:         mId,
 		AnimeListEntry:  &anilist.AnimeListEntry{},
 	}
@@ -131,7 +133,7 @@ func (pm *PlaybackManager) getStreamPlaybackDetails(mId int) mo.Option[*anilist.
 		return mo.Some(reqEvent.AnimeListEntry)
 	}
 
-	ret, ok := pm.animeCollection.MustGet().GetListEntryFromAnimeId(mId)
+	ret, ok := collection.GetListEntryFromAnimeId(mId)
 	if !ok {
 		return mo.None[*anilist.AnimeListEntry]()
 	}

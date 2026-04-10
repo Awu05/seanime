@@ -12,6 +12,19 @@ import (
 	"time"
 )
 
+// Shutdown releases per-session streaming resources without touching shared infrastructure
+// (the anacrolix torrent engine, MediaPlayerRepository, etc.). Called when a session is evicted
+// by the idle cleanup loop. Safe to call multiple times.
+func (s *ProfileStreamSession) Shutdown() {
+	defer util.HandlePanicInModuleThen("core/ProfileStreamSession.Shutdown", func() {})
+	if s.DirectStreamManager != nil {
+		s.DirectStreamManager.TerminateAllStreams()
+	}
+	if s.TorrentStream != nil {
+		s.TorrentStream.CleanupSession()
+	}
+}
+
 // SeedSessionCollection pulls the current anime collection from the platform and seeds
 // the session's PlaybackManager and DirectStreamManager. This is called outside the
 // StreamSessionManager lock because GetAnimeCollection may fall back to a network request

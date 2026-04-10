@@ -79,14 +79,21 @@ func (sm *StreamSessionManager) cleanupLoop() {
 	for {
 		select {
 		case <-sm.cleanupTicker.C:
+			// Collect evicted sessions under the lock, then run Shutdown outside
+			// so component cleanup cannot block other sessions or deadlock on the manager lock.
+			var evicted []*ProfileStreamSession
 			sm.mu.Lock()
 			now := time.Now()
 			for id, session := range sm.sessions {
 				if now.Sub(session.LastActive) > sm.inactivityTimeout {
+					evicted = append(evicted, session)
 					delete(sm.sessions, id)
 				}
 			}
 			sm.mu.Unlock()
+			for _, session := range evicted {
+				session.Shutdown()
+			}
 		case <-sm.cleanupDone:
 			return
 		}
@@ -96,4 +103,16 @@ func (sm *StreamSessionManager) cleanupLoop() {
 func (sm *StreamSessionManager) Stop() {
 	sm.cleanupTicker.Stop()
 	close(sm.cleanupDone)
+
+	// Shutdown all active sessions outside the lock to avoid deadlock.
+	sm.mu.Lock()
+	sessions := make([]*ProfileStreamSession, 0, len(sm.sessions))
+	for id, s := range sm.sessions {
+		sessions = append(sessions, s)
+		delete(sm.sessions, id)
+	}
+	sm.mu.Unlock()
+	for _, session := range sessions {
+		session.Shutdown()
+	}
 }

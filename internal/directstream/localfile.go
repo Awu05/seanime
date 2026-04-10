@@ -95,7 +95,7 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 		id := uuid.New().String()
 
 		var entryListData *anime.EntryListData
-		if animeCollection, ok := s.manager.animeCollection.Get(); ok {
+		if animeCollection := s.manager.animeCollection.Load(); animeCollection != nil {
 			if listEntry, ok := animeCollection.GetListEntryFromAnimeId(s.media.ID); ok {
 				entryListData = anime.NewEntryListData(listEntry)
 			}
@@ -245,8 +245,8 @@ func (m *Manager) PlayLocalFile(ctx context.Context, opts PlayLocalFileOptions) 
 	m.playbackMu.Lock()
 	defer m.playbackMu.Unlock()
 
-	animeCollection, ok := m.animeCollection.Get()
-	if !ok {
+	animeCollection := m.animeCollection.Load()
+	if animeCollection == nil {
 		return fmt.Errorf("cannot play local file, anime collection is not set")
 	}
 

@@ -14,10 +14,10 @@ import (
 	"seanime/internal/util/result"
 	"seanime/internal/videocore"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/samber/mo"
 )
 
 // Manager handles direct stream playback and progress tracking for the built-in video player.
@@ -49,10 +49,13 @@ type (
 
 		streams *result.Map[string, Stream] // Active streams keyed by clientId
 
-		settings *Settings
+		// settings is read on every playback event, so it uses atomic.Pointer for lock-free reads.
+		settings atomic.Pointer[Settings]
 
-		isOfflineRef    *util.Ref[bool]
-		animeCollection mo.Option[*anilist.AnimeCollection]
+		isOfflineRef *util.Ref[bool]
+		// animeCollection is read on every playback event and from background goroutines.
+		// It uses atomic.Pointer for lock-free reads. nil means absent.
+		animeCollection atomic.Pointer[anilist.AnimeCollection]
 		animeCache      *result.Cache[int, *anilist.BaseAnime]
 
 		parserCache        *result.Cache[string, *mkvparser.MetadataParser]
@@ -108,18 +111,32 @@ func NewManager(options NewManagerOptions) *Manager {
 		videoCore:                  options.VideoCore,
 		transcodeRequester:         options.TranscodeRequester,
 	}
+	ret.settings.Store(&Settings{})
 	ret.videoCoreSubscriber = ret.videoCore.Subscribe("directstream")
 	ret.listenToPlayerEvents()
 
 	return ret
 }
 
+// TerminateAllStreams terminates every active stream in this manager and clears the streams map.
+// Safe to call on session eviction; does not touch VideoCore or NativePlayer.
+func (m *Manager) TerminateAllStreams() {
+	m.streams.Range(func(clientId string, s Stream) bool {
+		s.Terminate()
+		m.streams.Delete(clientId)
+		return true
+	})
+}
+
 func (m *Manager) SetAnimeCollection(ac *anilist.AnimeCollection) {
-	m.animeCollection = mo.Some(ac)
+	m.animeCollection.Store(ac)
 }
 
 func (m *Manager) SetSettings(s *Settings) {
-	m.settings = s
+	if s == nil {
+		s = &Settings{}
+	}
+	m.settings.Store(s)
 }
 
 // GetHMACTokenQueryParam returns an HMAC token query param for the given endpoint, or empty string if not available.
@@ -139,8 +156,7 @@ func (m *Manager) getAnime(ctx context.Context, mediaId int) (*anilist.BaseAnime
 	}
 
 	// Find in anime collection
-	animeCollection, ok := m.animeCollection.Get()
-	if ok {
+	if animeCollection := m.animeCollection.Load(); animeCollection != nil {
 		media, ok := animeCollection.FindAnime(mediaId)
 		if ok {
 			return media, nil

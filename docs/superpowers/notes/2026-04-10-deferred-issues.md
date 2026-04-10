@@ -1,6 +1,8 @@
 # Deferred Issues — 2026-04-10
 
-Issues identified during the Phase 4 per-profile streaming race condition review that were intentionally deferred for later work. These are not blockers but should be addressed when time permits.
+Issues identified during the Phase 4 per-profile streaming race condition review that were intentionally deferred for later work.
+
+**Status:** Both deferred issues were addressed on 2026-04-11. See resolution notes inline below.
 
 ---
 
@@ -93,6 +95,20 @@ Then in `cleanupLoop`, call `session.Shutdown()` before `delete`. Careful: must 
 - `internal/core/stream_session.go` (add Shutdown call to cleanupLoop)
 - `internal/core/session_factory.go` (add Shutdown method on ProfileStreamSession, or wire up existing cleanup methods)
 - Possibly `internal/torrentstream/repository.go` to add a per-session-safe cleanup method
+
+---
+
+---
+
+## Resolution notes (2026-04-11)
+
+**Issue 1 resolved:** `PlaybackManager.settings`, `PlaybackManager.animeCollection`, `directstream.Manager.settings`, and `directstream.Manager.animeCollection` were converted to `atomic.Pointer[T]`. Writers use `Store`, readers use `Load`. `nil` from `Load()` represents absent. The constructors seed settings with an empty struct so reads never see nil. All 6 readers across utils.go, progress_tracking.go, playlist.go, debridstream.go, localfile.go, nakama.go, torrentstream.go were updated to the new pattern. Zero data race potential remains on these fields.
+
+**Issue 2 resolved:** Added `ProfileStreamSession.Shutdown()` which calls:
+- `DirectStreamManager.TerminateAllStreams()` — new method that iterates the streams map, calls `Terminate()` on each, and deletes them
+- `TorrentStream.CleanupSession()` — new per-session method on `torrentstream.Repository` that drops ONLY this session's torrent (via `currentClientId → activeStreams` lookup), removes the session's activeStreams entry, cancels preloaded stream, and resets per-session playback state. Uses `c.mu.Lock()` to match existing lock ordering in the monitor loop. Crucially does NOT call `Shutdown`/`DropTorrent` which would close the shared anacrolix client.
+
+The cleanupLoop now collects evicted sessions under the lock, releases the lock, and calls `Shutdown()` on each outside the lock (preventing deadlock and not blocking other profiles). `Stop()` also shuts down all remaining sessions on app exit.
 
 ---
 
