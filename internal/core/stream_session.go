@@ -39,7 +39,11 @@ func NewStreamSessionManager(inactivityTimeout time.Duration) *StreamSessionMana
 	return sm
 }
 
-func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory func(string) *ProfileStreamSession) *ProfileStreamSession {
+// GetOrCreateSession returns the profile's session, creating one via factory if absent.
+// The second return value is true when a new session was created, enabling callers to
+// trigger one-time post-creation work (e.g., seeding collection from an I/O-blocking source)
+// outside the lock.
+func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory func(string) *ProfileStreamSession) (*ProfileStreamSession, bool) {
 	if profileID == "" {
 		profileID = "_default"
 	}
@@ -50,16 +54,17 @@ func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory fun
 	if !exists {
 		session = factory(profileID)
 		sm.sessions[profileID] = session
-	} else {
-		session.LastActive = time.Now()
+		return session, true
 	}
-	return session
+	session.LastActive = time.Now()
+	return session, false
 }
 
 // WithSessionsLocked runs fn while holding the write lock, passing in a snapshot of
 // the current sessions. Use this to atomically update external state AND propagate to
 // existing sessions, serializing against concurrent session creation.
-// fn must not call back into StreamSessionManager methods (deadlock).
+// fn must not call back into StreamSessionManager methods (deadlock) and must not
+// perform blocking I/O (blocks all session creation and settings refreshes for its duration).
 func (sm *StreamSessionManager) WithSessionsLocked(fn func(sessions []*ProfileStreamSession)) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()

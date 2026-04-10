@@ -559,9 +559,7 @@ func (a *App) InitOrRefreshModules() {
 		a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
 			a.VideoCore.SetSettings(settings)
 			for _, session := range sessions {
-				if session.VideoCore != nil {
-					session.VideoCore.SetSettings(settings)
-				}
+				session.VideoCore.SetSettings(settings)
 			}
 		})
 	}

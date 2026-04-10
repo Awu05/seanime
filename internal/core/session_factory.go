@@ -7,9 +7,33 @@ import (
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/nativeplayer"
 	"seanime/internal/torrentstream"
+	"seanime/internal/util"
 	"seanime/internal/videocore"
 	"time"
 )
+
+// SeedSessionCollection pulls the current anime collection from the platform and seeds
+// the session's PlaybackManager and DirectStreamManager. This is called outside the
+// StreamSessionManager lock because GetAnimeCollection may fall back to a network request
+// on cache miss, which must not block concurrent session creation or settings refresh.
+// Safe to call multiple times (idempotent).
+func (a *App) SeedSessionCollection(session *ProfileStreamSession) {
+	defer util.HandlePanicInModuleThen("core/SeedSessionCollection", func() {})
+	platform := a.AnilistPlatformRef.Get()
+	if platform == nil {
+		return
+	}
+	collection, err := platform.GetAnimeCollection(context.Background(), false)
+	if err != nil || collection == nil {
+		return
+	}
+	if session.PlaybackManager != nil {
+		session.PlaybackManager.SetAnimeCollection(collection)
+	}
+	if session.DirectStreamManager != nil {
+		session.DirectStreamManager.SetAnimeCollection(collection)
+	}
+}
 
 // CreateStreamSession creates a new ProfileStreamSession with all streaming components initialized.
 // Each session gets its own per-profile instances. The TorrentstreamRepository gets its own Client
@@ -109,15 +133,6 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	if a.MediaPlayerRepository != nil {
 		tsr.SetMediaPlayerRepository(a.MediaPlayerRepository)
 		pm.SetMediaPlayerRepository(a.MediaPlayerRepository)
-	}
-
-	// Seed the session with the current anime collection (from cache, no network call)
-	// so collection-dependent features work immediately without waiting for next refresh.
-	if platform := a.AnilistPlatformRef.Get(); platform != nil {
-		if collection, err := platform.GetAnimeCollection(context.Background(), false); err == nil && collection != nil {
-			pm.SetAnimeCollection(collection)
-			dsm.SetAnimeCollection(collection)
-		}
 	}
 
 	return &ProfileStreamSession{
