@@ -252,6 +252,10 @@ func (r *Repository) Shutdown() {
 // It drops the torrent started by this session (if any), removes the session's
 // activeStreams entry, cancels any preloaded stream, and resets playback state.
 func (r *Repository) CleanupSession() {
+	// Belt-and-braces: torrent.Torrent.Drop() can panic if the underlying
+	// anacrolix client was already closed (shouldn't happen since we never
+	// close the shared engine from here, but recover keeps session eviction
+	// robust against any future regression in the shared-client lifecycle).
 	defer func() {
 		if rec := recover(); rec != nil {
 			r.logger.Warn().Interface("panic", rec).Msg("torrentstream: Panic in CleanupSession")
@@ -273,6 +277,7 @@ func (r *Repository) CleanupSession() {
 			stream.Torrent.Drop()
 		}
 		r.client.RemoveActiveStream(r.currentClientId)
+		r.currentClientId = ""
 	}
 
 	// Cancel any preloaded stream for this session

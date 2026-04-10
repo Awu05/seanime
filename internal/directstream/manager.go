@@ -120,7 +120,11 @@ func NewManager(options NewManagerOptions) *Manager {
 
 // TerminateAllStreams terminates every active stream in this manager and clears the streams map.
 // Safe to call on session eviction; does not touch VideoCore or NativePlayer.
+// Holds playbackMu to serialize against concurrent PlayLocalFile/PlayDebridStream which
+// load new streams into the map.
 func (m *Manager) TerminateAllStreams() {
+	m.playbackMu.Lock()
+	defer m.playbackMu.Unlock()
 	m.streams.Range(func(clientId string, s Stream) bool {
 		s.Terminate()
 		m.streams.Delete(clientId)
@@ -133,9 +137,6 @@ func (m *Manager) SetAnimeCollection(ac *anilist.AnimeCollection) {
 }
 
 func (m *Manager) SetSettings(s *Settings) {
-	if s == nil {
-		s = &Settings{}
-	}
 	m.settings.Store(s)
 }
 

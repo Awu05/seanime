@@ -245,9 +245,6 @@ func (pm *PlaybackManager) SetAnimeCollection(ac *anilist.AnimeCollection) {
 }
 
 func (pm *PlaybackManager) SetSettings(s *Settings) {
-	if s == nil {
-		s = &Settings{}
-	}
 	pm.settings.Store(s)
 }
 
