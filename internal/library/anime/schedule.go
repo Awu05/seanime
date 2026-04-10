@@ -113,3 +113,45 @@ func GetScheduleItems(animeSchedule *anilist.AnimeAiringSchedule, animeCollectio
 
 	return event.Items
 }
+
+// GetPublicScheduleItems builds schedule items from ListRecentAnime data (no auth required).
+// Used when the user is not signed into AniList.
+func GetPublicScheduleItems(recentAnime *anilist.ListRecentAnime) []*ScheduleItem {
+	if recentAnime == nil || recentAnime.GetPage() == nil {
+		return []*ScheduleItem{}
+	}
+
+	items := make([]*ScheduleItem, 0)
+	for _, sched := range recentAnime.GetPage().AiringSchedules {
+		if sched == nil || sched.GetMedia() == nil {
+			continue
+		}
+		media := sched.GetMedia()
+		title := ""
+		if media.GetTitle() != nil && media.GetTitle().GetUserPreferred() != nil {
+			title = *media.GetTitle().GetUserPreferred()
+		}
+
+		t := time.Unix(int64(sched.GetAiringAt()), 0)
+		item := &ScheduleItem{
+			MediaId:       media.GetID(),
+			Title:         title,
+			Time:          t.UTC().Format("15:04"),
+			DateTime:      t.UTC(),
+			Image:         media.GetCoverImageSafe(),
+			EpisodeNumber: sched.GetEpisode(),
+			IsMovie:       media.IsMovie(),
+		}
+		if media.GetTotalEpisodeCount() > 0 && sched.GetEpisode() == media.GetTotalEpisodeCount() {
+			item.IsSeasonFinale = true
+		}
+		items = append(items, item)
+	}
+
+	return lo.UniqBy(items, func(item *ScheduleItem) string {
+		if item == nil {
+			return ""
+		}
+		return fmt.Sprintf("%d-%d-%d", item.MediaId, item.EpisodeNumber, item.DateTime.Unix())
+	})
+}

@@ -242,12 +242,37 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		return h.RespondWithData(c, ret)
 	}
 
-	animeSchedule, err := h.getAnilistPlatform(c).GetAnimeAiringSchedule(c.Request().Context())
-	if err != nil {
-		return h.RespondWithData(c, []*anime.ScheduleItem{})
+	// Try to get the user's collection — if it fails (not authenticated), use public schedule
+	animeCollection, collErr := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
+	hasCollection := collErr == nil && animeCollection != nil && len(animeCollection.MediaListCollection.GetLists()) > 0
+
+	if !hasCollection {
+		// Not authenticated or empty collection — fetch all currently airing anime (public API, no auth required)
+		now := time.Now()
+		weekAgo := int(now.AddDate(0, 0, -7).Unix())
+		weekAhead := int(now.AddDate(0, 0, 7).Unix())
+		page := 1
+		perPage := 50
+		notYetAired := false
+
+		// Get recently aired
+		recentAired, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, &weekAgo, nil, &notYetAired)
+		// Get upcoming
+		upcoming, _ := h.App.AnilistClientRef.Get().ListRecentAnime(c.Request().Context(), &page, &perPage, nil, &weekAhead, nil)
+
+		allItems := make([]*anime.ScheduleItem, 0)
+		if recentAired != nil {
+			allItems = append(allItems, anime.GetPublicScheduleItems(recentAired)...)
+		}
+		if upcoming != nil {
+			allItems = append(allItems, anime.GetPublicScheduleItems(upcoming)...)
+		}
+
+		animeScheduleCache.SetT(1, allItems, 1*time.Hour)
+		return h.RespondWithData(c, allItems)
 	}
 
-	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
+	animeSchedule, err := h.getAnilistPlatform(c).GetAnimeAiringSchedule(c.Request().Context())
 	if err != nil {
 		return h.RespondWithData(c, []*anime.ScheduleItem{})
 	}
