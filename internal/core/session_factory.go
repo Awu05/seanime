@@ -18,7 +18,7 @@ import (
 func (s *ProfileStreamSession) Shutdown() {
 	defer util.HandlePanicInModuleThen("core/ProfileStreamSession.Shutdown", func() {})
 	if s.DirectStreamManager != nil {
-		s.DirectStreamManager.TerminateAllStreams()
+		s.DirectStreamManager.Shutdown()
 	}
 	if s.TorrentStream != nil {
 		s.TorrentStream.CleanupSession()

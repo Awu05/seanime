@@ -110,6 +110,11 @@ Then in `cleanupLoop`, call `session.Shutdown()` before `delete`. Careful: must 
 
 The cleanupLoop now collects evicted sessions under the lock, releases the lock, and calls `Shutdown()` on each outside the lock (preventing deadlock and not blocking other profiles). `Stop()` also shuts down all remaining sessions on app exit.
 
+**Follow-ups shipped:**
+
+- **VideoCore subscriber leak fixed:** `directstream.Manager` used to spawn a `listenToPlayerEvents` goroutine that blocked on `select { case <-m.videoCoreSubscriber.Events() }` forever. Switched to `for event := range ...` so the loop exits cleanly when the channel is closed, and added `Manager.Shutdown()` which calls `videoCore.Unsubscribe(...)` to close the channel. `ProfileStreamSession.Shutdown()` now calls `Manager.Shutdown()` instead of just `TerminateAllStreams()`, so evicted sessions no longer leak subscriber goroutines.
+- **`PlayLocalFile` lazy-load fallback:** when `animeCollection` is nil (background seed failed or still in-flight), `PlayLocalFile` now tries `platformRef.GetAnimeCollection(ctx, false)` first, then falls back to an empty collection and resolves media via the existing `getAnime()` path (which has its own platform fallback). A failed seed no longer bricks local file streaming for the session.
+
 ---
 
 ## Other Pending Work (not from review)

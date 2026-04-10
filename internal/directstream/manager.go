@@ -132,6 +132,17 @@ func (m *Manager) TerminateAllStreams() {
 	})
 }
 
+// Shutdown releases per-manager resources on session eviction. Terminates any
+// active streams and unsubscribes from VideoCore so the listenToPlayerEvents
+// goroutine exits cleanly (range loop terminates when the channel is closed).
+// Safe to call multiple times.
+func (m *Manager) Shutdown() {
+	m.TerminateAllStreams()
+	if m.videoCore != nil && m.videoCoreSubscriber != nil {
+		m.videoCore.Unsubscribe(m.videoCoreSubscriber.GetId())
+	}
+}
+
 func (m *Manager) SetAnimeCollection(ac *anilist.AnimeCollection) {
 	m.animeCollection.Store(ac)
 }

@@ -187,57 +187,56 @@ func (m *Manager) listenToPlayerEvents() {
 			m.Logger.Trace().Msg("directstream: Stream loop goroutine exited")
 		}()
 
-		for {
-			select {
-			case event := <-m.videoCoreSubscriber.Events():
-				if !event.IsNativePlayer() {
-					continue
-				}
+		// The range exits cleanly when the subscriber channel is closed by
+		// VideoCore.Unsubscribe (called from Manager.Shutdown on session eviction).
+		for event := range m.videoCoreSubscriber.Events() {
+			if !event.IsNativePlayer() {
+				continue
+			}
 
-				// Look up the stream by the event's clientId
-				cs, ok := m.streams.Get(event.GetClientId())
-				if !ok {
-					continue
-				}
+			// Look up the stream by the event's clientId
+			cs, ok := m.streams.Get(event.GetClientId())
+			if !ok {
+				continue
+			}
 
-				switch event := event.(type) {
-				case *videocore.VideoLoadedMetadataEvent:
-					m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video loaded metadata")
-					if lfStream, ok := cs.(*LocalFileStream); ok {
-						subReader, err := lfStream.newReader()
-						if err != nil {
-							m.Logger.Error().Err(err).Msg("directstream: Failed to create subtitle reader")
-							cs.StreamError(fmt.Errorf("failed to create subtitle reader: %w", err))
-							continue
-						}
-						lfStream.StartSubtitleStream(lfStream, lfStream.streamCtx, subReader, 0)
-					} else if ts, ok := cs.(*TorrentStream); ok {
-						subReader := ts.file.NewReader()
-						subReader.SetResponsive()
-						ts.StartSubtitleStream(ts, ts.streamCtx, subReader, 0)
+			switch event := event.(type) {
+			case *videocore.VideoLoadedMetadataEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video loaded metadata")
+				if lfStream, ok := cs.(*LocalFileStream); ok {
+					subReader, err := lfStream.newReader()
+					if err != nil {
+						m.Logger.Error().Err(err).Msg("directstream: Failed to create subtitle reader")
+						cs.StreamError(fmt.Errorf("failed to create subtitle reader: %w", err))
+						continue
 					}
-				case *videocore.VideoErrorEvent:
-					m.Logger.Debug().Str("clientId", cs.ClientId()).Msgf("directstream: Video error, Error: %s", event.Error)
-					cs.StreamError(fmt.Errorf(event.Error))
-				case *videocore.SubtitleFileUploadedEvent:
-					m.Logger.Debug().Str("clientId", cs.ClientId()).Msgf("directstream: Subtitle file uploaded, Filename: %s", event.Filename)
-					cs.OnSubtitleFileUploaded(event.Filename, event.Content)
-				case *videocore.VideoTerminatedEvent:
-					m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video terminated")
-					cs.Terminate()
-					m.streams.Delete(cs.ClientId())
-				case *videocore.VideoCompletedEvent:
-					m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video completed")
+					lfStream.StartSubtitleStream(lfStream, lfStream.streamCtx, subReader, 0)
+				} else if ts, ok := cs.(*TorrentStream); ok {
+					subReader := ts.file.NewReader()
+					subReader.SetResponsive()
+					ts.StartSubtitleStream(ts, ts.streamCtx, subReader, 0)
+				}
+			case *videocore.VideoErrorEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msgf("directstream: Video error, Error: %s", event.Error)
+				cs.StreamError(fmt.Errorf(event.Error))
+			case *videocore.SubtitleFileUploadedEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msgf("directstream: Subtitle file uploaded, Filename: %s", event.Filename)
+				cs.OnSubtitleFileUploaded(event.Filename, event.Content)
+			case *videocore.VideoTerminatedEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video terminated")
+				cs.Terminate()
+				m.streams.Delete(cs.ClientId())
+			case *videocore.VideoCompletedEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video completed")
 
-					if bs, ok := m.getBaseStream(cs); ok {
-						bs.updateProgress.Do(func() {
-							mediaId := bs.media.GetID()
-							epNum := bs.episode.GetProgressNumber()
-							totalEpisodes := bs.media.GetTotalEpisodeCount()
+				if bs, ok := m.getBaseStream(cs); ok {
+					bs.updateProgress.Do(func() {
+						mediaId := bs.media.GetID()
+						epNum := bs.episode.GetProgressNumber()
+						totalEpisodes := bs.media.GetTotalEpisodeCount()
 
-							_ = bs.manager.platformRef.Get().UpdateEntryProgress(context.Background(), mediaId, epNum, &totalEpisodes)
-						})
-					}
+						_ = bs.manager.platformRef.Get().UpdateEntryProgress(context.Background(), mediaId, epNum, &totalEpisodes)
+					})
 				}
 			}
 		}

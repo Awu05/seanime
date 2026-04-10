@@ -245,11 +245,6 @@ func (m *Manager) PlayLocalFile(ctx context.Context, opts PlayLocalFileOptions) 
 	m.playbackMu.Lock()
 	defer m.playbackMu.Unlock()
 
-	animeCollection := m.animeCollection.Load()
-	if animeCollection == nil {
-		return fmt.Errorf("cannot play local file, anime collection is not set")
-	}
-
 	// Get the local file
 	var lf *anime.LocalFile
 	for _, l := range opts.LocalFiles {
@@ -268,14 +263,41 @@ func (m *Manager) PlayLocalFile(ctx context.Context, opts PlayLocalFileOptions) 
 	}
 
 	mId := lf.MediaId
-	var media *anilist.BaseAnime
-	listEntry, ok := animeCollection.GetListEntryFromAnimeId(mId)
-	if ok {
-		media = listEntry.Media
+
+	// Try to load the anime collection. If it's nil (background seed failed or is still
+	// in-flight), lazy-load from the platform cache. If that also fails, fall back to
+	// an empty collection so local file playback still works — media metadata is fetched
+	// via getAnime() which has its own platform fallback.
+	animeCollection := m.animeCollection.Load()
+	if animeCollection == nil {
+		if collection, err := m.platformRef.Get().GetAnimeCollection(ctx, false); err == nil && collection != nil {
+			m.animeCollection.Store(collection)
+			animeCollection = collection
+		} else {
+			m.Logger.Warn().Err(err).Msg("directstream: Falling back to empty anime collection for local file playback")
+			animeCollection = &anilist.AnimeCollection{
+				MediaListCollection: &anilist.AnimeCollection_MediaListCollection{
+					Lists: []*anilist.AnimeCollection_MediaListCollection_Lists{},
+				},
+			}
+		}
 	}
 
+	// Resolve media: prefer the collection's entry (which carries list data), else
+	// fall back to getAnime() which caches and can fetch from the platform.
+	var media *anilist.BaseAnime
+	if listEntry, ok := animeCollection.GetListEntryFromAnimeId(mId); ok {
+		media = listEntry.Media
+	}
 	if media == nil {
-		return fmt.Errorf("media not found in anime collection: %d", mId)
+		fetched, err := m.getAnime(ctx, mId)
+		if err != nil {
+			return fmt.Errorf("cannot play local file, could not fetch media %d: %w", mId, err)
+		}
+		media = fetched
+	}
+	if media == nil {
+		return fmt.Errorf("media not found: %d", mId)
 	}
 
 	episodeCollection, err := anime.NewEpisodeCollectionFromLocalFiles(ctx, anime.NewEpisodeCollectionFromLocalFilesOptions{
