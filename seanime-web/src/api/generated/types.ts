@@ -1804,6 +1804,7 @@ export type Anime_ScheduleItem = {
     episodeNumber: number
     isMovie: boolean
     isSeasonFinale: boolean
+    isAdult: boolean
 }
 
 /**

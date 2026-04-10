@@ -240,6 +240,10 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 	})
 
 	showAll := c.QueryParam("showAll") == "true"
+	enableAdultContent := false
+	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
+		enableAdultContent = currentSettings.GetAnilist().EnableAdultContent
+	}
 
 	// Cache key: 1 = user schedule, 2 = all airing
 	cacheKey := 1
@@ -247,8 +251,21 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		cacheKey = 2
 	}
 
+	filterAdult := func(items []*anime.ScheduleItem) []*anime.ScheduleItem {
+		if enableAdultContent {
+			return items
+		}
+		filtered := make([]*anime.ScheduleItem, 0, len(items))
+		for _, item := range items {
+			if !item.IsAdult {
+				filtered = append(filtered, item)
+			}
+		}
+		return filtered
+	}
+
 	if ret, ok := animeScheduleCache.Get(cacheKey); ok {
-		return h.RespondWithData(c, ret)
+		return h.RespondWithData(c, filterAdult(ret))
 	}
 
 	// "Show all" mode or not authenticated — fetch all currently airing anime (public API, no auth required)
@@ -256,7 +273,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		allItems := h.fetchAllAiringScheduleItems(c.Request().Context())
 
 		animeScheduleCache.SetT(cacheKey, allItems, 1*time.Hour)
-		return h.RespondWithData(c, allItems)
+		return h.RespondWithData(c, filterAdult(allItems))
 	}
 
 	// User schedule mode — try collection first
@@ -267,7 +284,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		// Not authenticated — fall back to all airing
 		allItems := h.fetchAllAiringScheduleItems(c.Request().Context())
 		animeScheduleCache.SetT(cacheKey, allItems, 1*time.Hour)
-		return h.RespondWithData(c, allItems)
+		return h.RespondWithData(c, filterAdult(allItems))
 	}
 
 	animeSchedule, err := h.getAnilistPlatform(c).GetAnimeAiringSchedule(c.Request().Context())
@@ -279,7 +296,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 
 	animeScheduleCache.SetT(1, ret, 1*time.Hour)
 
-	return h.RespondWithData(c, ret)
+	return h.RespondWithData(c, filterAdult(ret))
 }
 
 // HandleAddUnknownMedia

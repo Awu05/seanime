@@ -8,8 +8,12 @@ import { PageWrapper } from "@/components/shared/page-wrapper"
 import { AppLayoutStack } from "@/components/ui/app-layout"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Switch } from "@/components/ui/switch"
+import { useAtom } from "jotai"
+import { atomWithStorage } from "jotai/utils"
 import React from "react"
 import { ScheduleCalendar } from "./_components/schedule-calendar"
+
+const showAllAiringAtom = atomWithStorage<boolean>("sea-schedule-show-all-airing", false)
 
 
 export default function Page() {
@@ -18,7 +22,9 @@ export default function Page() {
     const serverStatus = useServerStatus()
     const isAuthenticated = !!serverStatus?.user && !serverStatus?.user?.isSimulated
 
-    const [showAll, setShowAll] = React.useState(!isAuthenticated)
+    const [showAllStored, setShowAll] = useAtom(showAllAiringAtom)
+    // Default to true when not authenticated, otherwise use stored preference
+    const showAll = !isAuthenticated ? true : showAllStored
 
     if (isLoading) return <LoadingSpinner />
 
@@ -30,6 +36,7 @@ export default function Page() {
             >
                 <PluginWebviewSlot slot="schedule-screen-top" />
                 <MissingEpisodes data={data} isLoading={isLoading} />
+                <UpcomingEpisodes />
                 <AppLayoutStack>
 
                     <div className="hidden lg:flex items-center justify-between">
@@ -55,7 +62,6 @@ export default function Page() {
 
                     <ScheduleCalendar showAll={showAll} />
                 </AppLayoutStack>
-                <UpcomingEpisodes />
                 <PluginWebviewSlot slot="schedule-screen-bottom" />
             </PageWrapper>
         </>

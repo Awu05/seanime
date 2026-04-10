@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"seanime/internal/api/anilist"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/torrents/torrent"
@@ -248,6 +249,27 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	}
 
 	h.App.WSEventManager.SendToProfile(profileID, "settings", settings)
+
+	// Sync adult content setting to AniList if it changed
+	if prevSettings != nil && prevSettings.Anilist != nil && prevSettings.Anilist.EnableAdultContent != b.Anilist.EnableAdultContent {
+		go func() {
+			defer util.HandlePanicThen(func() {})
+			var account *models.Account
+			var accErr error
+			if h.App.MultiUserEnabled && profileID != "" {
+				account, accErr = h.App.Database.GetAccountByProfileID(profileID)
+			} else {
+				account, accErr = h.App.Database.GetAccount()
+			}
+			if accErr != nil || account == nil || account.Token == "" {
+				return
+			}
+			_, _ = anilist.CustomQuery(map[string]interface{}{
+				"query":     "mutation UpdateUser($displayAdultContent: Boolean) { UpdateUser(displayAdultContent: $displayAdultContent) { id } }",
+				"variables": map[string]interface{}{"displayAdultContent": b.Anilist.EnableAdultContent},
+			}, h.App.Logger, account.Token)
+		}()
+	}
 
 	status := h.NewStatus(c)
 

@@ -848,6 +848,7 @@ function GlobalAnimeScheduleCalendar(props: { libraryCollectionProps: HandleLibr
                 episodeNumber: schedule.episode,
                 isMovie: schedule.media?.format === "MOVIE",
                 isSeasonFinale: !!schedule.media?.episodes && schedule.media.episodes === schedule.episode,
+                isAdult: schedule.media?.isAdult === true,
             }
         })
     }, [previous1, previous2, previous3, previous4, next1, next2, next3, next4])

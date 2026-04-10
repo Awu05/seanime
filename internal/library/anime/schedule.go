@@ -21,6 +21,7 @@ type ScheduleItem struct {
 	EpisodeNumber  int       `json:"episodeNumber"`
 	IsMovie        bool      `json:"isMovie"`
 	IsSeasonFinale bool      `json:"isSeasonFinale"`
+	IsAdult        bool      `json:"isAdult"`
 }
 
 func GetScheduleItems(animeSchedule *anilist.AnimeAiringSchedule, animeCollection *anilist.AnimeCollection) []*ScheduleItem {
@@ -55,6 +56,7 @@ func GetScheduleItems(animeSchedule *anilist.AnimeAiringSchedule, animeCollectio
 			EpisodeNumber:  node.GetEpisode(),
 			IsMovie:        entry.GetMedia().IsMovie(),
 			IsSeasonFinale: false,
+			IsAdult:        entry.GetMedia().GetIsAdult() != nil && *entry.GetMedia().GetIsAdult(),
 		}
 		if entry.GetMedia().GetTotalEpisodeCount() > 0 && node.GetEpisode() == entry.GetMedia().GetTotalEpisodeCount() {
 			item.IsSeasonFinale = true
@@ -141,6 +143,7 @@ func GetPublicScheduleItems(recentAnime *anilist.ListRecentAnime) []*ScheduleIte
 			Image:         media.GetCoverImageSafe(),
 			EpisodeNumber: sched.GetEpisode(),
 			IsMovie:       media.IsMovie(),
+			IsAdult:       media.GetIsAdult() != nil && *media.GetIsAdult(),
 		}
 		if media.GetTotalEpisodeCount() > 0 && sched.GetEpisode() == media.GetTotalEpisodeCount() {
 			item.IsSeasonFinale = true

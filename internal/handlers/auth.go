@@ -81,6 +81,20 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// Sync the adult content setting from AniList
+	if getViewer.Viewer.Options != nil && getViewer.Viewer.Options.GetDisplayAdultContent() != nil {
+		anilistAdult := *getViewer.Viewer.Options.GetDisplayAdultContent()
+		currentSettings, settingsErr := h.getSettings(c)
+		if settingsErr == nil && currentSettings.Anilist != nil && currentSettings.Anilist.EnableAdultContent != anilistAdult {
+			currentSettings.Anilist.EnableAdultContent = anilistAdult
+			if h.App.MultiUserEnabled && profileID != "" {
+				_, _ = h.App.Database.UpsertSettingsForProfile(profileID, currentSettings)
+			} else {
+				_, _ = h.App.Database.UpsertSettings(currentSettings)
+			}
+		}
+	}
+
 	h.App.Logger.Info().Msg("app: Authenticated to AniList")
 
 	// Invalidate the pool cache for this profile so it picks up the new token
