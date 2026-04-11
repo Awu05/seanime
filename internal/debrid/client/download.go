@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"seanime/internal/database/models"
 	"seanime/internal/debrid/debrid"
 	"seanime/internal/events"
 	"seanime/internal/hook"
@@ -20,6 +21,7 @@ import (
 	"seanime/internal/util/result"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -72,7 +74,7 @@ func (r *Repository) launchDownloadLoop(ctx context.Context) {
 							}
 							time.Sleep(1 * time.Second)
 							// Download the torrent locally
-							err = r.downloadTorrentItem(readyItem.ID, readyItem.Name, dbItem.Destination)
+							err = r.downloadTorrentItem(readyItem.ID, readyItem.Name, readyItem.Hash, dbItem.Destination)
 							if err != nil {
 								r.logger.Err(err).Msg("debrid: Failed to download torrent")
 								continue
@@ -89,7 +91,7 @@ func (r *Repository) launchDownloadLoop(ctx context.Context) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (r *Repository) DownloadTorrent(item debrid.TorrentItem, destination string) error {
-	return r.downloadTorrentItem(item.ID, item.Name, destination)
+	return r.downloadTorrentItem(item.ID, item.Name, item.Hash, destination)
 }
 
 type downloadStatus struct {
@@ -97,7 +99,7 @@ type downloadStatus struct {
 	TotalSize  int64
 }
 
-func (r *Repository) downloadTorrentItem(tId string, torrentName string, destination string) (err error) {
+func (r *Repository) downloadTorrentItem(tId string, torrentName string, torrentHash string, destination string) (err error) {
 	defer util.HandlePanicInModuleWithError("debrid/client/downloadTorrentItem", &err)
 
 	provider, err := r.GetProvider()
@@ -142,6 +144,7 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, destina
 		wg := sync.WaitGroup{}
 		downloadUrls := strings.Split(downloadUrl, ",")
 		downloadMap := result.NewMap[string, downloadStatus]()
+		var successCount atomic.Int32
 
 		for _, url := range downloadUrls {
 			wg.Add(1)
@@ -153,9 +156,23 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, destina
 				if !ok {
 					return
 				}
+				successCount.Add(1)
 			}(ctx, url)
 		}
 		wg.Wait()
+
+		// Record the local download in the DB if at least one file was downloaded successfully.
+		// The UI uses this to show a "downloaded" indicator and offer "play locally".
+		if successCount.Load() > 0 {
+			if err := r.db.UpsertDebridLocalDownload(&models.DebridLocalDownload{
+				TorrentItemID: tId,
+				TorrentName:   torrentName,
+				TorrentHash:   torrentHash,
+				LocalPath:     destination,
+			}); err != nil {
+				r.logger.Err(err).Str("torrentItemId", tId).Msg("debrid: Failed to record local download")
+			}
+		}
 
 		r.sendDownloadCompletedEvent(tId)
 		notifier.GlobalNotifier.Notify(notifier.Debrid, fmt.Sprintf("Downloaded %q", torrentName))

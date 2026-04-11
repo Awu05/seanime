@@ -234,6 +234,57 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request, lfStream *LocalFileS
 	serveContentRange(w, r, ct, reader, lfStream.localFile.Path, size, playbackInfo.MimeType, ra)
 }
 
+// PlayLocalFileDirect plays an arbitrary local file path through the native player
+// without anime metadata. Used by the debrid torrent list "play locally" button to
+// play a file that was downloaded locally but isn't part of the scanned anime library.
+func (m *Manager) PlayLocalFileDirect(clientId string, path string, title string) error {
+	m.playbackMu.Lock()
+	defer m.playbackMu.Unlock()
+
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("local file not found: %w", err)
+	}
+
+	// Stub metadata — this is a "play arbitrary file" path with no media/episode match.
+	stubMedia := &anilist.BaseAnime{ID: 0}
+	stubEpisode := &anime.Episode{
+		Type:           anime.LocalFileTypeMain,
+		DisplayTitle:   title,
+		EpisodeTitle:   "",
+		EpisodeNumber:  1,
+		ProgressNumber: 1,
+		AniDBEpisode:   "1",
+	}
+	stubCollection := &anime.EpisodeCollection{
+		Episodes: []*anime.Episode{stubEpisode},
+	}
+	stubLocalFile := &anime.LocalFile{
+		Path: path,
+		Name: filepath.Base(path),
+	}
+
+	stream := &LocalFileStream{
+		localFile: stubLocalFile,
+		BaseStream: BaseStream{
+			manager:               m,
+			logger:                m.Logger,
+			clientId:              clientId,
+			filename:              filepath.Base(path),
+			media:                 stubMedia,
+			episode:               stubEpisode,
+			episodeCollection:     stubCollection,
+			subtitleEventCache:    result.NewMap[string, *mkvparser.SubtitleEvent](),
+			activeSubtitleStreams: result.NewMap[string, *SubtitleStream](),
+		},
+	}
+
+	go func() {
+		m.loadStream(stream)
+	}()
+
+	return nil
+}
+
 type PlayLocalFileOptions struct {
 	ClientId   string
 	Path       string

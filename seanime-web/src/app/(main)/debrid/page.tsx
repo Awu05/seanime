@@ -1,6 +1,13 @@
 import { useServerMutation } from "@/api/client/requests"
 import { Debrid_TorrentItem } from "@/api/generated/types"
-import { useDebridCancelDownload, useDebridDeleteTorrent, useDebridDownloadTorrent, useDebridGetTorrents } from "@/api/hooks/debrid.hooks"
+import {
+    useDebridCancelDownload,
+    useDebridDeleteLocalDownload,
+    useDebridDeleteTorrent,
+    useDebridDownloadTorrent,
+    useDebridGetLocalDownloads,
+    useDebridGetTorrents,
+} from "@/api/hooks/debrid.hooks"
 import { CustomLibraryBanner } from "@/app/(main)/_features/anime-library/_containers/custom-library-banner"
 import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets"
 import { useLibraryPathSelection } from "@/app/(main)/_hooks/use-library-path-selection"
@@ -19,12 +26,14 @@ import { Modal } from "@/components/ui/modal"
 import { Tooltip } from "@/components/ui/tooltip"
 import { clientIdAtom } from "@/app/websocket-provider"
 import { WSEvents } from "@/lib/server/ws-events"
+import { useQueryClient } from "@tanstack/react-query"
 import { formatDate } from "date-fns"
 import { atom } from "jotai"
 import { useAtom, useAtomValue } from "jotai/react"
 import capitalize from "lodash/capitalize"
 import React from "react"
 import { BiDownArrow, BiLinkExternal, BiRefresh, BiTime, BiTrash, BiX } from "react-icons/bi"
+import { FaCheckCircle } from "react-icons/fa"
 import { FcFolder } from "react-icons/fc"
 import { FiDownload } from "react-icons/fi"
 import { HiFolderDownload } from "react-icons/hi"
@@ -81,16 +90,36 @@ export default function Page() {
             </PageWrapper>
             <TorrentItemModal />
             <PlayTorrentModal />
+            <PlayChoiceModal />
+            <DeleteChoiceModal />
         </>
     )
 }
 
 function Content() {
     const serverStatus = useServerStatus()
+    const qc = useQueryClient()
     const [enabled, setEnabled] = React.useState(true)
     const [refetchInterval, setRefetchInterval] = React.useState(30000)
 
     const { data, isLoading, status, refetch } = useDebridGetTorrents(enabled, refetchInterval)
+    const { data: localDownloads } = useDebridGetLocalDownloads()
+
+    // Refresh the local-downloads list when a download completes so the badge appears
+    // without needing a manual refresh.
+    useWebsocketMessageListener<{ status: string }>({
+        type: WSEvents.DEBRID_DOWNLOAD_PROGRESS,
+        onMessage: data => {
+            if (data?.status === "completed") {
+                qc.invalidateQueries({ queryKey: ["debrid-get-local-downloads"] })
+            }
+        },
+    })
+
+    // Set of debrid torrent ids that have a local download record
+    const downloadedTorrentIds = React.useMemo(() => {
+        return new Set((localDownloads ?? []).map(d => d.torrentItemId))
+    }, [localDownloads])
 
     React.useEffect(() => {
         const hasDownloads = data?.filter(t => t.status === "downloading" || t.status === "paused")?.length ?? 0
@@ -161,6 +190,7 @@ function Content() {
                             return <TorrentItem
                                 key={torrent.id}
                                 torrent={torrent}
+                                isDownloadedLocally={downloadedTorrentIds.has(torrent.id)}
                             />
                         })}
                         {(!isLoading && !data?.length) && <LuffyError title="Nothing to see">No active torrents</LuffyError>}
@@ -176,11 +206,18 @@ function Content() {
 
 const selectedTorrentItemAtom = atom<Debrid_TorrentItem | null>(null)
 const playTorrentItemAtom = atom<Debrid_TorrentItem | null>(null)
+// Torrent whose Play button was just clicked but has a local copy — shown in the
+// "Play locally or stream?" choice modal.
+const playChoiceTorrentAtom = atom<Debrid_TorrentItem | null>(null)
+// Torrent whose Delete button was just clicked and has a local copy — shown in the
+// "Delete local, remote, or both?" choice modal.
+const deleteChoiceTorrentAtom = atom<Debrid_TorrentItem | null>(null)
 
 
 type TorrentItemProps = {
     torrent: Debrid_TorrentItem
     isPending?: boolean
+    isDownloadedLocally?: boolean
 }
 
 type DownloadProgress = {
@@ -191,7 +228,7 @@ type DownloadProgress = {
     speed: string
 }
 
-const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: TorrentItemProps) {
+const TorrentItem = React.memo(function TorrentItem({ torrent, isPending, isDownloadedLocally }: TorrentItemProps) {
 
     const { mutate: deleteTorrent, isPending: isDeleting } = useDebridDeleteTorrent()
 
@@ -199,7 +236,11 @@ const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: Torr
 
     const [_, setSelectedTorrentItem] = useAtom(selectedTorrentItemAtom)
     const [__, setPlayTorrentItem] = useAtom(playTorrentItemAtom)
+    const [___, setPlayChoiceTorrent] = useAtom(playChoiceTorrentAtom)
+    const [____, setDeleteChoiceTorrent] = useAtom(deleteChoiceTorrentAtom)
 
+    // Only used when the torrent is NOT downloaded locally — the multi-option
+    // modal handles the downloaded case.
     const confirmDeleteTorrentProps = useConfirmationDialog({
         title: "Remove torrent",
         description: "This action cannot be undone.",
@@ -209,6 +250,22 @@ const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: Torr
             })
         },
     })
+
+    const handlePlayClick = () => {
+        if (isDownloadedLocally) {
+            setPlayChoiceTorrent(torrent)
+        } else {
+            setPlayTorrentItem(torrent)
+        }
+    }
+
+    const handleDeleteClick = () => {
+        if (isDownloadedLocally) {
+            setDeleteChoiceTorrent(torrent)
+        } else {
+            confirmDeleteTorrentProps.open()
+        }
+    }
 
     const [progress, setProgress] = React.useState<DownloadProgress | null>(null)
 
@@ -284,6 +341,17 @@ const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: Torr
                     </div>}
             </div>
             <div className="flex-none flex gap-2 items-center">
+                {isDownloadedLocally && (
+                    <Tooltip
+                        trigger={
+                            <span className="flex items-center">
+                                <FaCheckCircle className="text-[--green] text-lg" />
+                            </span>
+                        }
+                    >
+                        Downloaded locally
+                    </Tooltip>
+                )}
                 {(torrent.isReady && !progress) && <>
                     <Tooltip trigger={
                         <IconButton
@@ -292,7 +360,7 @@ const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: Torr
                             intent="primary-subtle"
                             className="flex-none"
                             disabled={isDeleting || isCancelling}
-                            onClick={() => setPlayTorrentItem(torrent)}
+                            onClick={handlePlayClick}
                         />
                     }>
                         Play
@@ -339,9 +407,7 @@ const TorrentItem = React.memo(function TorrentItem({ torrent, isPending }: Torr
                     size="sm"
                     intent="alert-subtle"
                     className="flex-none"
-                    onClick={async () => {
-                        confirmDeleteTorrentProps.open()
-                    }}
+                    onClick={handleDeleteClick}
                     disabled={isCancelling}
                     loading={isDeleting}
                 />
@@ -432,11 +498,23 @@ function TorrentItemModal(props: TorrentItemModalProps) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type PlayTorrentPayload = {
+    torrentId: string
+    fileId: string
+    title: string
+    clientId: string
+    playLocally: boolean
+}
+
+// PlayTorrentModal fires the direct-stream play mutation whenever its atom is set.
+// This is the default path for torrents that are NOT downloaded locally.
+// For downloaded torrents the user goes through PlayChoiceModal which sets this atom
+// (stream) or calls the mutation with playLocally=true itself.
 function PlayTorrentModal() {
     const [playTorrentItem, setPlayTorrentItem] = useAtom(playTorrentItemAtom)
     const clientId = useAtomValue(clientIdAtom)
 
-    const { mutate: playTorrent, isPending } = useServerMutation<boolean, { torrentId: string, fileId: string, title: string, clientId: string }>({
+    const { mutate: playTorrent } = useServerMutation<boolean, PlayTorrentPayload>({
         endpoint: "/api/v1/debrid/torrents/play",
         method: "POST",
         mutationKey: ["debrid-play-torrent"],
@@ -449,6 +527,7 @@ function PlayTorrentModal() {
                 fileId: "",
                 title: playTorrentItem.name,
                 clientId: clientId || "",
+                playLocally: false,
             }, {
                 onSuccess: () => {
                     setPlayTorrentItem(null)
@@ -462,4 +541,150 @@ function PlayTorrentModal() {
     }, [playTorrentItem])
 
     return null
+}
+
+// PlayChoiceModal asks the user whether to play the local copy or stream from debrid.
+// Shown when the Play button is clicked on a torrent that has a DebridLocalDownload record.
+function PlayChoiceModal() {
+    const [playChoiceTorrent, setPlayChoiceTorrent] = useAtom(playChoiceTorrentAtom)
+    const clientId = useAtomValue(clientIdAtom)
+
+    const { mutate: playTorrent, isPending } = useServerMutation<boolean, PlayTorrentPayload>({
+        endpoint: "/api/v1/debrid/torrents/play",
+        method: "POST",
+        mutationKey: ["debrid-play-torrent-choice"],
+    })
+
+    const handlePlay = (playLocally: boolean) => {
+        if (!playChoiceTorrent) return
+        playTorrent({
+            torrentId: playChoiceTorrent.id,
+            fileId: "",
+            title: playChoiceTorrent.name,
+            clientId: clientId || "",
+            playLocally,
+        }, {
+            onSuccess: () => {
+                setPlayChoiceTorrent(null)
+            },
+            onError: () => {
+                toast.error(playLocally ? "Failed to play local file" : "Failed to stream torrent")
+                setPlayChoiceTorrent(null)
+            },
+        })
+    }
+
+    return (
+        <Modal
+            open={!!playChoiceTorrent}
+            onOpenChange={() => setPlayChoiceTorrent(null)}
+            title="Play torrent"
+            contentClass="max-w-md"
+        >
+            <p className="text-center line-clamp-2 text-sm text-[--muted]">
+                {playChoiceTorrent?.name}
+            </p>
+            <p className="text-center text-sm mt-2">
+                This torrent is downloaded locally. How would you like to play it?
+            </p>
+            <div className="flex gap-2 justify-center mt-4">
+                <Button
+                    intent="primary"
+                    leftIcon={<IoPlayCircle className="text-lg" />}
+                    loading={isPending}
+                    onClick={() => handlePlay(true)}
+                >
+                    Play locally
+                </Button>
+                <Button
+                    intent="white-subtle"
+                    leftIcon={<IoPlayCircle className="text-lg" />}
+                    loading={isPending}
+                    onClick={() => handlePlay(false)}
+                >
+                    Stream from debrid
+                </Button>
+            </div>
+        </Modal>
+    )
+}
+
+// DeleteChoiceModal asks the user whether to delete only the local copy, only the
+// remote debrid torrent, or both. Shown when the Delete button is clicked on a
+// torrent that has a DebridLocalDownload record.
+function DeleteChoiceModal() {
+    const [deleteChoiceTorrent, setDeleteChoiceTorrent] = useAtom(deleteChoiceTorrentAtom)
+
+    const { mutate: deleteTorrent, isPending: isDeletingRemote } = useDebridDeleteTorrent()
+    const { mutate: deleteLocal, isPending: isDeletingLocal } = useDebridDeleteLocalDownload()
+
+    const isPending = isDeletingRemote || isDeletingLocal
+
+    const handleDeleteLocal = () => {
+        if (!deleteChoiceTorrent) return
+        deleteLocal({ torrentId: deleteChoiceTorrent.id }, {
+            onSuccess: () => setDeleteChoiceTorrent(null),
+        })
+    }
+
+    const handleDeleteRemote = () => {
+        if (!deleteChoiceTorrent) return
+        deleteTorrent({ torrentItem: deleteChoiceTorrent }, {
+            onSuccess: () => setDeleteChoiceTorrent(null),
+        })
+    }
+
+    const handleDeleteBoth = () => {
+        if (!deleteChoiceTorrent) return
+        const torrent = deleteChoiceTorrent
+        deleteLocal({ torrentId: torrent.id }, {
+            onSuccess: () => {
+                deleteTorrent({ torrentItem: torrent }, {
+                    onSuccess: () => setDeleteChoiceTorrent(null),
+                })
+            },
+        })
+    }
+
+    return (
+        <Modal
+            open={!!deleteChoiceTorrent}
+            onOpenChange={() => setDeleteChoiceTorrent(null)}
+            title="Remove torrent"
+            contentClass="max-w-md"
+        >
+            <p className="text-center line-clamp-2 text-sm text-[--muted]">
+                {deleteChoiceTorrent?.name}
+            </p>
+            <p className="text-center text-sm mt-2">
+                This torrent is downloaded locally. What do you want to remove?
+            </p>
+            <div className="flex flex-col gap-2 mt-4">
+                <Button
+                    intent="alert-subtle"
+                    leftIcon={<BiTrash />}
+                    loading={isPending}
+                    onClick={handleDeleteLocal}
+                >
+                    Local files only
+                </Button>
+                <Button
+                    intent="alert-subtle"
+                    leftIcon={<BiTrash />}
+                    loading={isPending}
+                    onClick={handleDeleteRemote}
+                >
+                    Debrid torrent only
+                </Button>
+                <Button
+                    intent="alert"
+                    leftIcon={<BiTrash />}
+                    loading={isPending}
+                    onClick={handleDeleteBoth}
+                >
+                    Both local files and debrid torrent
+                </Button>
+            </div>
+        </Modal>
+    )
 }

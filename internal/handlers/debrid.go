@@ -2,15 +2,18 @@ package handlers
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	debrid_client "seanime/internal/debrid/client"
 	"seanime/internal/debrid/debrid"
-	"seanime/internal/core"
 	"seanime/internal/events"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
+	"seanime/internal/util"
+	"sort"
 
 	"github.com/labstack/echo/v4"
 )
@@ -240,19 +243,36 @@ func (h *Handler) HandleDebridGetTorrents(c echo.Context) error {
 // HandleDebridPlayTorrent
 //
 //	@summary play a torrent file from debrid via native player.
+//	@desc When playLocally is true, streams from the downloaded local file instead
+//	@desc of re-fetching the debrid URL. The local file is resolved from the
+//	@desc DebridLocalDownload record for the given torrent id.
 //	@returns bool
-//	@route /api/v1/debrid/torrents/stream-url [POST]
+//	@route /api/v1/debrid/torrents/play [POST]
 func (h *Handler) HandleDebridPlayTorrent(c echo.Context) error {
 	type body struct {
-		TorrentId string `json:"torrentId"`
-		FileId    string `json:"fileId"`
-		Title     string `json:"title"`
-		ClientId  string `json:"clientId"`
+		TorrentId   string `json:"torrentId"`
+		FileId      string `json:"fileId"`
+		Title       string `json:"title"`
+		ClientId    string `json:"clientId"`
+		PlayLocally bool   `json:"playLocally"`
 	}
 
 	var b body
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	session := h.getStreamSession(c)
+
+	if b.PlayLocally {
+		localPath, err := h.findDebridLocalVideoFile(b.TorrentId)
+		if err != nil {
+			return h.RespondWithError(c, err)
+		}
+		if err := session.DirectStreamManager.PlayLocalFileDirect(b.ClientId, localPath, b.Title); err != nil {
+			return h.RespondWithError(c, err)
+		}
+		return h.RespondWithData(c, true)
 	}
 
 	provider, err := h.App.DebridClientRepository.GetProvider()
@@ -268,9 +288,110 @@ func (h *Handler) HandleDebridPlayTorrent(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	session := h.getStreamSession(c)
-	err = session.DirectStreamManager.PlayDebridStreamDirect(b.ClientId, downloadUrl, b.Title)
+	if err := session.DirectStreamManager.PlayDebridStreamDirect(b.ClientId, downloadUrl, b.Title); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	return h.RespondWithData(c, true)
+}
+
+// findDebridLocalVideoFile looks up the DebridLocalDownload record for a torrent id
+// and returns the path of the largest video file inside the download directory.
+// Returns an error if the record doesn't exist, the directory is missing, or no
+// video files are found.
+func (h *Handler) findDebridLocalVideoFile(torrentId string) (string, error) {
+	record, err := h.App.Database.GetDebridLocalDownloadByTorrentItemId(torrentId)
 	if err != nil {
+		return "", errors.New("local download record not found")
+	}
+
+	info, err := os.Stat(record.LocalPath)
+	if err != nil {
+		return "", errors.New("local download directory is missing")
+	}
+
+	// If LocalPath is a file (future-proofing), return it directly.
+	if !info.IsDir() {
+		return record.LocalPath, nil
+	}
+
+	// Walk the directory and collect video files with sizes, then pick the largest.
+	type videoEntry struct {
+		path string
+		size int64
+	}
+	var videos []videoEntry
+	err = filepath.Walk(record.LocalPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if !util.IsValidMediaFile(path) {
+			return nil
+		}
+		if !util.IsValidVideoExtension(filepath.Ext(path)) {
+			return nil
+		}
+		videos = append(videos, videoEntry{path: path, size: info.Size()})
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(videos) == 0 {
+		return "", errors.New("no video files found in local download directory")
+	}
+	sort.Slice(videos, func(i, j int) bool { return videos[i].size > videos[j].size })
+	return videos[0].path, nil
+}
+
+// HandleDebridGetLocalDownloads
+//
+//	@summary list debrid torrents that have been downloaded locally.
+//	@desc Used by the debrid page to show a "downloaded" indicator on torrents.
+//	@returns []models.DebridLocalDownload
+//	@route /api/v1/debrid/torrents/local-downloads [GET]
+func (h *Handler) HandleDebridGetLocalDownloads(c echo.Context) error {
+	items, err := h.App.Database.GetDebridLocalDownloads()
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, items)
+}
+
+// HandleDebridDeleteLocalDownload
+//
+//	@summary delete a debrid torrent's local download from disk and from the tracking DB.
+//	@desc Removes the downloaded files from the local path and clears the DB record.
+//	@desc The remote debrid torrent is NOT removed — use HandleDebridDeleteTorrent for that.
+//	@returns bool
+//	@route /api/v1/debrid/torrents/local-download [DELETE]
+func (h *Handler) HandleDebridDeleteLocalDownload(c echo.Context) error {
+	type body struct {
+		TorrentId string `json:"torrentId"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	record, err := h.App.Database.GetDebridLocalDownloadByTorrentItemId(b.TorrentId)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	// Remove the files on disk (best-effort).
+	if record.LocalPath != "" {
+		if info, statErr := os.Stat(record.LocalPath); statErr == nil {
+			if info.IsDir() {
+				_ = os.RemoveAll(record.LocalPath)
+			} else {
+				_ = os.Remove(record.LocalPath)
+			}
+		}
+	}
+
+	if err := h.App.Database.DeleteDebridLocalDownloadByTorrentItemId(b.TorrentId); err != nil {
 		return h.RespondWithError(c, err)
 	}
 

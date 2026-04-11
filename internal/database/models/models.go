@@ -558,6 +558,17 @@ type DebridTorrentItem struct {
 	MediaId       int    `gorm:"column:media_id" json:"mediaId"`
 }
 
+// DebridLocalDownload tracks debrid torrents that have been manually downloaded
+// to a local path. Populated after a successful download so the UI can show a
+// "downloaded" indicator and offer "play locally" as an alternative to streaming.
+type DebridLocalDownload struct {
+	BaseModel
+	TorrentItemID string `gorm:"column:torrent_item_id;index" json:"torrentItemId"`
+	TorrentName   string `gorm:"column:torrent_name" json:"torrentName"`
+	TorrentHash   string `gorm:"column:torrent_hash" json:"torrentHash"`
+	LocalPath     string `gorm:"column:local_path" json:"localPath"`
+}
+
 // +---------------------+
 // |       Plugin        |
 // +---------------------+

@@ -3763,6 +3763,21 @@ export type Models_DebridSettings = {
  * - Filename: models.go
  * - Package: models
  */
+export type Models_DebridLocalDownload = {
+    torrentItemId: string
+    torrentName: string
+    torrentHash: string
+    localPath: string
+    id: number
+    createdAt?: string
+    updatedAt?: string
+}
+
+/**
+ * - Filepath: internal/database/models/models.go
+ * - Filename: models.go
+ * - Package: models
+ */
 export type Models_DiscordSettings = {
     enableRichPresence: boolean
     enableAnimeRichPresence: boolean
