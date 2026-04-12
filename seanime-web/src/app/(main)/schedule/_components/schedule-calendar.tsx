@@ -1,4 +1,5 @@
 import { AL_MediaListStatus, Anime_ScheduleItem } from "@/api/generated/types"
+import { AdultContentBadge } from "@/app/(main)/_features/media/_components/media-entry-card-components"
 import { useGetAnimeCollectionSchedule } from "@/api/hooks/anime_collection.hooks"
 import { SeaImage } from "@/components/shared/sea-image"
 import { SeaLink } from "@/components/shared/sea-link"
@@ -119,6 +120,7 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
                     isMovie: item.isMovie,
                     isWatched: isEpisodeWatched(item.mediaId, item.episodeNumber),
                     isOnList: !!anilistListData[String(item.mediaId)],
+                    isAdult: item.isAdult === true,
                 }
             }) ?? []
             events = sortBy(events, (e) => e.episode)
@@ -288,6 +290,7 @@ type CalendarEvent = {
     isMovie: boolean
     isWatched: boolean
     isOnList: boolean
+    isAdult: boolean
 }
 
 interface MobileCalendarListProps {
@@ -436,7 +439,10 @@ function MobileEventItem({ event, calendarParams, showAll }: MobileEventItemProp
                             )}
                             data-schedule-calendar-mobile-list-day-item-event-text
                         >
-                            {event.name}
+                            <span className="inline-flex items-center gap-1">
+                                {event.name}
+                                {event.isAdult && <AdultContentBadge />}
+                            </span>
                         </p>
                         <div className="flex items-center gap-1 flex-shrink-0" data-schedule-calendar-mobile-list-day-item-event-icons>
                             {event.isSeasonFinale && !event.isWatched && (
@@ -584,8 +590,9 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
                                         className="size-2 lg:size-3 text-[--muted] flex-none group-hover:scale-[1.15] transition-transform duration-300"
                                         data-schedule-calendar-event-item-watched-icon
                                     />}
-                                <span className="truncate" data-schedule-calendar-event-item-name>
+                                <span className="truncate inline-flex items-center gap-1" data-schedule-calendar-event-item-name>
                                     {event.name}
+                                    {event.isAdult && <AdultContentBadge />}
                                 </span>
                                 {/*<span className="truncate hidden 2xl:inline-block" data-schedule-calendar-event-item-name>*/}
                                 {/*    {event.name.length > 40 ? event.name.slice(0, 37) + "..." : event.name}*/}
