@@ -323,16 +323,20 @@ func (h *Handler) HandleSaveAutoDownloaderSettings(c echo.Context) error {
 	}
 
 	profileID := core.GetProfileIDFromContext(c)
-	currSettings.AutoDownloader = autoDownloaderSettings
+
+	// Shallow-copy before mutating — currSettings may alias db.CurrSettings (the global cache)
+	// or another caller's view of the same row; direct mutation would race concurrent readers.
+	nextSettings := *currSettings
+	nextSettings.AutoDownloader = autoDownloaderSettings
 
 	if h.App.MultiUserEnabled && profileID != "" {
-		_, err = h.App.Database.UpsertSettingsForProfile(profileID, currSettings)
+		_, err = h.App.Database.UpsertSettingsForProfile(profileID, &nextSettings)
 	} else {
-		currSettings.BaseModel = models.BaseModel{
+		nextSettings.BaseModel = models.BaseModel{
 			ID:        1,
 			UpdatedAt: time.Now(),
 		}
-		_, err = h.App.Database.UpsertSettings(currSettings)
+		_, err = h.App.Database.UpsertSettings(&nextSettings)
 	}
 	if err != nil {
 		return h.RespondWithError(c, err)
@@ -367,16 +371,20 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 	}
 
 	profileID := core.GetProfileIDFromContext(c)
-	currSettings.MediaPlayer = b.MediaPlayer
+
+	// Shallow-copy before mutating — currSettings may alias db.CurrSettings (the global cache)
+	// or another caller's view of the same row; direct mutation would race concurrent readers.
+	nextSettings := *currSettings
+	nextSettings.MediaPlayer = b.MediaPlayer
 
 	if h.App.MultiUserEnabled && profileID != "" {
-		_, err = h.App.Database.UpsertSettingsForProfile(profileID, currSettings)
+		_, err = h.App.Database.UpsertSettingsForProfile(profileID, &nextSettings)
 	} else {
-		currSettings.BaseModel = models.BaseModel{
+		nextSettings.BaseModel = models.BaseModel{
 			ID:        1,
 			UpdatedAt: time.Now(),
 		}
-		_, err = h.App.Database.UpsertSettings(currSettings)
+		_, err = h.App.Database.UpsertSettings(&nextSettings)
 	}
 	if err != nil {
 		return h.RespondWithError(c, err)
