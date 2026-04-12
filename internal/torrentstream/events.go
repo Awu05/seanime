@@ -43,8 +43,11 @@ func (r *Repository) sendStateEvent(event string, data ...interface{}) {
 		Data:  dataToSend,
 	}
 	// Send to the specific client if we have a client ID, otherwise broadcast
-	if r.currentClientId != "" {
-		r.wsEventManager.SendEventTo(r.currentClientId, events.TorrentStreamState, payload)
+	r.currentClientIdMu.RLock()
+	clientId := r.currentClientId
+	r.currentClientIdMu.RUnlock()
+	if clientId != "" {
+		r.wsEventManager.SendEventTo(clientId, events.TorrentStreamState, payload)
 	} else {
 		r.wsEventManager.SendEvent(events.TorrentStreamState, payload)
 	}

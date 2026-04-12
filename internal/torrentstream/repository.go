@@ -22,6 +22,7 @@ import (
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/util"
 	"seanime/internal/util/result"
+	"sync"
 	"sync/atomic"
 
 	itorrent "github.com/anacrolix/torrent"
@@ -60,7 +61,8 @@ type (
 		previousStreamOptions mo.Option[*StartStreamOptions]
 		preloadedStream       mo.Option[*preloadedStream]
 		shouldPreloadStream   atomic.Bool // Flag on whether the client should prepare a stream
-		currentClientId       string      // Track the client ID of the current stream for session cleanup
+		currentClientIdMu     sync.RWMutex
+		currentClientId       string // Track the client ID of the current stream for session cleanup
 	}
 
 	Settings struct {
@@ -272,12 +274,15 @@ func (r *Repository) CleanupSession() {
 
 	// Drop this session's torrent (if any) and remove its activeStreams entry.
 	// Only affects the torrent this session was streaming, not the shared engine.
-	if r.currentClientId != "" {
-		if stream := r.client.GetActiveStream(r.currentClientId); stream != nil && stream.Torrent != nil {
+	r.currentClientIdMu.Lock()
+	clientId := r.currentClientId
+	r.currentClientId = ""
+	r.currentClientIdMu.Unlock()
+	if clientId != "" {
+		if stream := r.client.GetActiveStream(clientId); stream != nil && stream.Torrent != nil {
 			stream.Torrent.Drop()
 		}
-		r.client.RemoveActiveStream(r.currentClientId)
-		r.currentClientId = ""
+		r.client.RemoveActiveStream(clientId)
 	}
 
 	// Cancel any preloaded stream for this session
@@ -296,18 +301,6 @@ func (r *Repository) CleanupSession() {
 		r.playback.mediaPlayerCtxCancelFunc = nil
 	}
 }
-
-//// Cleanup shuts down the module and removes the download directory
-//func (r *Repository) Cleanup() {
-//	if r.settings.IsAbsent() {
-//		return
-//	}
-//	r.client.Close()
-//
-//	// Remove the download directory
-//	downloadDir := r.GetDownloadDir()
-//	_ = os.RemoveAll(downloadDir)
-//}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -140,10 +140,15 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//
 	// Set current file & torrent
 	//
+	r.currentClientIdMu.Lock()
 	r.currentClientId = opts.ClientId
-	r.client.SetActiveStream(opts.ClientId, torrentToStream.Torrent, torrentToStream.File)
+	r.currentClientIdMu.Unlock()
+	// Legacy fields are guarded by c.mu — the monitor loop reads them under the same lock.
+	r.client.mu.Lock()
 	r.client.currentFile = mo.Some(torrentToStream.File)
 	r.client.currentTorrent = mo.Some(torrentToStream.Torrent)
+	r.client.mu.Unlock()
+	r.client.SetActiveStream(opts.ClientId, torrentToStream.Torrent, torrentToStream.File)
 
 	r.sendStateEvent(eventLoading, TLSStateSendingStreamToMediaPlayer)
 
@@ -363,8 +368,11 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	}
 
 	// Remove this session's active stream
-	if r.currentClientId != "" {
-		r.client.RemoveActiveStream(r.currentClientId)
+	r.currentClientIdMu.RLock()
+	clientId := r.currentClientId
+	r.currentClientIdMu.RUnlock()
+	if clientId != "" {
+		r.client.RemoveActiveStream(clientId)
 	}
 
 	// Reset all torrent state
