@@ -246,6 +246,14 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
 
     const stringifiedListData = React.useMemo(() => JSON.stringify(listData), [listData])
 
+    const airingDateRange = React.useMemo(() => {
+        if (!showExpandedHoverContent || type !== "anime") return null
+        return formatAiringDateRange(
+            (media as AL_BaseAnime).startDate,
+            (media as AL_BaseAnime).endDate,
+        )
+    }, [showExpandedHoverContent, type, (media as AL_BaseAnime).startDate, (media as AL_BaseAnime).endDate])
+
     if (!media) return null
 
     return (
@@ -367,17 +375,11 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
 
                             {showExpandedHoverContent && type === "anime" && (
                                 <>
-                                    {(() => {
-                                        const range = formatAiringDateRange(
-                                            (media as AL_BaseAnime).startDate,
-                                            (media as AL_BaseAnime).endDate,
-                                        )
-                                        return range ? (
-                                            <p className="text-center text-xs text-[--muted] w-full px-2">
-                                                {range}
-                                            </p>
-                                        ) : null
-                                    })()}
+                                    {airingDateRange && (
+                                        <p className="text-center text-xs text-[--muted] w-full px-2">
+                                            {airingDateRange}
+                                        </p>
+                                    )}
                                     {media.description && (
                                         <p className="text-xs text-[--muted] px-2 leading-snug line-clamp-4">
                                             {stripHtml(media.description)}
@@ -443,7 +445,7 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                 hideReleasingBadge={hideReleasingBadge}
             >
                 {mediaIsAdult && (
-                    <div data-media-entry-card-body-adult-badge-container className="absolute z-[11] right-1 top-1">
+                    <div data-media-entry-card-body-adult-badge-container className="absolute z-[11] right-1 top-8">
                         <AdultContentBadge />
                     </div>
                 )}
