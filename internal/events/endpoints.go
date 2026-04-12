@@ -7,6 +7,7 @@ const (
 	AnilistListMangaEndpoint                           = "MANGA-anilist-list-manga"
 	AnilistListMissedSequelsEndpoint                   = "ANILIST-anilist-list-missed-sequels"
 	AnilistListRecentAiringAnimeEndpoint               = "ANILIST-anilist-list-recent-airing-anime"
+	AnilistListSeasonAnimeEndpoint                     = "ANILIST-anilist-list-season-anime"
 	AnimeEntryBulkActionEndpoint                       = "ANIME-ENTRIES-anime-entry-bulk-action"
 	AnimeEntryManualMatchEndpoint                      = "ANIME-ENTRIES-anime-entry-manual-match"
 	CancelDiscordActivityEndpoint                      = "DISCORD-cancel-discord-activity"

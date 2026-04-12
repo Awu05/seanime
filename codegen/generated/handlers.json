@@ -482,6 +482,72 @@
     }
   },
   {
+    "name": "HandleAnilistListSeasonAnime",
+    "trimmedName": "AnilistListSeasonAnime",
+    "comments": [
+      "HandleAnilistListSeasonAnime",
+      "",
+      "\t@summary returns all anime in a given AniList season, aggregated across pages.",
+      "\t@desc Used by the schedule page's \"This Season\" tab. Loops AniList's ListAnime query",
+      "\t@desc server-side until the season is exhausted and returns a flat array of anime.",
+      "\t@desc Per-profile adult content filtering is applied: if the profile has",
+      "\t@desc EnableAdultContent=false, adult entries are excluded; if true, both adult and",
+      "\t@desc non-adult entries are returned (isAdult filter is omitted from the AniList query).",
+      "\t@route /api/v1/anilist/season-anime [POST]",
+      "\t@returns []anilist.BaseAnime",
+      ""
+    ],
+    "filepath": "internal/handlers/anilist.go",
+    "filename": "anilist.go",
+    "api": {
+      "summary": "returns all anime in a given AniList season, aggregated across pages.",
+      "descriptions": [
+        "Used by the schedule page's \"This Season\" tab. Loops AniList's ListAnime query",
+        "server-side until the season is exhausted and returns a flat array of anime.",
+        "Per-profile adult content filtering is applied: if the profile has",
+        "EnableAdultContent=false, adult entries are excluded; if true, both adult and",
+        "non-adult entries are returned (isAdult filter is omitted from the AniList query)."
+      ],
+      "endpoint": "/api/v1/anilist/season-anime",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Season",
+          "jsonName": "season",
+          "goType": "anilist.MediaSeason",
+          "usedStructType": "anilist.MediaSeason",
+          "typescriptType": "AL_MediaSeason",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "SeasonYear",
+          "jsonName": "seasonYear",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Sort",
+          "jsonName": "sort",
+          "goType": "[]anilist.MediaSort",
+          "usedStructType": "anilist.MediaSort",
+          "typescriptType": "Array\u003cAL_MediaSort\u003e",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "[]anilist.BaseAnime",
+      "returnGoType": "anilist.BaseAnime",
+      "returnTypescriptType": "Array\u003cAL_BaseAnime\u003e"
+    }
+  },
+  {
     "name": "HandleAnilistListRecentAiringAnime",
     "trimmedName": "AnilistListRecentAiringAnime",
     "comments": [

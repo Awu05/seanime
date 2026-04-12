@@ -98,6 +98,20 @@ export const API_ENDPOINTS = {
         },
         /**
          *  @description
+         *  Route returns all anime in a given AniList season, aggregated across pages.
+         *  Used by the schedule page's "This Season" tab. Loops AniList's ListAnime query
+         *  server-side until the season is exhausted and returns a flat array of anime.
+         *  Per-profile adult content filtering is applied: if the profile has
+         *  EnableAdultContent=false, adult entries are excluded; if true, both adult and
+         *  non-adult entries are returned (isAdult filter is omitted from the AniList query).
+         */
+        AnilistListSeasonAnime: {
+            key: "ANILIST-anilist-list-season-anime",
+            methods: ["POST"],
+            endpoint: "/api/v1/anilist/season-anime",
+        },
+        /**
+         *  @description
          *  Route returns a list of recently aired anime.
          *  This is used by the "Schedule" page to display recently aired anime.
          */

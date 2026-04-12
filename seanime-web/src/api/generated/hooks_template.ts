@@ -108,6 +108,17 @@
 //     })
 // }
 
+// export function useAnilistListSeasonAnime() {
+//     return useServerMutation<Array<AL_BaseAnime>, AnilistListSeasonAnime_Variables>({
+//         endpoint: API_ENDPOINTS.ANILIST.AnilistListSeasonAnime.endpoint,
+//         method: API_ENDPOINTS.ANILIST.AnilistListSeasonAnime.methods[0],
+//         mutationKey: [API_ENDPOINTS.ANILIST.AnilistListSeasonAnime.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
 // export function useAnilistListRecentAiringAnime() {
 //     return useServerMutation<AL_ListRecentAnime, AnilistListRecentAiringAnime_Variables>({
 //         endpoint: API_ENDPOINTS.ANILIST.AnilistListRecentAiringAnime.endpoint,

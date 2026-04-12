@@ -148,6 +148,19 @@ export type AnilistListAnime_Variables = {
 /**
  * - Filepath: internal/handlers/anilist.go
  * - Filename: anilist.go
+ * - Endpoint: /api/v1/anilist/season-anime
+ * @description
+ * Route returns all anime in a given AniList season, aggregated across pages.
+ */
+export type AnilistListSeasonAnime_Variables = {
+    season?: AL_MediaSeason
+    seasonYear?: number
+    sort: Array<AL_MediaSort>
+}
+
+/**
+ * - Filepath: internal/handlers/anilist.go
+ * - Filename: anilist.go
  * - Endpoint: /api/v1/anilist/list-recent-anime
  * @description
  * Route returns a list of recently aired anime.
