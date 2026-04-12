@@ -21,8 +21,8 @@ import (
 //	@returns models.TorrentstreamSettings
 //	@route /api/v1/torrentstream/settings [GET]
 func (h *Handler) HandleGetTorrentstreamSettings(c echo.Context) error {
-	torrentstreamSettings, found := h.App.Database.GetTorrentstreamSettings()
-	if !found {
+	torrentstreamSettings := h.getTorrentstreamSettings(c)
+	if torrentstreamSettings == nil {
 		return h.RespondWithError(c, errors.New("torrent streaming settings not found"))
 	}
 
@@ -64,7 +64,14 @@ func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 		}
 	}
 
-	settings, err := h.App.Database.UpsertTorrentstreamSettings(&b.Settings)
+	var settings *models.TorrentstreamSettings
+	var err error
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertTorrentstreamSettingsForProfile(profileID, &b.Settings)
+	} else {
+		b.Settings.BaseModel = models.BaseModel{ID: 1}
+		settings, err = h.App.Database.UpsertTorrentstreamSettings(&b.Settings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

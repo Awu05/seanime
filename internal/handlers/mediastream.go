@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/mediastream"
 
@@ -16,8 +17,8 @@ import (
 //	@returns models.MediastreamSettings
 //	@route /api/v1/mediastream/settings [GET]
 func (h *Handler) HandleGetMediastreamSettings(c echo.Context) error {
-	mediastreamSettings, found := h.App.Database.GetMediastreamSettings()
-	if !found {
+	mediastreamSettings := h.getMediastreamSettings(c)
+	if mediastreamSettings == nil {
 		return h.RespondWithError(c, errors.New("media streaming settings not found"))
 	}
 
@@ -40,7 +41,15 @@ func (h *Handler) HandleSaveMediastreamSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	settings, err := h.App.Database.UpsertMediastreamSettings(&b.Settings)
+	var settings *models.MediastreamSettings
+	var err error
+	profileID := core.GetProfileIDFromContext(c)
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertMediastreamSettingsForProfile(profileID, &b.Settings)
+	} else {
+		b.Settings.BaseModel = models.BaseModel{ID: 1}
+		settings, err = h.App.Database.UpsertMediastreamSettings(&b.Settings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

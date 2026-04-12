@@ -43,7 +43,8 @@ func (db *Database) GetSettings() (*models.Settings, error) {
 }
 
 // GetSettingsForProfile returns the settings for a specific profile.
-// Falls back to the global settings (ID=1) if the profile has no settings.
+// Returns an empty settings object if the profile has no settings row — does NOT
+// fall back to the global (admin) settings, so each profile is fully independent.
 func (db *Database) GetSettingsForProfile(profileID string) (*models.Settings, error) {
 	if profileID == "" {
 		return db.GetSettings()
@@ -52,8 +53,7 @@ func (db *Database) GetSettingsForProfile(profileID string) (*models.Settings, e
 	var settings models.Settings
 	err := db.gormdb.Where("profile_id = ?", profileID).First(&settings).Error
 	if err != nil {
-		// Fall back to global settings
-		return db.GetSettings()
+		return &models.Settings{}, nil
 	}
 	return &settings, nil
 }
@@ -189,6 +189,46 @@ func (db *Database) GetMediastreamSettings() (*models.MediastreamSettings, bool)
 	return &settings, true
 }
 
+func (db *Database) GetMediastreamSettingsForProfile(profileID string) (*models.MediastreamSettings, bool) {
+	if profileID == "" {
+		return db.GetMediastreamSettings()
+	}
+	var settings models.MediastreamSettings
+	err := db.gormdb.Where("profile_id = ?", profileID).First(&settings).Error
+	if err != nil {
+		return &models.MediastreamSettings{}, true
+	}
+	return &settings, true
+}
+
+func (db *Database) UpsertMediastreamSettingsForProfile(profileID string, settings *models.MediastreamSettings) (*models.MediastreamSettings, error) {
+	settings.ProfileID = profileID
+	var existing models.MediastreamSettings
+	err := db.gormdb.Where("profile_id = ?", profileID).First(&existing).Error
+	if err != nil {
+		settings.ID = 0
+		err = db.gormdb.Create(settings).Error
+	} else {
+		settings.ID = existing.ID
+		err = db.gormdb.Save(settings).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+func (db *Database) CloneMediastreamSettingsForProfile(profileID string) {
+	global, ok := db.GetMediastreamSettings()
+	if !ok || global == nil {
+		return
+	}
+	cloned := *global
+	cloned.ID = 0
+	cloned.ProfileID = profileID
+	_ = db.gormdb.Create(&cloned).Error
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var CurrTorrentstreamSettings *models.TorrentstreamSettings
@@ -226,6 +266,46 @@ func (db *Database) GetTorrentstreamSettings() (*models.TorrentstreamSettings, b
 	return &settings, true
 }
 
+func (db *Database) GetTorrentstreamSettingsForProfile(profileID string) (*models.TorrentstreamSettings, bool) {
+	if profileID == "" {
+		return db.GetTorrentstreamSettings()
+	}
+	var settings models.TorrentstreamSettings
+	err := db.gormdb.Where("profile_id = ?", profileID).First(&settings).Error
+	if err != nil {
+		return &models.TorrentstreamSettings{}, true
+	}
+	return &settings, true
+}
+
+func (db *Database) UpsertTorrentstreamSettingsForProfile(profileID string, settings *models.TorrentstreamSettings) (*models.TorrentstreamSettings, error) {
+	settings.ProfileID = profileID
+	var existing models.TorrentstreamSettings
+	err := db.gormdb.Where("profile_id = ?", profileID).First(&existing).Error
+	if err != nil {
+		settings.ID = 0
+		err = db.gormdb.Create(settings).Error
+	} else {
+		settings.ID = existing.ID
+		err = db.gormdb.Save(settings).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+func (db *Database) CloneTorrentstreamSettingsForProfile(profileID string) {
+	global, ok := db.GetTorrentstreamSettings()
+	if !ok || global == nil {
+		return
+	}
+	cloned := *global
+	cloned.ID = 0
+	cloned.ProfileID = profileID
+	_ = db.gormdb.Create(&cloned).Error
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var CurrentDebridSettings *models.DebridSettings
@@ -259,4 +339,44 @@ func (db *Database) GetDebridSettings() (*models.DebridSettings, bool) {
 		return nil, false
 	}
 	return &settings, true
+}
+
+func (db *Database) GetDebridSettingsForProfile(profileID string) (*models.DebridSettings, bool) {
+	if profileID == "" {
+		return db.GetDebridSettings()
+	}
+	var settings models.DebridSettings
+	err := db.gormdb.Where("profile_id = ?", profileID).First(&settings).Error
+	if err != nil {
+		return &models.DebridSettings{}, true
+	}
+	return &settings, true
+}
+
+func (db *Database) UpsertDebridSettingsForProfile(profileID string, settings *models.DebridSettings) (*models.DebridSettings, error) {
+	settings.ProfileID = profileID
+	var existing models.DebridSettings
+	err := db.gormdb.Where("profile_id = ?", profileID).First(&existing).Error
+	if err != nil {
+		settings.ID = 0
+		err = db.gormdb.Create(settings).Error
+	} else {
+		settings.ID = existing.ID
+		err = db.gormdb.Save(settings).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+func (db *Database) CloneDebridSettingsForProfile(profileID string) {
+	global, ok := db.GetDebridSettings()
+	if !ok || global == nil {
+		return
+	}
+	cloned := *global
+	cloned.ID = 0
+	cloned.ProfileID = profileID
+	_ = db.gormdb.Create(&cloned).Error
 }

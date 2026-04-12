@@ -120,9 +120,9 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		VersionName:           constants.VersionName,
 		ThemeSettings:         theme,
 		IsOffline:             h.App.Config.Server.Offline,
-		MediastreamSettings:   h.App.SecondarySettings.Mediastream,
-		TorrentstreamSettings: h.App.SecondarySettings.Torrentstream,
-		DebridSettings:        h.App.SecondarySettings.Debrid,
+		MediastreamSettings:   h.getMediastreamSettings(c),
+		TorrentstreamSettings: h.getTorrentstreamSettings(c),
+		DebridSettings:        h.getDebridSettings(c),
 		AnilistClientID:       h.App.Config.Anilist.ClientID,
 		Updating:              false,
 		IsDesktopSidecar:      h.App.IsDesktopSidecar,
@@ -197,7 +197,7 @@ func (h *Handler) HandleGetLogContent(c echo.Context) error {
 	content := h.App.ReportRepository.Anonymize(report.AnonymizeOptions{
 		Content:        contentB,
 		Settings:       h.App.Settings,
-		DebridSettings: h.App.SecondarySettings.Debrid,
+		DebridSettings: h.getDebridSettings(c),
 		Username:       h.App.GetUsername(),
 	})
 
@@ -349,7 +349,7 @@ func (h *Handler) HandleGetLatestLogContent(c echo.Context) error {
 	content := h.App.ReportRepository.Anonymize(report.AnonymizeOptions{
 		Content:        contentB,
 		Settings:       h.App.Settings,
-		DebridSettings: h.App.SecondarySettings.Debrid,
+		DebridSettings: h.getDebridSettings(c),
 		Username:       h.App.GetUsername(),
 	})
 

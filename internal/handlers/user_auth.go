@@ -79,6 +79,9 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 		}
 		// Clone global settings for the new admin profile
 		_, _ = h.App.Database.CloneSettingsForProfile(profile.ID)
+		h.App.Database.CloneMediastreamSettingsForProfile(profile.ID)
+		h.App.Database.CloneTorrentstreamSettingsForProfile(profile.ID)
+		h.App.Database.CloneDebridSettingsForProfile(profile.ID)
 	}
 
 	_, err = h.App.Database.CreateAdmin(&models.Admin{
@@ -316,6 +319,9 @@ func (h *Handler) HandleSelfCreateProfile(c echo.Context) error {
 
 	// Clone global settings for the new profile
 	_, _ = h.App.Database.CloneSettingsForProfile(profile.ID)
+	h.App.Database.CloneMediastreamSettingsForProfile(profile.ID)
+	h.App.Database.CloneTorrentstreamSettingsForProfile(profile.ID)
+	h.App.Database.CloneDebridSettingsForProfile(profile.ID)
 
 	return h.RespondWithData(c, profile)
 }

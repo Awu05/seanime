@@ -52,6 +52,9 @@ func (h *Handler) HandleCreateProfile(c echo.Context) error {
 
 	// Clone global settings for the new profile
 	_, _ = h.App.Database.CloneSettingsForProfile(created.ID)
+	h.App.Database.CloneMediastreamSettingsForProfile(created.ID)
+	h.App.Database.CloneTorrentstreamSettingsForProfile(created.ID)
+	h.App.Database.CloneDebridSettingsForProfile(created.ID)
 
 	return h.RespondWithData(c, created)
 }

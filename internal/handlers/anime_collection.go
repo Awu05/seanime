@@ -188,9 +188,11 @@ func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 		if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
 			library = currentSettings.GetLibrary()
 		}
-		if (h.App.SecondarySettings.Torrentstream != nil && h.App.SecondarySettings.Torrentstream.Enabled && h.App.SecondarySettings.Torrentstream.IncludeInLibrary) ||
+		tsSettings := h.getTorrentstreamSettings(c)
+		debridSettings := h.getDebridSettings(c)
+		if (tsSettings != nil && tsSettings.Enabled && tsSettings.IncludeInLibrary) ||
 			(library != nil && library.EnableOnlinestream && library.IncludeOnlineStreamingInLibrary) ||
-			(h.App.SecondarySettings.Debrid != nil && h.App.SecondarySettings.Debrid.Enabled && h.App.SecondarySettings.Debrid.IncludeDebridStreamInLibrary) {
+			(debridSettings != nil && debridSettings.Enabled && debridSettings.IncludeDebridStreamInLibrary) {
 			session := h.getStreamSession(c)
 			session.TorrentStream.HydrateStreamCollection(&torrentstream.HydrateStreamCollectionOptions{
 				AnimeCollection:     animeCollection,

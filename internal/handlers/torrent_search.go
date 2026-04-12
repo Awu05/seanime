@@ -60,7 +60,8 @@ func (h *Handler) HandleSearchTorrent(c echo.Context) error {
 	//
 	// Debrid torrent instant availability
 	//
-	if h.App.SecondarySettings.Debrid.Enabled {
+	debridSettings := h.getDebridSettings(c)
+	if debridSettings != nil && debridSettings.Enabled {
 		hashes := make([]string, 0)
 		for _, t := range data.Torrents {
 			if t.InfoHash == "" {

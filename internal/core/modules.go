@@ -957,6 +957,9 @@ func (a *App) bootstrapAdminFromEnv(username, password, accessCode string) {
 
 	// Clone global settings for the admin profile
 	_, _ = a.Database.CloneSettingsForProfile(profile.ID)
+	a.Database.CloneMediastreamSettingsForProfile(profile.ID)
+	a.Database.CloneTorrentstreamSettingsForProfile(profile.ID)
+	a.Database.CloneDebridSettingsForProfile(profile.ID)
 
 	if accessCode != "" {
 		codeHash, err := bcrypt.GenerateFromPassword([]byte(accessCode), bcrypt.DefaultCost)
@@ -985,6 +988,9 @@ func (a *App) ensureDefaultProfile() {
 		return
 	}
 	_, _ = a.Database.CloneSettingsForProfile(profile.ID)
+	a.Database.CloneMediastreamSettingsForProfile(profile.ID)
+	a.Database.CloneTorrentstreamSettingsForProfile(profile.ID)
+	a.Database.CloneDebridSettingsForProfile(profile.ID)
 }
 
 // mediastreamTranscodeAdapter adapts MediastreamRepository to the directstream.TranscodeRequester interface.

@@ -31,3 +31,42 @@ func (h *Handler) getSettings(c echo.Context) (*models.Settings, error) {
 	}
 	return h.App.Database.GetSettings()
 }
+
+// getMediastreamSettings returns mediastream settings for the current profile.
+func (h *Handler) getMediastreamSettings(c echo.Context) *models.MediastreamSettings {
+	if h.App.MultiUserEnabled {
+		profileID := core.GetProfileIDFromContext(c)
+		if profileID != "" {
+			s, _ := h.App.Database.GetMediastreamSettingsForProfile(profileID)
+			return s
+		}
+	}
+	s, _ := h.App.Database.GetMediastreamSettings()
+	return s
+}
+
+// getTorrentstreamSettings returns torrentstream settings for the current profile.
+func (h *Handler) getTorrentstreamSettings(c echo.Context) *models.TorrentstreamSettings {
+	if h.App.MultiUserEnabled {
+		profileID := core.GetProfileIDFromContext(c)
+		if profileID != "" {
+			s, _ := h.App.Database.GetTorrentstreamSettingsForProfile(profileID)
+			return s
+		}
+	}
+	s, _ := h.App.Database.GetTorrentstreamSettings()
+	return s
+}
+
+// getDebridSettings returns debrid settings for the current profile.
+func (h *Handler) getDebridSettings(c echo.Context) *models.DebridSettings {
+	if h.App.MultiUserEnabled {
+		profileID := core.GetProfileIDFromContext(c)
+		if profileID != "" {
+			s, _ := h.App.Database.GetDebridSettingsForProfile(profileID)
+			return s
+		}
+	}
+	s, _ := h.App.Database.GetDebridSettings()
+	return s
+}

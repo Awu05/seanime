@@ -25,8 +25,8 @@ import (
 //	@returns models.DebridSettings
 //	@route /api/v1/debrid/settings [GET]
 func (h *Handler) HandleGetDebridSettings(c echo.Context) error {
-	debridSettings, found := h.App.Database.GetDebridSettings()
-	if !found {
+	debridSettings := h.getDebridSettings(c)
+	if debridSettings == nil {
 		return h.RespondWithError(c, errors.New("debrid settings not found"))
 	}
 
@@ -51,7 +51,15 @@ func (h *Handler) HandleSaveDebridSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	settings, err := h.App.Database.UpsertDebridSettings(&b.Settings)
+	var settings *models.DebridSettings
+	var err error
+	profileID := core.GetProfileIDFromContext(c)
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertDebridSettingsForProfile(profileID, &b.Settings)
+	} else {
+		b.Settings.BaseModel = models.BaseModel{ID: 1}
+		settings, err = h.App.Database.UpsertDebridSettings(&b.Settings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

@@ -438,6 +438,7 @@ type ChapterDownloadQueueItem struct {
 
 type MediastreamSettings struct {
 	BaseModel
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 	// DEVNOTE: Should really be "Enabled"
 	TranscodeEnabled              bool   `gorm:"column:transcode_enabled" json:"transcodeEnabled"`
 	TranscodeHwAccel              string `gorm:"column:transcode_hw_accel" json:"transcodeHwAccel"`
@@ -461,6 +462,7 @@ type MediastreamSettings struct {
 
 type TorrentstreamSettings struct {
 	BaseModel
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 	Enabled             bool   `gorm:"column:enabled" json:"enabled"`
 	AutoSelect          bool   `gorm:"column:auto_select" json:"autoSelect"`
 	PreferredResolution string `gorm:"column:preferred_resolution" json:"preferredResolution"`
@@ -538,6 +540,7 @@ type OnlinestreamMapping struct {
 
 type DebridSettings struct {
 	BaseModel
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 	Enabled  bool   `gorm:"column:enabled" json:"enabled"`
 	Provider string `gorm:"column:provider" json:"provider"`
 	ApiKey   string `gorm:"column:api_key" json:"apiKey"`
