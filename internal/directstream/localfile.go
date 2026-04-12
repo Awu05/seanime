@@ -67,7 +67,6 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 		fr, err := s.newReader()
 		if err != nil {
 			s.logger.Error().Err(err).Msg("directstream(file): Failed to open local file")
-			//s.manager.preStreamError(s, fmt.Errorf("cannot stream local file: %w", err))
 			s.playbackInfoErr = fmt.Errorf("cannot open local file: %w", err)
 			return
 		}
@@ -86,7 +85,6 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 		size, err := fr.Seek(0, io.SeekEnd)
 		if err != nil {
 			s.logger.Error().Err(err).Msg("directstream(file): Failed to get file size")
-			//s.manager.preStreamError(s, fmt.Errorf("failed to get file size: %w", err))
 			s.playbackInfoErr = fmt.Errorf("failed to get file size: %w", err)
 			return
 		}
@@ -130,7 +128,6 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 			metadata := parser.GetMetadata(context.Background())
 			if metadata.Error != nil {
 				s.logger.Error().Err(metadata.Error).Msg("directstream(torrent): Failed to get metadata")
-				//s.manager.preStreamError(s, fmt.Errorf("failed to get metadata: %w", metadata.Error))
 				s.playbackInfoErr = fmt.Errorf("failed to get metadata: %w", metadata.Error)
 				return
 			}
@@ -151,12 +148,6 @@ func (s *LocalFileStream) GetAttachmentByName(filename string) (*mkvparser.Attac
 
 func (s *LocalFileStream) GetStreamHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//s.logger.Trace().Str("method", r.Method).Msg("directstream: Received request")
-		//
-		//defer func() {
-		//	s.logger.Trace().Msg("directstream: Request finished")
-		//}()
-
 		if r.Method == http.MethodHead {
 			// Get the file size
 			fileInfo, err := os.Stat(s.localFile.Path)

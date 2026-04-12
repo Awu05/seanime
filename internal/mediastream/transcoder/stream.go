@@ -299,9 +299,6 @@ func (ts *Stream) KillHead(encoderId int) {
 	ts.heads[encoderId] = DeletedHead
 }
 
-func (ts *Stream) SetIsKilled() {
-}
-
 //////////////////////////////
 
 // Remember to lock before calling this.

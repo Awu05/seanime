@@ -149,10 +149,8 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	}
 
 	return &ProfileStreamSession{
-		ProfileID:           profileID,
 		LastActive:          time.Now(),
 		VideoCore:           vc,
-		NativePlayer:        np,
 		PlaybackManager:     pm,
 		DirectStreamManager: dsm,
 		TorrentStream:       tsr,

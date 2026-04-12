@@ -247,12 +247,6 @@ func (fs *FileStream) getVideoStream(quality Quality) *VideoStream {
 }
 
 // GetVideoSegment gets a segment of a video stream of a specific quality.
-//func (fs *FileStream) GetVideoSegment(quality Quality, segment int32) (string, error) {
-//	stream := fs.getVideoStream(quality)
-//	return stream.GetSegment(segment)
-//}
-
-// GetVideoSegment gets a segment of a video stream of a specific quality.
 func (fs *FileStream) GetVideoSegment(quality Quality, segment int32) (string, error) {
 	streamLogger.Debug().Msgf("filestream: Retrieving video segment %d (%s)", segment, quality)
 	// Debug
