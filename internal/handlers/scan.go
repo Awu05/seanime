@@ -5,6 +5,7 @@ import (
 	"errors"
 	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
+	"seanime/internal/database/models"
 	"seanime/internal/library/scanner"
 	"seanime/internal/library/summary"
 
@@ -83,6 +84,14 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 
 	ac, _ := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 
+	var scanLibrary *models.LibrarySettings
+	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
+		scanLibrary = currentSettings.GetLibrary()
+	}
+	if scanLibrary == nil {
+		scanLibrary = &models.LibrarySettings{}
+	}
+
 	// Create a new scanner
 	sc := scanner.Scanner{
 		DirPath:                    libraryPath,
@@ -98,12 +107,12 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 		ScanSummaryLogger:          scanSummaryLogger,
 		ScanLogger:                 scanLogger,
 		MetadataProviderRef:        h.App.MetadataProviderRef,
-		MatchingAlgorithm:          h.App.Settings.GetLibrary().ScannerMatchingAlgorithm,
-		MatchingThreshold:          h.App.Settings.GetLibrary().ScannerMatchingThreshold,
-		UseLegacyMatching:          h.App.Settings.GetLibrary().ScannerUseLegacyMatching,
+		MatchingAlgorithm:          scanLibrary.ScannerMatchingAlgorithm,
+		MatchingThreshold:          scanLibrary.ScannerMatchingThreshold,
+		UseLegacyMatching:          scanLibrary.ScannerUseLegacyMatching,
 		WithShelving:               true,
 		ExistingShelvedFiles:       existingShelvedLfs,
-		ConfigAsString:             h.App.Settings.GetLibrary().ScannerConfig,
+		ConfigAsString:             scanLibrary.ScannerConfig,
 		AnimeCollection:            ac,
 	}
 

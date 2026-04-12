@@ -6,6 +6,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/customsource"
 	"seanime/internal/database/db_bridge"
+	"seanime/internal/database/models"
 	"seanime/internal/library/anime"
 	"seanime/internal/torrentstream"
 	"seanime/internal/util"
@@ -183,8 +184,12 @@ func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 	}
 
 	if !fromNakama {
+		var library *models.LibrarySettings
+		if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
+			library = currentSettings.GetLibrary()
+		}
 		if (h.App.SecondarySettings.Torrentstream != nil && h.App.SecondarySettings.Torrentstream.Enabled && h.App.SecondarySettings.Torrentstream.IncludeInLibrary) ||
-			(h.App.Settings.GetLibrary() != nil && h.App.Settings.GetLibrary().EnableOnlinestream && h.App.Settings.GetLibrary().IncludeOnlineStreamingInLibrary) ||
+			(library != nil && library.EnableOnlinestream && library.IncludeOnlineStreamingInLibrary) ||
 			(h.App.SecondarySettings.Debrid != nil && h.App.SecondarySettings.Debrid.Enabled && h.App.SecondarySettings.Debrid.IncludeDebridStreamInLibrary) {
 			session := h.getStreamSession(c)
 			session.TorrentStream.HydrateStreamCollection(&torrentstream.HydrateStreamCollectionOptions{
