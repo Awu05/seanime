@@ -118,7 +118,7 @@ export function ThisSeasonView() {
                                 key={opt.value}
                                 type="button"
                                 className={cn(
-                                    "px-3 py-1.5 text-sm font-medium transition-colors",
+                                    "px-5 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
                                     seasonKind === opt.value
                                         ? "bg-brand-500 text-white"
                                         : "bg-transparent text-[--muted] hover:text-white hover:bg-white/5",
