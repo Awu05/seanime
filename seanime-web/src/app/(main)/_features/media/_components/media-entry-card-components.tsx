@@ -621,3 +621,23 @@ export const MediaEntryCardHoverPopupBanner = memo(({
         </div>
     </SeaLink>
 })
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * AdultContentBadge — small "18+" badge shown on media cards and calendar
+ * entries when the underlying media has `isAdult === true`. The badge is
+ * purely informational; adult filtering is enforced upstream by the
+ * per-profile EnableAdultContent setting.
+ */
+export function AdultContentBadge() {
+    return (
+        <Badge
+            intent="alert-solid"
+            size="sm"
+            className="font-bold tracking-wider leading-none h-5 px-1.5"
+        >
+            18+
+        </Badge>
+    )
+}
