@@ -110,9 +110,8 @@ export function ThisSeasonView() {
                     {formatSeasonLabel(season, seasonYear)}
                 </h2>
 
-                {/* Controls row */}
-                <div className="flex flex-wrap items-center justify-center gap-3 pb-2">
-                    {/* Season segmented control */}
+                {/* Season switcher + sort */}
+                <div className="flex items-center justify-center gap-3">
                     <div className="flex items-center rounded-lg overflow-hidden border border-[--border]">
                         {SEASON_KINDS.map((opt) => (
                             <button
@@ -131,7 +130,6 @@ export function ThisSeasonView() {
                         ))}
                     </div>
 
-                    {/* Sort dropdown */}
                     <NativeSelect
                         value={sort}
                         options={SORT_OPTIONS}
@@ -139,8 +137,10 @@ export function ThisSeasonView() {
                         className="w-36"
                         size="sm"
                     />
+                </div>
 
-                    {/* Format filter */}
+                {/* Filters row */}
+                <div className="flex items-center justify-center gap-3 pb-2">
                     <NativeSelect
                         value={formatFilter}
                         options={FORMAT_OPTIONS}
@@ -149,7 +149,6 @@ export function ThisSeasonView() {
                         size="sm"
                     />
 
-                    {/* Status filter */}
                     <NativeSelect
                         value={statusFilter}
                         options={STATUS_OPTIONS}
@@ -158,7 +157,6 @@ export function ThisSeasonView() {
                         size="sm"
                     />
 
-                    {/* Genre filter */}
                     <NativeSelect
                         value={genreFilter}
                         options={GENRE_OPTIONS}
