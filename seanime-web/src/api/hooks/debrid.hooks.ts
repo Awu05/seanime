@@ -11,7 +11,13 @@ import {
     SaveDebridSettings_Variables,
 } from "@/api/generated/endpoint.types"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
-import { Debrid_TorrentInfo, Debrid_TorrentItem, DebridClient_FilePreview, Models_DebridSettings } from "@/api/generated/types"
+import {
+    Debrid_TorrentInfo,
+    Debrid_TorrentItem,
+    DebridClient_FilePreview,
+    Models_DebridLocalDownload,
+    Models_DebridSettings,
+} from "@/api/generated/types"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -62,6 +68,10 @@ export function useDebridDownloadTorrent() {
     })
 }
 
+// DebridDownloadProgress WebSocket events fire with status "completed" after the
+// local download finishes. The debrid page listens for this and invalidates the
+// local-downloads query so the "downloaded" badge appears without a manual refresh.
+
 export function useDebridCancelDownload() {
     return useServerMutation<boolean, DebridCancelDownload_Variables>({
         endpoint: API_ENDPOINTS.DEBRID.DebridCancelDownload.endpoint,
@@ -92,8 +102,11 @@ export function useDebridGetTorrents(enabled: boolean, refetchInterval: number) 
         method: API_ENDPOINTS.DEBRID.DebridGetTorrents.methods[0],
         queryKey: [API_ENDPOINTS.DEBRID.DebridGetTorrents.key],
         enabled: enabled,
-        retry: 3,
+        retry: 2,
         refetchInterval: refetchInterval,
+        gcTime: 0, // Don't cache — remove query data immediately when component unmounts
+        refetchOnWindowFocus: false,
+        refetchIntervalInBackground: false, // Stop polling when tab is not focused
     })
 }
 
@@ -136,6 +149,32 @@ export function useDebridCancelStream() {
         mutationKey: [API_ENDPOINTS.DEBRID.DebridCancelStream.key],
         onSuccess: async () => {
             toast.success("Stream cancelled")
+        },
+    })
+}
+
+// Fetches the list of debrid torrents that have been downloaded locally.
+// Used to show the "downloaded" indicator on the debrid page.
+export function useDebridGetLocalDownloads() {
+    return useServerQuery<Array<Models_DebridLocalDownload>>({
+        endpoint: "/api/v1/debrid/torrents/local-downloads",
+        method: "GET",
+        queryKey: ["debrid-get-local-downloads"],
+        enabled: true,
+    })
+}
+
+// Deletes a debrid torrent's local download (files on disk + DB record).
+// Does NOT remove the remote debrid torrent.
+export function useDebridDeleteLocalDownload() {
+    const qc = useQueryClient()
+    return useServerMutation<boolean, { torrentId: string }>({
+        endpoint: "/api/v1/debrid/torrents/local-download",
+        method: "DELETE",
+        mutationKey: ["debrid-delete-local-download"],
+        onSuccess: async () => {
+            toast.success("Local download removed")
+            await qc.invalidateQueries({ queryKey: ["debrid-get-local-downloads"] })
         },
     })
 }

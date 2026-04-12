@@ -67,7 +67,6 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 		fr, err := s.newReader()
 		if err != nil {
 			s.logger.Error().Err(err).Msg("directstream(file): Failed to open local file")
-			//s.manager.preStreamError(s, fmt.Errorf("cannot stream local file: %w", err))
 			s.playbackInfoErr = fmt.Errorf("cannot open local file: %w", err)
 			return
 		}
@@ -86,7 +85,6 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 		size, err := fr.Seek(0, io.SeekEnd)
 		if err != nil {
 			s.logger.Error().Err(err).Msg("directstream(file): Failed to get file size")
-			//s.manager.preStreamError(s, fmt.Errorf("failed to get file size: %w", err))
 			s.playbackInfoErr = fmt.Errorf("failed to get file size: %w", err)
 			return
 		}
@@ -95,7 +93,7 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 		id := uuid.New().String()
 
 		var entryListData *anime.EntryListData
-		if animeCollection, ok := s.manager.animeCollection.Get(); ok {
+		if animeCollection := s.manager.animeCollection.Load(); animeCollection != nil {
 			if listEntry, ok := animeCollection.GetListEntryFromAnimeId(s.media.ID); ok {
 				entryListData = anime.NewEntryListData(listEntry)
 			}
@@ -106,7 +104,7 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 			StreamType:        s.Type(),
 			StreamPath:        s.localFile.Path,
 			MimeType:          s.LoadContentType(),
-			StreamUrl:         "{{SERVER_URL}}/api/v1/directstream/stream?id=" + id + s.manager.GetHMACTokenQueryParam("/api/v1/directstream/stream", "&"),
+			StreamUrl:         "{{SERVER_URL}}/api/v1/directstream/stream?id=" + id + "&clientId=" + s.clientId + s.manager.GetHMACTokenQueryParam("/api/v1/directstream/stream", "&"),
 			ContentLength:     size,
 			MkvMetadata:       nil,
 			MkvMetadataParser: mo.None[*mkvparser.MetadataParser](),
@@ -130,7 +128,6 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 			metadata := parser.GetMetadata(context.Background())
 			if metadata.Error != nil {
 				s.logger.Error().Err(metadata.Error).Msg("directstream(torrent): Failed to get metadata")
-				//s.manager.preStreamError(s, fmt.Errorf("failed to get metadata: %w", metadata.Error))
 				s.playbackInfoErr = fmt.Errorf("failed to get metadata: %w", metadata.Error)
 				return
 			}
@@ -146,17 +143,11 @@ func (s *LocalFileStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, er
 }
 
 func (s *LocalFileStream) GetAttachmentByName(filename string) (*mkvparser.AttachmentInfo, bool) {
-	return getAttachmentByName(s.manager.playbackCtx, s, filename)
+	return getAttachmentByName(s.streamCtx, s, filename)
 }
 
 func (s *LocalFileStream) GetStreamHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//s.logger.Trace().Str("method", r.Method).Msg("directstream: Received request")
-		//
-		//defer func() {
-		//	s.logger.Trace().Msg("directstream: Request finished")
-		//}()
-
 		if r.Method == http.MethodHead {
 			// Get the file size
 			fileInfo, err := os.Stat(s.localFile.Path)
@@ -205,7 +196,7 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request, lfStream *LocalFileS
 		lfStream.serveContentCancelFunc()
 	}
 
-	ct, cancel := context.WithCancel(lfStream.manager.playbackCtx)
+	ct, cancel := context.WithCancel(lfStream.streamCtx)
 	lfStream.serveContentCancelFunc = cancel
 
 	reader, err := lfStream.newReader()
@@ -228,10 +219,61 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request, lfStream *LocalFileS
 			http.Error(w, "Failed to create subtitle reader", http.StatusInternalServerError)
 			return
 		}
-		go lfStream.StartSubtitleStream(lfStream, lfStream.manager.playbackCtx, subReader, ra.Start)
+		go lfStream.StartSubtitleStream(lfStream, lfStream.streamCtx, subReader, ra.Start)
 	}
 
 	serveContentRange(w, r, ct, reader, lfStream.localFile.Path, size, playbackInfo.MimeType, ra)
+}
+
+// PlayLocalFileDirect plays an arbitrary local file path through the native player
+// without anime metadata. Used by the debrid torrent list "play locally" button to
+// play a file that was downloaded locally but isn't part of the scanned anime library.
+func (m *Manager) PlayLocalFileDirect(clientId string, path string, title string) error {
+	m.playbackMu.Lock()
+	defer m.playbackMu.Unlock()
+
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("local file not found: %w", err)
+	}
+
+	// Stub metadata — this is a "play arbitrary file" path with no media/episode match.
+	stubMedia := &anilist.BaseAnime{ID: 0}
+	stubEpisode := &anime.Episode{
+		Type:           anime.LocalFileTypeMain,
+		DisplayTitle:   title,
+		EpisodeTitle:   "",
+		EpisodeNumber:  1,
+		ProgressNumber: 1,
+		AniDBEpisode:   "1",
+	}
+	stubCollection := &anime.EpisodeCollection{
+		Episodes: []*anime.Episode{stubEpisode},
+	}
+	stubLocalFile := &anime.LocalFile{
+		Path: path,
+		Name: filepath.Base(path),
+	}
+
+	stream := &LocalFileStream{
+		localFile: stubLocalFile,
+		BaseStream: BaseStream{
+			manager:               m,
+			logger:                m.Logger,
+			clientId:              clientId,
+			filename:              filepath.Base(path),
+			media:                 stubMedia,
+			episode:               stubEpisode,
+			episodeCollection:     stubCollection,
+			subtitleEventCache:    result.NewMap[string, *mkvparser.SubtitleEvent](),
+			activeSubtitleStreams: result.NewMap[string, *SubtitleStream](),
+		},
+	}
+
+	go func() {
+		m.loadStream(stream)
+	}()
+
+	return nil
 }
 
 type PlayLocalFileOptions struct {
@@ -244,11 +286,6 @@ type PlayLocalFileOptions struct {
 func (m *Manager) PlayLocalFile(ctx context.Context, opts PlayLocalFileOptions) error {
 	m.playbackMu.Lock()
 	defer m.playbackMu.Unlock()
-
-	animeCollection, ok := m.animeCollection.Get()
-	if !ok {
-		return fmt.Errorf("cannot play local file, anime collection is not set")
-	}
 
 	// Get the local file
 	var lf *anime.LocalFile
@@ -268,14 +305,41 @@ func (m *Manager) PlayLocalFile(ctx context.Context, opts PlayLocalFileOptions) 
 	}
 
 	mId := lf.MediaId
-	var media *anilist.BaseAnime
-	listEntry, ok := animeCollection.GetListEntryFromAnimeId(mId)
-	if ok {
-		media = listEntry.Media
+
+	// Try to load the anime collection. If it's nil (background seed failed or is still
+	// in-flight), lazy-load from the platform cache. If that also fails, fall back to
+	// an empty collection so local file playback still works — media metadata is fetched
+	// via getAnime() which has its own platform fallback.
+	animeCollection := m.animeCollection.Load()
+	if animeCollection == nil {
+		if collection, err := m.platformRef.Get().GetAnimeCollection(ctx, false); err == nil && collection != nil {
+			m.animeCollection.Store(collection)
+			animeCollection = collection
+		} else {
+			m.Logger.Warn().Err(err).Msg("directstream: Falling back to empty anime collection for local file playback")
+			animeCollection = &anilist.AnimeCollection{
+				MediaListCollection: &anilist.AnimeCollection_MediaListCollection{
+					Lists: []*anilist.AnimeCollection_MediaListCollection_Lists{},
+				},
+			}
+		}
 	}
 
+	// Resolve media: prefer the collection's entry (which carries list data), else
+	// fall back to getAnime() which caches and can fetch from the platform.
+	var media *anilist.BaseAnime
+	if listEntry, ok := animeCollection.GetListEntryFromAnimeId(mId); ok {
+		media = listEntry.Media
+	}
 	if media == nil {
-		return fmt.Errorf("media not found in anime collection: %d", mId)
+		fetched, err := m.getAnime(ctx, mId)
+		if err != nil {
+			return fmt.Errorf("cannot play local file, could not fetch media %d: %w", mId, err)
+		}
+		media = fetched
+	}
+	if media == nil {
+		return fmt.Errorf("media not found: %d", mId)
 	}
 
 	episodeCollection, err := anime.NewEpisodeCollectionFromLocalFiles(ctx, anime.NewEpisodeCollectionFromLocalFilesOptions{
@@ -317,7 +381,9 @@ func (m *Manager) PlayLocalFile(ctx context.Context, opts PlayLocalFileOptions) 
 		},
 	}
 
-	m.loadStream(stream)
+	go func() {
+		m.loadStream(stream)
+	}()
 
 	return nil
 }

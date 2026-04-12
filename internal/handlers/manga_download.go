@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"seanime/internal/core"
 	"seanime/internal/events"
 	"seanime/internal/manga"
 	chapter_downloader "seanime/internal/manga/downloader"
@@ -16,6 +17,8 @@ import (
 //	@returns bool
 func (h *Handler) HandleDownloadMangaChapters(c echo.Context) error {
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	type body struct {
 		MediaId    int      `json:"mediaId"`
 		Provider   string   `json:"provider"`
@@ -28,7 +31,7 @@ func (h *Handler) HandleDownloadMangaChapters(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.WSEventManager.SendEvent(events.InfoToast, "Adding chapters to download queue...")
+	h.App.WSEventManager.SendToProfile(profileID, events.InfoToast, "Adding chapters to download queue...")
 
 	// Add chapters to the download queue
 	for _, chapterId := range b.ChapterIds {
@@ -128,12 +131,14 @@ func (h *Handler) HandleStopMangaDownloadQueue(c echo.Context) error {
 //	@returns bool
 func (h *Handler) HandleClearAllChapterDownloadQueue(c echo.Context) error {
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	err := h.App.Database.ClearAllChapterDownloadQueueItems()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.WSEventManager.SendEvent(events.ChapterDownloadQueueUpdated, nil)
+	h.App.WSEventManager.SendToProfile(profileID, events.ChapterDownloadQueueUpdated, nil)
 
 	return h.RespondWithData(c, true)
 }
@@ -148,12 +153,14 @@ func (h *Handler) HandleClearAllChapterDownloadQueue(c echo.Context) error {
 //	@returns bool
 func (h *Handler) HandleResetErroredChapterDownloadQueue(c echo.Context) error {
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	err := h.App.Database.ResetErroredChapterDownloadQueueItems()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.WSEventManager.SendEvent(events.ChapterDownloadQueueUpdated, nil)
+	h.App.WSEventManager.SendToProfile(profileID, events.ChapterDownloadQueueUpdated, nil)
 
 	return h.RespondWithData(c, true)
 }
@@ -194,7 +201,7 @@ func (h *Handler) HandleDeleteMangaDownloadedChapters(c echo.Context) error {
 //	@returns []manga.DownloadListItem
 func (h *Handler) HandleGetMangaDownloadsList(c echo.Context) error {
 
-	mangaCollection, err := h.App.GetMangaCollection(false)
+	mangaCollection, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

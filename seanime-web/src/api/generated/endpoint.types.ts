@@ -15,9 +15,9 @@ import type {
     Anime_PlaylistEpisode,
     ChapterDownloader_DownloadID,
     Continuity_UpdateWatchHistoryItemOptions,
-    Debrid_TorrentItem,
     DebridClient_CancelStreamOptions,
     DebridClient_StreamPlaybackType,
+    Debrid_TorrentItem,
     HibikeTorrent_AnimeTorrent,
     HibikeTorrent_BatchEpisodeFiles,
     LibraryExplorer_SuperUpdateFileOptions,
@@ -46,6 +46,45 @@ import type {
     RunPlaygroundCodeParams,
     Torrentstream_PlaybackType,
 } from "@/api/generated/types.ts"
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// admin_profiles
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * - Filepath: internal/handlers/admin_profiles.go
+ * - Filename: admin_profiles.go
+ * - Endpoint: /api/v1/admin/profiles
+ * @description
+ * Route creates a new profile (admin only).
+ */
+export type CreateProfile_Variables = {
+    name: string
+    avatar: string
+    pin: string
+}
+
+/**
+ * - Filepath: internal/handlers/admin_profiles.go
+ * - Filename: admin_profiles.go
+ * - Endpoint: /api/v1/admin/access-code
+ * @description
+ * Route sets or updates the instance access code (admin only).
+ */
+export type SetAccessCode_Variables = {
+    accessCode: string
+}
+
+/**
+ * - Filepath: internal/handlers/admin_profiles.go
+ * - Filename: admin_profiles.go
+ * - Endpoint: /api/v1/profiles/:id/name
+ * @description
+ * Route updates a profile's display name.
+ */
+export type UpdateProfileName_Variables = {
+    name: string
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // anilist
@@ -133,6 +172,19 @@ export type AnilistListAnime_Variables = {
 /**
  * - Filepath: internal/handlers/anilist.go
  * - Filename: anilist.go
+ * - Endpoint: /api/v1/anilist/season-anime
+ * @description
+ * Route returns all anime in a given AniList season, aggregated across pages.
+ */
+export type AnilistListSeasonAnime_Variables = {
+    season?: AL_MediaSeason
+    seasonYear?: number
+    sort: Array<AL_MediaSort>
+}
+
+/**
+ * - Filepath: internal/handlers/anilist.go
+ * - Filename: anilist.go
  * - Endpoint: /api/v1/anilist/list-recent-anime
  * @description
  * Route returns a list of recently aired anime.
@@ -146,6 +198,10 @@ export type AnilistListRecentAiringAnime_Variables = {
     notYetAired?: boolean
     sort?: Array<AL_AiringSort>
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// anilist_helper
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // anime
@@ -309,6 +365,10 @@ export type UpdateAnimeEntryRepeat_Variables = {
 export type Login_Variables = {
     token: string
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// auth_middleware
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // auto_downloader
@@ -549,6 +609,32 @@ export type DebridCancelDownload_Variables = {
  */
 export type DebridDeleteTorrent_Variables = {
     torrentItem: Debrid_TorrentItem
+}
+
+/**
+ * - Filepath: internal/handlers/debrid.go
+ * - Filename: debrid.go
+ * - Endpoint: /api/v1/debrid/torrents/play
+ * @description
+ * Route play a torrent file from debrid via native player.
+ */
+export type DebridPlayTorrent_Variables = {
+    torrentId: string
+    fileId: string
+    title: string
+    clientId: string
+    playLocally: boolean
+}
+
+/**
+ * - Filepath: internal/handlers/debrid.go
+ * - Filename: debrid.go
+ * - Endpoint: /api/v1/debrid/torrents/local-download
+ * @description
+ * Route delete a debrid torrent's local download from disk and from the tracking DB.
+ */
+export type DebridDeleteLocalDownload_Variables = {
+    torrentId: string
 }
 
 /**
@@ -1389,6 +1475,17 @@ export type PreloadMediastreamMediaContainer_Variables = {
     audioStreamIndex: number
 }
 
+/**
+ * - Filepath: internal/handlers/mediastream.go
+ * - Filename: mediastream.go
+ * - Endpoint: /api/v1/mediastream/shutdown-transcode
+ * @description
+ * Route shuts down the transcode stream
+ */
+export type MediastreamShutdownTranscodeStream_Variables = {
+    clientId: string
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // metadata
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1711,6 +1808,21 @@ export type GetPlaylistEpisodes_Variables = {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// profile_settings
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * - Filepath: internal/handlers/profile_settings.go
+ * - Filename: profile_settings.go
+ * - Endpoint: /api/v1/profile-settings
+ * @description
+ * Route saves profile-specific settings overrides.
+ */
+export type SaveProfileSettings_Variables = {
+    overrides: string
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // proxy
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1802,6 +1914,7 @@ export type GettingStarted_Variables = {
     enableTorrentStreaming: boolean
     debridProvider: string
     debridApiKey: string
+    debridApiUrl: string
 }
 
 /**
@@ -1973,7 +2086,7 @@ export type TorrentClientAddMagnetFromRule_Variables = {
 export type SearchTorrent_Variables = {
     /**
      *  "smart" or "simple"
-     *
+     *  
      *  "smart" or "simple"
      */
     type?: string
@@ -2046,7 +2159,7 @@ export type TorrentstreamStartStream_Variables = {
     batchEpisodeFiles?: HibikeTorrent_BatchEpisodeFiles
     /**
      *  Preload is true if the stream should only be prepared.
-     *
+     *  
      *  Preload is true if the stream should only be prepared.
      */
     preload?: boolean
@@ -2061,6 +2174,69 @@ export type TorrentstreamStartStream_Variables = {
  */
 export type GetTorrentstreamBatchHistory_Variables = {
     mediaId: number
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// user_auth
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/setup
+ * @description
+ * Route creates the initial admin account.
+ */
+export type AdminSetup_Variables = {
+    username: string
+    password: string
+    accessCode: string
+}
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/admin-login
+ * @description
+ * Route authenticates an admin user.
+ */
+export type AdminLogin_Variables = {
+    username: string
+    password: string
+}
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/access-code
+ * @description
+ * Route authenticates using an access code.
+ */
+export type AccessCode_Variables = {
+    accessCode: string
+}
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/select-profile
+ * @description
+ * Route selects a profile and sets the auth cookie.
+ */
+export type SelectProfile_Variables = {
+    profileId: string
+    pin: string
+}
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/create-profile
+ * @description
+ * Route allows a household member (access code scope) to create their own profile.
+ */
+export type SelfCreateProfile_Variables = {
+    name: string
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

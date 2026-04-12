@@ -33,13 +33,13 @@ type (
 		currentTorrentStatus TorrentStatus
 		cancelFunc           context.CancelFunc
 
+		activeStreams map[string]*ActiveStream // keyed by session/profile ID
+		streamsMu    sync.RWMutex
+
 		mu                          sync.Mutex
 		stopCh                      chan struct{}                    // Closed when the media player stops
 		mediaPlayerPlaybackStatusCh chan *mediaplayer.PlaybackStatus // Continuously receives playback status
 		timeSinceLoggedSeeding      time.Time
-		lastSpeedCheck              time.Time // Track the last time we checked speeds
-		lastBytesCompleted          int64     // Track the last bytes completed
-		lastBytesWrittenData        int64     // Track the last bytes written data
 	}
 
 	TorrentStatus struct {
@@ -50,6 +50,16 @@ type (
 		UploadSpeed        string  `json:"uploadSpeed"`
 		Size               string  `json:"size"`
 		Seeders            int     `json:"seeders"`
+	}
+
+	// ActiveStream represents a single active torrent streaming session.
+	ActiveStream struct {
+		Torrent              *torrent.Torrent
+		File                 *torrent.File
+		Status               TorrentStatus
+		LastBytesCompleted   int64
+		LastBytesWrittenData int64
+		LastSpeedCheck       time.Time
 	}
 
 	NewClientOptions struct {
@@ -63,11 +73,35 @@ func NewClient(repository *Repository) *Client {
 		torrentClient:               mo.None[*torrent.Client](),
 		currentFile:                 mo.None[*torrent.File](),
 		currentTorrent:              mo.None[*torrent.Torrent](),
+		activeStreams:                make(map[string]*ActiveStream),
 		stopCh:                      make(chan struct{}),
 		mediaPlayerPlaybackStatusCh: make(chan *mediaplayer.PlaybackStatus, 1),
 	}
 
 	return ret
+}
+
+// GetTorrentClient returns the underlying anacrolix torrent client (if initialized).
+func (c *Client) GetTorrentClient() mo.Option[*torrent.Client] {
+	return c.torrentClient
+}
+
+// UseSharedTorrentClient sets this client wrapper to use an existing anacrolix torrent client
+// instead of creating its own. This allows multiple session wrappers to share a single engine.
+// Starts the monitoring goroutine for this wrapper's active streams.
+func (c *Client) UseSharedTorrentClient(tc *torrent.Client) {
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+	}
+
+	var ctx context.Context
+	ctx, c.cancelFunc = context.WithCancel(context.Background())
+
+	c.mu.Lock()
+	c.torrentClient = mo.Some(tc)
+	c.mu.Unlock()
+
+	go c.monitorLoop(ctx)
 }
 
 // initializeClient will create and torrent client.
@@ -129,102 +163,113 @@ func (c *Client) initializeClient() error {
 	c.dropTorrents()
 	c.mu.Unlock()
 
-	go func(ctx context.Context) {
-
-		for {
-			select {
-			case <-ctx.Done():
-				c.repository.logger.Debug().Msg("torrentstream: Context cancelled, stopping torrent client")
-				return
-
-			case status := <-c.mediaPlayerPlaybackStatusCh:
-				// DEVNOTE: When this is received, "default" case is executed right after
-				if status != nil && c.currentFile.IsPresent() && c.repository.playback.currentVideoDuration == 0 {
-					// If the stored video duration is 0 but the media player status shows a duration that is not 0
-					// we know that the video has been loaded and is playing
-					if c.repository.playback.currentVideoDuration == 0 && status.Duration > 0 {
-						// The media player has started playing the video
-						c.repository.logger.Debug().Msg("torrentstream: Media player started playing the video, sending event")
-						c.repository.sendStateEvent(eventTorrentStartedPlaying)
-						// Update the stored video duration
-						c.repository.playback.currentVideoDuration = status.Duration
-					}
-				}
-			default:
-				c.mu.Lock()
-				if c.torrentClient.IsPresent() && c.currentTorrent.IsPresent() && c.currentFile.IsPresent() {
-					t := c.currentTorrent.MustGet()
-					f := c.currentFile.MustGet()
-
-					// Get the current time
-					now := time.Now()
-					elapsed := now.Sub(c.lastSpeedCheck).Seconds()
-
-					// downloadProgress is the number of bytes downloaded
-					downloadProgress := t.BytesCompleted()
-
-					downloadSpeed := ""
-					if elapsed > 0 {
-						bytesPerSecond := float64(downloadProgress-c.lastBytesCompleted) / elapsed
-						if bytesPerSecond > 0 {
-							downloadSpeed = fmt.Sprintf("%s/s", util.Bytes(uint64(bytesPerSecond)))
-						}
-					}
-					size := util.Bytes(uint64(f.Length()))
-
-					bytesWrittenData := t.Stats().BytesWrittenData
-					uploadSpeed := ""
-					if elapsed > 0 {
-						bytesPerSecond := float64((&bytesWrittenData).Int64()-c.lastBytesWrittenData) / elapsed
-						if bytesPerSecond > 0 {
-							uploadSpeed = fmt.Sprintf("%s/s", util.Bytes(uint64(bytesPerSecond)))
-						}
-					}
-
-					// Update the stored values for next calculation
-					c.lastBytesCompleted = downloadProgress
-					c.lastBytesWrittenData = (&bytesWrittenData).Int64()
-					c.lastSpeedCheck = now
-
-					if t.PeerConns() != nil {
-						c.currentTorrentStatus.Seeders = len(t.PeerConns())
-					}
-
-					c.currentTorrentStatus = TorrentStatus{
-						Size:               size,
-						UploadProgress:     (&bytesWrittenData).Int64() - c.currentTorrentStatus.UploadProgress,
-						DownloadSpeed:      downloadSpeed,
-						UploadSpeed:        uploadSpeed,
-						DownloadProgress:   downloadProgress,
-						ProgressPercentage: c.getTorrentPercentage(c.currentTorrent, c.currentFile),
-						Seeders:            t.Stats().ConnectedSeeders,
-					}
-					c.repository.sendStateEvent(eventTorrentStatus, c.currentTorrentStatus)
-					// Always log the progress so the user knows what's happening
-					c.repository.logger.Trace().Msgf("torrentstream: Progress: %.2f%%, Download speed: %s, Upload speed: %s, Size: %s",
-						c.currentTorrentStatus.ProgressPercentage,
-						c.currentTorrentStatus.DownloadSpeed,
-						c.currentTorrentStatus.UploadSpeed,
-						c.currentTorrentStatus.Size)
-					c.timeSinceLoggedSeeding = time.Now()
-				}
-				c.mu.Unlock()
-				if c.torrentClient.IsPresent() {
-					if time.Since(c.timeSinceLoggedSeeding) > 20*time.Second {
-						c.timeSinceLoggedSeeding = time.Now()
-						for _, t := range c.torrentClient.MustGet().Torrents() {
-							if t.Seeding() {
-								c.repository.logger.Trace().Msgf("torrentstream: Seeding last torrent, %d peers", t.Stats().ActivePeers)
-							}
-						}
-					}
-				}
-				time.Sleep(3 * time.Second)
-			}
-		}
-	}(ctx)
+	go c.monitorLoop(ctx)
 
 	return nil
+}
+
+// monitorLoop runs the background monitoring goroutine that tracks torrent download/upload
+// progress for all active streams.
+func (c *Client) monitorLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			c.repository.logger.Debug().Msg("torrentstream: Context cancelled, stopping monitor loop")
+			return
+
+		case status := <-c.mediaPlayerPlaybackStatusCh:
+			if status != nil && c.currentFile.IsPresent() && c.repository.playback.currentVideoDuration == 0 {
+				if c.repository.playback.currentVideoDuration == 0 && status.Duration > 0 {
+					c.repository.logger.Debug().Msg("torrentstream: Media player started playing the video, sending event")
+					c.repository.sendStateEvent(eventTorrentStartedPlaying)
+					c.repository.playback.currentVideoDuration = status.Duration
+				}
+			}
+		default:
+			c.mu.Lock()
+			// Monitor all active streams
+			c.streamsMu.RLock()
+			for _, stream := range c.activeStreams {
+				if stream.Torrent == nil || stream.File == nil {
+					continue
+				}
+				t := stream.Torrent
+				f := stream.File
+
+				now := time.Now()
+				elapsed := now.Sub(stream.LastSpeedCheck).Seconds()
+
+				downloadProgress := t.BytesCompleted()
+
+				downloadSpeed := ""
+				if elapsed > 0 {
+					bytesPerSecond := float64(downloadProgress-stream.LastBytesCompleted) / elapsed
+					if bytesPerSecond > 0 {
+						downloadSpeed = fmt.Sprintf("%s/s", util.Bytes(uint64(bytesPerSecond)))
+					}
+				}
+				size := util.Bytes(uint64(f.Length()))
+
+				bytesWrittenData := t.Stats().BytesWrittenData
+				uploadSpeed := ""
+				if elapsed > 0 {
+					bytesPerSecond := float64((&bytesWrittenData).Int64()-stream.LastBytesWrittenData) / elapsed
+					if bytesPerSecond > 0 {
+						uploadSpeed = fmt.Sprintf("%s/s", util.Bytes(uint64(bytesPerSecond)))
+					}
+				}
+
+				stream.LastBytesCompleted = downloadProgress
+				stream.LastBytesWrittenData = (&bytesWrittenData).Int64()
+				stream.LastSpeedCheck = now
+
+				stream.Status = TorrentStatus{
+					Size:               size,
+					UploadProgress:     (&bytesWrittenData).Int64(),
+					DownloadSpeed:      downloadSpeed,
+					UploadSpeed:        uploadSpeed,
+					DownloadProgress:   downloadProgress,
+					ProgressPercentage: c.getTorrentPercentage(mo.Some(t), mo.Some(f)),
+					Seeders:            t.Stats().ConnectedSeeders,
+				}
+
+				c.currentTorrentStatus = stream.Status
+			}
+			c.streamsMu.RUnlock()
+
+			// Send state event only if there is an active torrent being streamed
+			c.streamsMu.RLock()
+			hasStreams := len(c.activeStreams) > 0
+			c.streamsMu.RUnlock()
+			hasTorrent := c.currentTorrent.IsPresent() && c.currentFile.IsPresent()
+			if hasStreams || hasTorrent {
+				c.repository.sendStateEvent(eventTorrentStatus, c.currentTorrentStatus)
+			} else if c.currentTorrentStatus.ProgressPercentage > 0 {
+				// Stream was stopped but status wasn't cleared — reset it
+				c.currentTorrentStatus = TorrentStatus{}
+				c.repository.sendStateEvent(eventTorrentStopped, nil)
+				c.repository.logger.Trace().Msgf("torrentstream: Progress: %.2f%%, Download speed: %s, Upload speed: %s, Size: %s",
+					c.currentTorrentStatus.ProgressPercentage,
+					c.currentTorrentStatus.DownloadSpeed,
+					c.currentTorrentStatus.UploadSpeed,
+					c.currentTorrentStatus.Size)
+				c.timeSinceLoggedSeeding = time.Now()
+			}
+
+			c.mu.Unlock()
+			if c.torrentClient.IsPresent() {
+				if time.Since(c.timeSinceLoggedSeeding) > 20*time.Second {
+					c.timeSinceLoggedSeeding = time.Now()
+					for _, t := range c.torrentClient.MustGet().Torrents() {
+						if t.Seeding() {
+							c.repository.logger.Trace().Msgf("torrentstream: Seeding torrent, %d peers", t.Stats().ActivePeers)
+						}
+					}
+				}
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}
 }
 
 func (c *Client) GetStreamingUrl() string {
@@ -440,7 +485,7 @@ func (c *Client) dropTorrents() {
 	c.repository.logger.Debug().Msg("torrentstream: Dropped all torrents")
 }
 
-// dropExcessTorrents drops all torrents except the current stream and prepared stream
+// dropExcessTorrents drops all torrents except active streams, current stream, and prepared stream
 func (c *Client) dropExcessTorrents() {
 	if c.torrentClient.IsAbsent() {
 		return
@@ -449,7 +494,16 @@ func (c *Client) dropExcessTorrents() {
 	// Collect info hashes we want to keep
 	keepHashes := make(map[metainfo.Hash]bool)
 
-	// Keep current torrent
+	// Keep all active stream torrents
+	c.streamsMu.RLock()
+	for _, stream := range c.activeStreams {
+		if stream.Torrent != nil {
+			keepHashes[stream.Torrent.InfoHash()] = true
+		}
+	}
+	c.streamsMu.RUnlock()
+
+	// Keep legacy current torrent
 	if c.currentTorrent.IsPresent() {
 		keepHashes[c.currentTorrent.MustGet().InfoHash()] = true
 	}
@@ -480,6 +534,43 @@ func (c *Client) dropExcessTorrents() {
 	if droppedCount > 0 {
 		c.repository.logger.Debug().Msgf("torrentstream: Dropped %d excess torrent(s)", droppedCount)
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// SetActiveStream sets the torrent and file for a session.
+// Legacy fields (currentTorrent/currentFile) are maintained by StartStream/StopStream
+// under c.mu — this method only manages the per-session activeStreams map.
+func (c *Client) SetActiveStream(sessionID string, t *torrent.Torrent, f *torrent.File) {
+	c.streamsMu.Lock()
+	defer c.streamsMu.Unlock()
+	if c.activeStreams == nil {
+		c.activeStreams = make(map[string]*ActiveStream)
+	}
+	c.activeStreams[sessionID] = &ActiveStream{
+		Torrent:        t,
+		File:           f,
+		LastSpeedCheck: time.Now(),
+	}
+}
+
+// GetActiveStream returns the active stream for a session.
+func (c *Client) GetActiveStream(sessionID string) *ActiveStream {
+	c.streamsMu.RLock()
+	defer c.streamsMu.RUnlock()
+	if c.activeStreams == nil {
+		return nil
+	}
+	return c.activeStreams[sessionID]
+}
+
+// RemoveActiveStream removes a session's active stream.
+// Legacy fields (currentTorrent/currentFile/currentTorrentStatus) are managed by
+// StartStream/StopStream under c.mu — this method only touches the activeStreams map.
+func (c *Client) RemoveActiveStream(sessionID string) {
+	c.streamsMu.Lock()
+	defer c.streamsMu.Unlock()
+	delete(c.activeStreams, sessionID)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -529,3 +620,4 @@ func (c *Client) readyToStream() bool {
 	// Ready when both minimum buffer is met AND percentage threshold is reached
 	return bytesCompleted >= minimumBufferBytes && percentCompleted >= percentThreshold
 }
+

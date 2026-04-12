@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"seanime/internal/api/anilist"
 	"seanime/internal/customsource"
 	"seanime/internal/database/db_bridge"
+	"seanime/internal/database/models"
 	"seanime/internal/library/anime"
 	"seanime/internal/torrentstream"
 	"seanime/internal/util"
@@ -25,7 +27,7 @@ import (
 //	@returns anime.LibraryCollection
 func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -182,10 +184,17 @@ func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 	}
 
 	if !fromNakama {
-		if (h.App.SecondarySettings.Torrentstream != nil && h.App.SecondarySettings.Torrentstream.Enabled && h.App.SecondarySettings.Torrentstream.IncludeInLibrary) ||
-			(h.App.Settings.GetLibrary() != nil && h.App.Settings.GetLibrary().EnableOnlinestream && h.App.Settings.GetLibrary().IncludeOnlineStreamingInLibrary) ||
-			(h.App.SecondarySettings.Debrid != nil && h.App.SecondarySettings.Debrid.Enabled && h.App.SecondarySettings.Debrid.IncludeDebridStreamInLibrary) {
-			h.App.TorrentstreamRepository.HydrateStreamCollection(&torrentstream.HydrateStreamCollectionOptions{
+		var library *models.LibrarySettings
+		if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
+			library = currentSettings.GetLibrary()
+		}
+		tsSettings := h.getTorrentstreamSettings(c)
+		debridSettings := h.getDebridSettings(c)
+		if (tsSettings != nil && tsSettings.Enabled && tsSettings.IncludeInLibrary) ||
+			(library != nil && library.EnableOnlinestream && library.IncludeOnlineStreamingInLibrary) ||
+			(debridSettings != nil && debridSettings.Enabled && debridSettings.IncludeDebridStreamInLibrary) {
+			session := h.getStreamSession(c)
+			session.TorrentStream.HydrateStreamCollection(&torrentstream.HydrateStreamCollectionOptions{
 				AnimeCollection:     animeCollection,
 				LibraryCollection:   libraryCollection,
 				MetadataProviderRef: h.App.MetadataProviderRef,
@@ -237,25 +246,64 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		animeScheduleCache.Clear()
 	})
 
-	if ret, ok := animeScheduleCache.Get(1); ok {
-		return h.RespondWithData(c, ret)
+	showAll := c.QueryParam("showAll") == "true"
+	enableAdultContent := false
+	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
+		enableAdultContent = currentSettings.GetAnilist().EnableAdultContent
 	}
 
-	animeSchedule, err := h.App.AnilistPlatformRef.Get().GetAnimeAiringSchedule(c.Request().Context())
-	if err != nil {
-		return h.RespondWithError(c, err)
+	// Cache key: 1 = user schedule, 2 = all airing
+	cacheKey := 1
+	if showAll {
+		cacheKey = 2
 	}
 
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	filterAdult := func(items []*anime.ScheduleItem) []*anime.ScheduleItem {
+		if enableAdultContent {
+			return items
+		}
+		filtered := make([]*anime.ScheduleItem, 0, len(items))
+		for _, item := range items {
+			if !item.IsAdult {
+				filtered = append(filtered, item)
+			}
+		}
+		return filtered
+	}
+
+	if ret, ok := animeScheduleCache.Get(cacheKey); ok {
+		return h.RespondWithData(c, filterAdult(ret))
+	}
+
+	// "Show all" mode or not authenticated — fetch all currently airing anime (public API, no auth required)
+	if showAll {
+		allItems := h.fetchAllAiringScheduleItems(c.Request().Context())
+
+		animeScheduleCache.SetT(cacheKey, allItems, 1*time.Hour)
+		return h.RespondWithData(c, filterAdult(allItems))
+	}
+
+	// User schedule mode — try collection first
+	animeCollection, collErr := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
+	hasCollection := collErr == nil && animeCollection != nil && len(animeCollection.MediaListCollection.GetLists()) > 0
+
+	if !hasCollection {
+		// Not authenticated — fall back to all airing
+		allItems := h.fetchAllAiringScheduleItems(c.Request().Context())
+		animeScheduleCache.SetT(cacheKey, allItems, 1*time.Hour)
+		return h.RespondWithData(c, filterAdult(allItems))
+	}
+
+	animeSchedule, err := h.getAnilistPlatform(c).GetAnimeAiringSchedule(c.Request().Context())
 	if err != nil {
-		return h.RespondWithError(c, err)
+		return h.RespondWithData(c, []*anime.ScheduleItem{})
 	}
 
 	ret := anime.GetScheduleItems(animeSchedule, animeCollection)
 
 	animeScheduleCache.SetT(1, ret, 1*time.Hour)
 
-	return h.RespondWithData(c, ret)
+	return h.RespondWithData(c, filterAdult(ret))
 }
 
 // HandleAddUnknownMedia
@@ -277,16 +325,58 @@ func (h *Handler) HandleAddUnknownMedia(c echo.Context) error {
 	}
 
 	// Add non-added media entries to AniList collection
-	if err := h.App.AnilistPlatformRef.Get().AddMediaToCollection(c.Request().Context(), b.MediaIds); err != nil {
+	if err := h.getAnilistPlatform(c).AddMediaToCollection(c.Request().Context(), b.MediaIds); err != nil {
 		return h.RespondWithError(c, errors.New("error: Anilist responded with an error, this is most likely a rate limit issue"))
 	}
 
 	// Bypass the cache
-	animeCollection, err := h.App.GetAnimeCollection(true)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), true)
 	if err != nil {
 		return h.RespondWithError(c, errors.New("error: Anilist responded with an error, wait one minute before refreshing"))
 	}
 
 	return h.RespondWithData(c, animeCollection)
 
+}
+
+// fetchAllAiringScheduleItems fetches all currently airing anime from the public AniList API,
+// paginating to get complete coverage for the past 7 days and next 7 days.
+func (h *Handler) fetchAllAiringScheduleItems(ctx context.Context) []*anime.ScheduleItem {
+	now := time.Now()
+	nowUnix := int(now.Unix())
+	weekAgo := int(now.AddDate(0, 0, -7).Unix())
+	weekAhead := int(now.AddDate(0, 0, 7).Unix())
+	perPage := 50
+	notYetAiredFalse := false
+	notYetAiredTrue := true
+
+	allItems := make([]*anime.ScheduleItem, 0)
+
+	// Fetch recently aired (past 7 days) — paginate
+	for page := 1; page <= 4; page++ {
+		p := page
+		res, err := h.App.AnilistClientRef.Get().ListRecentAnime(ctx, &p, &perPage, &weekAgo, &nowUnix, &notYetAiredFalse)
+		if err != nil || res == nil {
+			break
+		}
+		allItems = append(allItems, anime.GetPublicScheduleItems(res)...)
+		if res.GetPage().PageInfo == nil || res.GetPage().PageInfo.GetHasNextPage() == nil || !*res.GetPage().PageInfo.GetHasNextPage() {
+			break
+		}
+	}
+
+	// Fetch upcoming (next 7 days) — paginate
+	for page := 1; page <= 4; page++ {
+		p := page
+		res, err := h.App.AnilistClientRef.Get().ListRecentAnime(ctx, &p, &perPage, &nowUnix, &weekAhead, &notYetAiredTrue)
+		if err != nil || res == nil {
+			break
+		}
+		allItems = append(allItems, anime.GetPublicScheduleItems(res)...)
+		if res.GetPage().PageInfo == nil || res.GetPage().PageInfo.GetHasNextPage() == nil || !*res.GetPage().PageInfo.GetHasNextPage() {
+			break
+		}
+	}
+
+	return allItems
 }

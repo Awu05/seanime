@@ -8,15 +8,16 @@ testdata/
 .cursor
 .DS_Store
 */.DS_Store
+.env
+./seanime-data/
 
-Dockerfile
 Dockerfile.dev
 dev.dockerfile
-.dockerignore
 
 go.work
 
 .github/*.md
+docs/superpowers/
 
 _docker-compose.yml
 
@@ -84,6 +85,7 @@ internal/extension_repo/**/test*.ts
 internal/extension_repo/goja_plugin_test
 
 *.sh
+!docker/**/*.sh
 
 seanime-web-tr/
 codegen/nonext/
@@ -91,3 +93,5 @@ codegen/nonext/
 local_testing
 dist-server
 scripts/build.go
+
+.claude/

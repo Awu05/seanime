@@ -47,6 +47,7 @@ type Status struct {
 	DisabledFeatures      []core.FeatureKey             `json:"disabledFeatures"`
 	ServerReady           bool                          `json:"serverReady"`
 	ServerHasPassword     bool                          `json:"serverHasPassword"`
+	MultiUserEnabled      bool                          `json:"multiUserEnabled"`
 	ShowChangelogTour     string                        `json:"showChangelogTour"`
 }
 
@@ -62,17 +63,37 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 	//var mal *models.Mal
 
 	// Get the user from the database (if logged in)
-	if dbAcc, _ = h.App.Database.GetAccount(); dbAcc != nil {
+	// In multi-user mode, load the profile-specific AniList account
+	profileID := core.GetProfileIDFromContext(c)
+	if h.App.MultiUserEnabled && profileID != "" {
+		if profileAcc, err := h.App.Database.GetAccountByProfileID(profileID); err == nil && profileAcc != nil && profileAcc.Token != "" {
+			currentUser, _ = user.NewUser(profileAcc)
+			if currentUser != nil {
+				currentUser.Token = "HIDDEN"
+			} else {
+				currentUser = user.NewSimulatedUser()
+			}
+		} else {
+			currentUser = user.NewSimulatedUser()
+		}
+	} else if dbAcc, _ = h.App.Database.GetAccount(); dbAcc != nil {
 		currentUser, _ = user.NewUser(dbAcc)
 		if currentUser != nil {
 			currentUser.Token = "HIDDEN"
+		} else {
+			// Account exists but AniList is disconnected — use simulated user
+			currentUser = user.NewSimulatedUser()
 		}
 	} else {
-		// If the user is not logged in, create a simulated user
 		currentUser = user.NewSimulatedUser()
 	}
 
-	if settings, _ = h.App.Database.GetSettings(); settings != nil {
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, _ = h.App.Database.GetSettingsForProfile(profileID)
+	} else {
+		settings, _ = h.App.Database.GetSettings()
+	}
+	if settings != nil {
 		if settings.ID == 0 || settings.Library == nil || settings.Torrent == nil || settings.MediaPlayer == nil {
 			settings = nil
 		}
@@ -99,15 +120,16 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		VersionName:           constants.VersionName,
 		ThemeSettings:         theme,
 		IsOffline:             h.App.Config.Server.Offline,
-		MediastreamSettings:   h.App.SecondarySettings.Mediastream,
-		TorrentstreamSettings: h.App.SecondarySettings.Torrentstream,
-		DebridSettings:        h.App.SecondarySettings.Debrid,
+		MediastreamSettings:   h.getMediastreamSettings(c),
+		TorrentstreamSettings: h.getTorrentstreamSettings(c),
+		DebridSettings:        h.getDebridSettings(c),
 		AnilistClientID:       h.App.Config.Anilist.ClientID,
 		Updating:              false,
 		IsDesktopSidecar:      h.App.IsDesktopSidecar,
 		FeatureFlags:          h.App.FeatureFlags,
 		ServerReady:           h.App.ServerReady,
 		ServerHasPassword:     h.App.Config.Server.Password != "",
+		MultiUserEnabled:      h.App.MultiUserEnabled,
 		DisabledFeatures:      h.App.FeatureManager.DisabledFeatures,
 		ShowChangelogTour:     h.App.ShowTour,
 	}
@@ -118,6 +140,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 			User:              user.NewSimulatedUser(),
 			ServerReady:       h.App.ServerReady,
 			ServerHasPassword: h.App.Config.Server.Password != "",
+			MultiUserEnabled:  h.App.MultiUserEnabled,
 			Settings:          &models.Settings{},
 		}
 	}
@@ -174,7 +197,7 @@ func (h *Handler) HandleGetLogContent(c echo.Context) error {
 	content := h.App.ReportRepository.Anonymize(report.AnonymizeOptions{
 		Content:        contentB,
 		Settings:       h.App.Settings,
-		DebridSettings: h.App.SecondarySettings.Debrid,
+		DebridSettings: h.getDebridSettings(c),
 		Username:       h.App.GetUsername(),
 	})
 
@@ -326,7 +349,7 @@ func (h *Handler) HandleGetLatestLogContent(c echo.Context) error {
 	content := h.App.ReportRepository.Anonymize(report.AnonymizeOptions{
 		Content:        contentB,
 		Settings:       h.App.Settings,
-		DebridSettings: h.App.SecondarySettings.Debrid,
+		DebridSettings: h.getDebridSettings(c),
 		Username:       h.App.GetUsername(),
 	})
 
@@ -349,7 +372,7 @@ func (h *Handler) HandleGetAnnouncements(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	settings, _ := h.App.Database.GetSettings()
+	settings, _ := h.getSettings(c)
 
 	announcements := h.App.Updater.GetAnnouncements(h.App.Version, b.Platform, settings)
 

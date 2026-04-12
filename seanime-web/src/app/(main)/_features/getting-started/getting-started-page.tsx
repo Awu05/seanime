@@ -362,11 +362,11 @@ function PlayerStep({ form, status }: { form: any, status: Status }) {
                                 <Alert
                                     intent="info-basic"
                                     description={<p>For IINA to work correctly with Seanime, make sure <strong>Quit after all windows are
-                                                                                                               closed</strong> is <span
-                                        className="underline"
-                                    >checked</span> and <strong>Keep window open after playback
-                                                                finishes</strong> is <span className="underline">unchecked</span> in
-                                                    your IINA general settings.</p>}
+                                        closed</strong> is <span
+                                            className="underline"
+                                        >checked</span> and <strong>Keep window open after playback
+                                            finishes</strong> is <span className="underline">unchecked</span> in
+                                        your IINA general settings.</p>}
                                 />
                             </motion.div>
                         )}
@@ -546,6 +546,7 @@ function DebridStep({ form }: { form: any }) {
                             { label: "TorBox", value: "torbox" },
                             { label: "Real-Debrid", value: "realdebrid" },
                             { label: "AllDebrid", value: "alldebrid" },
+                            { label: "StremThru", value: "stremthru" },
                         ]}
                     />
 
@@ -557,11 +558,33 @@ function DebridStep({ form }: { form: any }) {
                                 exit={{ opacity: 0, height: 0 }}
                                 className="space-y-4 p-4 rounded-lg bg-gray-800/30"
                             >
-                                <Field.Text
-                                    name="debridApiKey"
-                                    label="API Key"
-                                    help="The API key provided by the debrid service."
-                                />
+                                {debridProvider === "stremthru" && (
+                                    <>
+                                        <p className="text-sm text-gray-400">
+                                            StremThru is a self-hosted proxy that acts as a unified interface for debrid services.
+                                            Configure your debrid store credentials (STREMTHRU_STORE_AUTH) in your StremThru instance.
+                                        </p>
+                                        <Field.Text
+                                            name="debridApiUrl"
+                                            label="StremThru URL"
+                                            placeholder="http://stremthru:8080"
+                                            help="The base URL of your StremThru instance."
+                                        />
+                                        <Field.Text
+                                            name="debridApiKey"
+                                            label="StremThru Credentials"
+                                            placeholder="username:password"
+                                            help="The credentials set in STREMTHRU_AUTH (e.g. username:password)."
+                                        />
+                                    </>
+                                )}
+                                {debridProvider !== "stremthru" && (
+                                    <Field.Text
+                                        name="debridApiKey"
+                                        label="API Key"
+                                        help="The API key provided by the debrid service."
+                                    />
+                                )}
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -782,6 +805,7 @@ export function GettingStartedPage({ status }: { status: Status }) {
                         enableTranscode: false,
                         debridProvider: "none",
                         debridApiKey: "",
+                        debridApiUrl: "",
                         nakamaUsername: "",
                         enableWatchContinuity: true,
                     }}

@@ -98,6 +98,8 @@ type (
 		OnlinestreamRepository  *onlinestream.Repository
 		MediastreamRepository   *mediastream.Repository
 		TorrentstreamRepository *torrentstream.Repository
+		StreamSessionManager    *StreamSessionManager
+		AnilistPool             *AnilistClientPool
 
 		// Players
 		NativePlayer *nativeplayer.NativePlayer
@@ -138,6 +140,8 @@ type (
 		FeatureFlags      FeatureFlags
 		FeatureManager    *FeatureManager
 		Settings          *models.Settings
+		JWTSecret        string
+		MultiUserEnabled bool
 		SecondarySettings struct {
 			Mediastream   *models.MediastreamSettings
 			Torrentstream *models.TorrentstreamSettings

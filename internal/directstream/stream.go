@@ -2,6 +2,7 @@ package directstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,7 +20,6 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/samber/mo"
 )
 
 // Stream is the common interface for all stream types.
@@ -61,12 +61,25 @@ type Stream interface {
 
 func (m *Manager) getStreamHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		stream, ok := m.currentStream.Get()
-		if !ok {
+		// Look up the stream by clientId query param
+		clientId := r.URL.Query().Get("clientId")
+		if clientId != "" {
+			if stream, ok := m.streams.Get(clientId); ok {
+				stream.GetStreamHandler().ServeHTTP(w, r)
+				return
+			}
+		}
+		// Fallback: try to find any active stream (backward compatibility for single-stream)
+		var activeStream Stream
+		m.streams.Range(func(_ string, s Stream) bool {
+			activeStream = s
+			return false
+		})
+		if activeStream == nil {
 			http.Error(w, "no stream", http.StatusInternalServerError)
 			return
 		}
-		stream.GetStreamHandler().ServeHTTP(w, r)
+		activeStream.GetStreamHandler().ServeHTTP(w, r)
 	})
 }
 
@@ -75,11 +88,12 @@ func (m *Manager) PrepareNewStream(clientId string, step string) {
 }
 
 func (m *Manager) StreamError(err error) {
-	// Clear the current stream if it exists
-	if stream, ok := m.currentStream.Get(); ok {
+	// This is a generic error — terminate all streams
+	m.streams.Range(func(_ string, stream Stream) bool {
 		m.Logger.Warn().Err(err).Msgf("directstream: Terminating stream with error")
 		stream.StreamError(err)
-	}
+		return true
+	})
 }
 
 func (m *Manager) AbortOpen(clientId string, err error) {
@@ -87,87 +101,85 @@ func (m *Manager) AbortOpen(clientId string, err error) {
 }
 
 func (m *Manager) prepareNewStream(clientId string, step string) {
-	// Cancel the previous playback
-	if m.playbackCtxCancelFunc != nil {
-		m.Logger.Trace().Msgf("directstream: Cancelling previous playback")
-		m.playbackCtxCancelFunc()
-		m.playbackCtxCancelFunc = nil
+	// Terminate only the previous stream for THIS client (if any)
+	if existing, ok := m.streams.Get(clientId); ok {
+		m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Terminating previous stream for client")
+		existing.Terminate()
+		m.streams.Delete(clientId)
 	}
 
-	// Clear the current stream if it exists
-	if stream, ok := m.currentStream.Get(); ok {
-		m.Logger.Debug().Msgf("directstream: Terminating previous stream before preparing new stream")
-		stream.Terminate()
-		m.currentStream = mo.None[Stream]()
-	}
-
-	m.Logger.Debug().Msgf("directstream: Signaling native player that a new stream is starting")
-	// Signal the native player that a new stream is starting
+	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Signaling native player that a new stream is starting")
 	m.nativePlayer.OpenAndAwait(clientId, step)
 }
 
 func (m *Manager) abortPreparation(clientId string, err error) {
-	// Cancel the previous playback
-	if m.playbackCtxCancelFunc != nil {
-		m.Logger.Trace().Msgf("directstream: Cancelling previous playback")
-		m.playbackCtxCancelFunc()
-		m.playbackCtxCancelFunc = nil
+	// Terminate only this client's stream
+	if existing, ok := m.streams.Get(clientId); ok {
+		m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Terminating stream before abort")
+		existing.Terminate()
+		m.streams.Delete(clientId)
 	}
 
-	// Clear the current stream if it exists
-	if stream, ok := m.currentStream.Get(); ok {
-		m.Logger.Debug().Msgf("directstream: Terminating previous stream before preparing new stream")
-		stream.Terminate()
-		m.currentStream = mo.None[Stream]()
-	}
-
-	m.Logger.Debug().Msgf("directstream: Signaling native player to abort stream preparation, reason: %s", err.Error())
-	// Signal the native player that a new stream is starting
+	m.Logger.Debug().Str("clientId", clientId).Msgf("directstream: Signaling native player to abort stream preparation, reason: %s", err.Error())
 	m.nativePlayer.AbortOpen(clientId, err.Error())
 }
 
-// loadStream loads a new stream and cancels the previous one.
-// Caller should use mutex to lock the manager.
+// loadStream loads a new stream for a client. Does not affect other clients' streams.
 func (m *Manager) loadStream(stream Stream) {
-	m.prepareNewStream(stream.ClientId(), "Loading stream...")
+	clientId := stream.ClientId()
+	m.prepareNewStream(clientId, "Loading stream...")
 
-	m.Logger.Debug().Msgf("directstream: Loading stream")
-	m.currentStream = mo.Some(stream)
+	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Loading stream")
 
-	// Create a new context
+	// Create a per-stream context
 	ctx, cancel := context.WithCancel(context.Background())
-	m.playbackCtx = ctx
-	m.playbackCtxCancelFunc = cancel
+	if bs, ok := m.getBaseStream(stream); ok {
+		bs.streamCtx = ctx
+		bs.streamCancelFunc = cancel
+	}
 
-	m.Logger.Debug().Msgf("directstream: Loading content type")
-	m.nativePlayer.OpenAndAwait(stream.ClientId(), "Loading metadata...")
-	// Load the content type
+	// Register the stream
+	m.streams.Set(clientId, stream)
+
+	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Loading content type")
+	m.nativePlayer.OpenAndAwait(clientId, "Loading metadata...")
+
 	contentType := stream.LoadContentType()
 	if contentType == "" {
-		m.Logger.Error().Msg("directstream: Failed to load content type")
+		m.Logger.Error().Str("clientId", clientId).Msg("directstream: Failed to load content type")
 		m.preStreamError(stream, fmt.Errorf("failed to load content type"))
 		return
 	}
 
-	m.Logger.Debug().Msgf("directstream: Signaling native player that metadata is being loaded")
+	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Signaling native player that metadata is being loaded")
 
-	// Load the playback info
-	// If EBML, it will block until the metadata is parsed
 	playbackInfo, err := stream.LoadPlaybackInfo()
 	if err != nil {
-		m.Logger.Error().Err(err).Msg("directstream: Failed to load playback info")
+		m.Logger.Error().Err(err).Str("clientId", clientId).Msg("directstream: Failed to load playback info")
 		m.preStreamError(stream, fmt.Errorf("failed to load playback info: %w", err))
 		return
 	}
 
-	// Shut the mkv parser logger
-	//parser, ok := playbackInfo.MkvMetadataParser.Get()
-	//if ok {
-	//	parser.SetLoggerEnabled(false)
-	//}
+	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Signaling native player that stream is ready")
+	m.nativePlayer.Watch(clientId, playbackInfo)
+}
 
-	m.Logger.Debug().Msgf("directstream: Signaling native player that stream is ready")
-	m.nativePlayer.Watch(stream.ClientId(), playbackInfo)
+// getBaseStream extracts the BaseStream from any Stream implementation.
+func (m *Manager) getBaseStream(s Stream) (*BaseStream, bool) {
+	switch v := s.(type) {
+	case *DebridStream:
+		return &v.BaseStream, true
+	case *TorrentStream:
+		return &v.BaseStream, true
+	case *LocalFileStream:
+		return &v.BaseStream, true
+	case *Nakama:
+		return &v.BaseStream, true
+	case *BaseStream:
+		return v, true
+	default:
+		return nil, false
+	}
 }
 
 func (m *Manager) listenToPlayerEvents() {
@@ -176,83 +188,72 @@ func (m *Manager) listenToPlayerEvents() {
 			m.Logger.Trace().Msg("directstream: Stream loop goroutine exited")
 		}()
 
-		for {
-			select {
-			case event := <-m.videoCoreSubscriber.Events():
-				cs, ok := m.currentStream.Get()
-				if !ok {
-					continue
-				}
-				if !event.IsNativePlayer() {
-					continue
-				}
+		// The range exits cleanly when the subscriber channel is closed by
+		// VideoCore.Unsubscribe (called from Manager.Shutdown on session eviction).
+		for event := range m.videoCoreSubscriber.Events() {
+			if !event.IsNativePlayer() {
+				continue
+			}
 
-				if event.GetClientId() != cs.ClientId() {
-					continue
-				}
-				switch event := event.(type) {
-				case *videocore.VideoLoadedMetadataEvent:
-					m.Logger.Debug().Msgf("directstream: Video loaded metadata")
-					// Start subtitle extraction from the beginning
-					// cs.ServeSubtitlesFromTime(0.0)
-					if lfStream, ok := cs.(*LocalFileStream); ok {
-						subReader, err := lfStream.newReader()
-						if err != nil {
-							m.Logger.Error().Err(err).Msg("directstream: Failed to create subtitle reader")
-							cs.StreamError(fmt.Errorf("failed to create subtitle reader: %w", err))
-							return
-						}
-						lfStream.StartSubtitleStream(lfStream, m.playbackCtx, subReader, 0)
-					} else if ts, ok := cs.(*TorrentStream); ok {
-						subReader := ts.file.NewReader()
-						subReader.SetResponsive()
-						ts.StartSubtitleStream(ts, m.playbackCtx, subReader, 0)
+			// Look up the stream by the event's clientId
+			cs, ok := m.streams.Get(event.GetClientId())
+			if !ok {
+				continue
+			}
+
+			switch event := event.(type) {
+			case *videocore.VideoLoadedMetadataEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video loaded metadata")
+				if lfStream, ok := cs.(*LocalFileStream); ok {
+					subReader, err := lfStream.newReader()
+					if err != nil {
+						m.Logger.Error().Err(err).Msg("directstream: Failed to create subtitle reader")
+						cs.StreamError(fmt.Errorf("failed to create subtitle reader: %w", err))
+						continue
 					}
-				case *videocore.VideoErrorEvent:
-					m.Logger.Debug().Msgf("directstream: Video error, Error: %s", event.Error)
-					cs.StreamError(fmt.Errorf(event.Error))
-				case *videocore.SubtitleFileUploadedEvent:
-					m.Logger.Debug().Msgf("directstream: Subtitle file uploaded, Filename: %s", event.Filename)
-					cs.OnSubtitleFileUploaded(event.Filename, event.Content)
-				case *videocore.VideoTerminatedEvent:
-					m.Logger.Debug().Msgf("directstream: Video terminated")
-					cs.Terminate()
-				case *videocore.VideoCompletedEvent:
-					m.Logger.Debug().Msgf("directstream: Video completed")
+					lfStream.StartSubtitleStream(lfStream, lfStream.streamCtx, subReader, 0)
+				} else if ts, ok := cs.(*TorrentStream); ok {
+					subReader := ts.file.NewReader()
+					subReader.SetResponsive()
+					ts.StartSubtitleStream(ts, ts.streamCtx, subReader, 0)
+				}
+			case *videocore.VideoErrorEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msgf("directstream: Video error, Error: %s", event.Error)
+				cs.StreamError(errors.New(event.Error))
+			case *videocore.SubtitleFileUploadedEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msgf("directstream: Subtitle file uploaded, Filename: %s", event.Filename)
+				cs.OnSubtitleFileUploaded(event.Filename, event.Content)
+			case *videocore.VideoTerminatedEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video terminated")
+				cs.Terminate()
+				m.streams.Delete(cs.ClientId())
+			case *videocore.VideoCompletedEvent:
+				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video completed")
 
-					if baseStream, ok := cs.(*BaseStream); ok {
-						baseStream.updateProgress.Do(func() {
-							mediaId := baseStream.media.GetID()
-							epNum := baseStream.episode.GetProgressNumber()
-							totalEpisodes := baseStream.media.GetTotalEpisodeCount() // total episode count or -1
+				if bs, ok := m.getBaseStream(cs); ok {
+					bs.updateProgress.Do(func() {
+						mediaId := bs.media.GetID()
+						epNum := bs.episode.GetProgressNumber()
+						totalEpisodes := bs.media.GetTotalEpisodeCount()
 
-							_ = baseStream.manager.platformRef.Get().UpdateEntryProgress(context.Background(), mediaId, epNum, &totalEpisodes)
-						})
-					}
+						_ = bs.manager.platformRef.Get().UpdateEntryProgress(context.Background(), mediaId, epNum, &totalEpisodes)
+					})
 				}
 			}
 		}
 	}()
 }
 
-func (m *Manager) unloadStream() {
-	m.Logger.Debug().Msg("directstream: Unloading current stream")
+// unloadStreamByClientId removes and terminates a specific client's stream.
+func (m *Manager) unloadStreamByClientId(clientId string) {
+	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Unloading stream for client")
 
-	// Cancel any existing playback context first
-	if m.playbackCtxCancelFunc != nil {
-		m.Logger.Trace().Msg("directstream: Cancelling playback context")
-		m.playbackCtxCancelFunc()
-		m.playbackCtxCancelFunc = nil
-	}
-
-	// Clear the current stream
-	if stream, ok := m.currentStream.Get(); ok {
-		m.Logger.Debug().Msg("directstream: Terminating current stream")
+	if stream, ok := m.streams.Get(clientId); ok {
 		stream.Terminate()
+		m.streams.Delete(clientId)
 	}
 
-	m.currentStream = mo.None[Stream]()
-	m.Logger.Debug().Msg("directstream: Stream unloaded successfully")
+	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Stream unloaded successfully")
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -274,11 +275,20 @@ type BaseStream struct {
 	serveContentCancelFunc context.CancelFunc
 	filename               string // Name of the file being streamed, if applicable
 
+	// Per-stream context — each stream has its own lifecycle context
+	streamCtx        context.Context
+	streamCancelFunc context.CancelFunc
+
 	// Subtitle stream management
 	activeSubtitleStreams *result.Map[string, *SubtitleStream]
 
 	manager        *Manager
 	updateProgress sync.Once
+}
+
+// StreamCtx returns this stream's context. Use this instead of manager.playbackCtx.
+func (s *BaseStream) StreamCtx() context.Context {
+	return s.streamCtx
 }
 
 var _ Stream = (*BaseStream)(nil)
@@ -325,10 +335,9 @@ func (s *BaseStream) ClientId() string {
 
 func (s *BaseStream) Terminate() {
 	s.terminateOnce.Do(func() {
-		// Cancel the playback context
-		// This will snowball and cancel other stuff
-		if s.manager.playbackCtxCancelFunc != nil {
-			s.manager.playbackCtxCancelFunc()
+		// Cancel this stream's own context — does NOT affect other streams
+		if s.streamCancelFunc != nil {
+			s.streamCancelFunc()
 		}
 
 		// Cancel all active subtitle streams
@@ -346,9 +355,8 @@ func (s *BaseStream) StreamError(err error) {
 	s.logger.Error().Err(err).Msg("directstream: Stream error occurred")
 	s.manager.nativePlayer.Error(s.clientId, err)
 	s.Terminate()
-	s.manager.playbackMu.Lock()
-	s.manager.unloadStream()
-	s.manager.playbackMu.Unlock()
+	// Remove from the map without calling Terminate again
+	s.manager.streams.Delete(s.clientId)
 }
 
 func (s *BaseStream) GetSubtitleEventCache() *result.Map[string, *mkvparser.SubtitleEvent] {
@@ -396,7 +404,7 @@ func loadContentType(path string, reader ...io.ReadSeekCloser) string {
 func (m *Manager) preStreamError(stream Stream, err error) {
 	stream.Terminate()
 	m.nativePlayer.Error(stream.ClientId(), err)
-	m.unloadStream()
+	m.streams.Delete(stream.ClientId())
 }
 
 func (m *Manager) getContentTypeAndLength(url string) (string, int64, error) {

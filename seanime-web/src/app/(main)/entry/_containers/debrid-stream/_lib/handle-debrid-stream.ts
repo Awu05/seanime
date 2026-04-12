@@ -51,6 +51,7 @@ export function useHandleStartDebridStream() {
     const getPlaybackType = React.useCallback((forcePlaybackMethod?: ForcePlaybackMethod) => {
         if (
             (!forcePlaybackMethod && __isElectronDesktop__ && electronPlaybackMethod === ElectronPlaybackMethod.NativePlayer) ||
+            (!forcePlaybackMethod && !__isElectronDesktop__ && torrentStreamingPlayback === PlaybackTorrentStreaming.NativePlayer) ||
             (forcePlaybackMethod && forcePlaybackMethod === "nativeplayer")
         ) {
             return "nativeplayer"
@@ -113,7 +114,8 @@ export function useHandleStartDebridStream() {
     }
 
     return {
-        isUsingNativePlayer: __isElectronDesktop__ && electronPlaybackMethod === ElectronPlaybackMethod.NativePlayer,
+        isUsingNativePlayer: (__isElectronDesktop__ && electronPlaybackMethod === ElectronPlaybackMethod.NativePlayer) ||
+            (!__isElectronDesktop__ && torrentStreamingPlayback === PlaybackTorrentStreaming.NativePlayer),
         handleStreamSelection,
         handleAutoSelectStream,
         isPending,

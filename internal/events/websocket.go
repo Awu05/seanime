@@ -15,6 +15,7 @@ import (
 type WSEventManagerInterface interface {
 	SendEvent(t string, payload interface{})
 	SendEventTo(clientId string, t string, payload interface{}, noLog ...bool)
+	SendToProfile(profileID string, t string, payload interface{})
 	SubscribeToClientEvents(id string) *ClientEventSubscriber
 	SubscribeToClientNativePlayerEvents(id string) *ClientEventSubscriber
 	SubscribeToClientVideoCoreEvents(id string) *ClientEventSubscriber
@@ -43,6 +44,13 @@ func (w *GlobalWSEventManagerWrapper) SendEventTo(clientId string, t string, pay
 	w.WSEventManager.SendEventTo(clientId, t, payload, noLog...)
 }
 
+func (w *GlobalWSEventManagerWrapper) SendToProfile(profileID string, t string, payload interface{}) {
+	if w.WSEventManager == nil {
+		return
+	}
+	w.WSEventManager.SendToProfile(profileID, t, payload)
+}
+
 type (
 	// WSEventManager holds the websocket connection instance.
 	// It is attached to the App instance, so it is available to other handlers.
@@ -66,8 +74,9 @@ type (
 	}
 
 	WSConn struct {
-		ID   string
-		Conn *websocket.Conn
+		ID        string
+		ProfileID string
+		Conn      *websocket.Conn
 	}
 
 	WSEvent struct {
@@ -131,15 +140,17 @@ func (m *WSEventManager) ExitIfNoConnsAsDesktopSidecar() {
 	}()
 }
 
-func (m *WSEventManager) AddConn(id string, conn *websocket.Conn) {
+func (m *WSEventManager) AddConn(id string, profileID string, conn *websocket.Conn) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Conns = append(m.Conns, &WSConn{ID: id, ProfileID: profileID, Conn: conn})
 	m.hasHadConnection = true
-	m.Conns = append(m.Conns, &WSConn{
-		ID:   id,
-		Conn: conn,
-	})
 }
 
 func (m *WSEventManager) RemoveConn(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for i, conn := range m.Conns {
 		if conn.ID == id {
 			m.Conns = append(m.Conns[:i], m.Conns[i+1:]...)
@@ -203,6 +214,24 @@ func (m *WSEventManager) SendEventTo(clientId string, t string, payload interfac
 				Type:    t,
 				Payload: payload,
 			})
+		}
+	}
+}
+
+// SendToProfile sends a websocket event to all connections belonging to the specified profile.
+func (m *WSEventManager) SendToProfile(profileID string, t string, payload interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, conn := range m.Conns {
+		if conn.ProfileID == profileID {
+			err := conn.Conn.WriteJSON(struct {
+				Type    string      `json:"type"`
+				Payload interface{} `json:"payload"`
+			}{t, payload})
+			if err != nil {
+				m.Logger.Err(err).Str("connId", conn.ID).Msg("ws: Failed to send profile event")
+			}
 		}
 	}
 }

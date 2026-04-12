@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/mediastream"
 
@@ -16,8 +17,8 @@ import (
 //	@returns models.MediastreamSettings
 //	@route /api/v1/mediastream/settings [GET]
 func (h *Handler) HandleGetMediastreamSettings(c echo.Context) error {
-	mediastreamSettings, found := h.App.Database.GetMediastreamSettings()
-	if !found {
+	mediastreamSettings := h.getMediastreamSettings(c)
+	if mediastreamSettings == nil {
 		return h.RespondWithError(c, errors.New("media streaming settings not found"))
 	}
 
@@ -40,7 +41,15 @@ func (h *Handler) HandleSaveMediastreamSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	settings, err := h.App.Database.UpsertMediastreamSettings(&b.Settings)
+	var settings *models.MediastreamSettings
+	var err error
+	profileID := core.GetProfileIDFromContext(c)
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertMediastreamSettingsForProfile(profileID, &b.Settings)
+	} else {
+		b.Settings.BaseModel = models.BaseModel{ID: 1}
+		settings, err = h.App.Database.UpsertMediastreamSettings(&b.Settings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -131,7 +140,11 @@ func (h *Handler) HandleMediastreamGetSubtitles(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
-	return h.App.MediastreamRepository.ServeEchoExtractedSubtitles(c)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoExtractedSubtitles(c, clientId)
 }
 
 func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
@@ -139,7 +152,11 @@ func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
-	return h.App.MediastreamRepository.ServeEchoExtractedAttachments(c)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoExtractedAttachments(c, clientId)
 }
 
 //
@@ -147,8 +164,11 @@ func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
 //
 
 func (h *Handler) HandleMediastreamDirectPlay(c echo.Context) error {
-	client := "1"
-	return h.App.MediastreamRepository.ServeEchoDirectPlay(c, client)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoDirectPlay(c, clientId)
 }
 
 //
@@ -156,8 +176,11 @@ func (h *Handler) HandleMediastreamDirectPlay(c echo.Context) error {
 //
 
 func (h *Handler) HandleMediastreamTranscode(c echo.Context) error {
-	client := "1"
-	return h.App.MediastreamRepository.ServeEchoTranscodeStream(c, client)
+	clientId := c.QueryParam("clientId")
+	if clientId == "" {
+		clientId = "default"
+	}
+	return h.App.MediastreamRepository.ServeEchoTranscodeStream(c, clientId)
 }
 
 // HandleMediastreamShutdownTranscodeStream
@@ -169,8 +192,16 @@ func (h *Handler) HandleMediastreamTranscode(c echo.Context) error {
 //	@returns bool
 //	@route /api/v1/mediastream/shutdown-transcode [POST]
 func (h *Handler) HandleMediastreamShutdownTranscodeStream(c echo.Context) error {
-	client := "1"
-	h.App.MediastreamRepository.ShutdownTranscodeStream(client)
+	type body struct {
+		ClientId string `json:"clientId"`
+	}
+	var b body
+	_ = c.Bind(&b)
+	clientId := b.ClientId
+	if clientId == "" {
+		clientId = "default"
+	}
+	h.App.MediastreamRepository.ShutdownTranscodeStream(clientId)
 	return h.RespondWithData(c, true)
 }
 
@@ -181,6 +212,9 @@ func (h *Handler) HandleMediastreamShutdownTranscodeStream(c echo.Context) error
 func (h *Handler) HandleMediastreamFile(c echo.Context) error {
 	client := "1"
 	fp := c.QueryParam("path")
-	libraryPaths := h.App.Settings.GetLibrary().GetLibraryPaths()
+	var libraryPaths []string
+	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil && currentSettings.GetLibrary() != nil {
+		libraryPaths = currentSettings.GetLibrary().GetLibraryPaths()
+	}
 	return h.App.MediastreamRepository.ServeEchoFile(c, fp, client, libraryPaths)
 }

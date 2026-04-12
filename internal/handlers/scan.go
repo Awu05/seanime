@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"errors"
+	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
+	"seanime/internal/database/models"
 	"seanime/internal/library/scanner"
 	"seanime/internal/library/summary"
 
@@ -40,6 +43,19 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// Include paths from library_paths table for this profile
+	profileID := core.GetProfileIDFromContext(c)
+	if profileID != "" {
+		dbPaths, err := h.App.Database.GetLibraryPathStringsForProfile(profileID)
+		if err == nil {
+			for _, p := range dbPaths {
+				if p != libraryPath {
+					additionalLibraryPaths = append(additionalLibraryPaths, p)
+				}
+			}
+		}
+	}
+
 	// Get the latest local files
 	existingLfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
 	if err != nil {
@@ -66,7 +82,15 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 	}
 	defer scanLogger.Done()
 
-	ac, _ := h.App.GetAnimeCollection(false)
+	ac, _ := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
+
+	var scanLibrary *models.LibrarySettings
+	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
+		scanLibrary = currentSettings.GetLibrary()
+	}
+	if scanLibrary == nil {
+		scanLibrary = &models.LibrarySettings{}
+	}
 
 	// Create a new scanner
 	sc := scanner.Scanner{
@@ -83,12 +107,12 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 		ScanSummaryLogger:          scanSummaryLogger,
 		ScanLogger:                 scanLogger,
 		MetadataProviderRef:        h.App.MetadataProviderRef,
-		MatchingAlgorithm:          h.App.Settings.GetLibrary().ScannerMatchingAlgorithm,
-		MatchingThreshold:          h.App.Settings.GetLibrary().ScannerMatchingThreshold,
-		UseLegacyMatching:          h.App.Settings.GetLibrary().ScannerUseLegacyMatching,
+		MatchingAlgorithm:          scanLibrary.ScannerMatchingAlgorithm,
+		MatchingThreshold:          scanLibrary.ScannerMatchingThreshold,
+		UseLegacyMatching:          scanLibrary.ScannerUseLegacyMatching,
 		WithShelving:               true,
 		ExistingShelvedFiles:       existingShelvedLfs,
-		ConfigAsString:             h.App.Settings.GetLibrary().ScannerConfig,
+		ConfigAsString:             scanLibrary.ScannerConfig,
 		AnimeCollection:            ac,
 	}
 
@@ -119,7 +143,8 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 
 	go h.App.AutoDownloader.CleanUpDownloadedItems()
 
-	go h.App.RefreshAnimeCollection()
+	plat := h.getAnilistPlatform(c)
+	go plat.RefreshAnimeCollection(context.Background())
 
 	return h.RespondWithData(c, lfs)
 

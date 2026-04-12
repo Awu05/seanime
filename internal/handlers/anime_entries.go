@@ -57,13 +57,14 @@ func (h *Handler) getAnimeEntry(c echo.Context, lfs []*anime.LocalFile, mId int)
 	}
 
 	// Get the user's anilist collection
-	animeCollection, err := h.App.GetAnimeCollection(false)
-	if err != nil {
-		return nil, err
-	}
-
-	if animeCollection == nil {
-		return nil, errors.New("anime collection not found")
+	// If AniList is disconnected, use an empty collection so the entry page still loads
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
+	if err != nil || animeCollection == nil {
+		animeCollection = &anilist.AnimeCollection{
+			MediaListCollection: &anilist.AnimeCollection_MediaListCollection{
+				Lists: []*anilist.AnimeCollection_MediaListCollection_Lists{},
+			},
+		}
 	}
 
 	// Create a new media entry
@@ -362,7 +363,7 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	animeCollectionWithRelations, err := h.App.AnilistPlatformRef.Get().GetAnimeCollectionWithRelations(c.Request().Context())
+	animeCollectionWithRelations, err := h.getAnilistPlatform(c).GetAnimeCollectionWithRelations(c.Request().Context())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -393,7 +394,7 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 	})
 
 	// Get the media
-	media, err := h.App.AnilistPlatformRef.Get().GetAnime(c.Request().Context(), b.MediaId)
+	media, err := h.getAnilistPlatform(c).GetAnime(c.Request().Context(), b.MediaId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -493,9 +494,12 @@ func (h *Handler) HandleGetMissingEpisodes(c echo.Context) error {
 	// Get the user's anilist collection
 	// Do not bypass the cache, since this handler might be called multiple times, and we don't want to spam the API
 	// A cron job will refresh the cache every 10 minutes
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
-		return h.RespondWithError(c, err)
+		return h.RespondWithData(c, &anime.MissingEpisodes{
+			Episodes:         []*anime.Episode{},
+			SilencedEpisodes: []*anime.Episode{},
+		})
 	}
 
 	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
@@ -546,9 +550,11 @@ func (h *Handler) HandleGetUpcomingEpisodes(c echo.Context) error {
 	}
 
 	// Get the user's anilist collection
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
-		return h.RespondWithError(c, err)
+		return h.RespondWithData(c, &anime.UpcomingEpisodes{
+			Episodes: []*anime.UpcomingEpisode{},
+		})
 	}
 	upcomingEps := anime.NewUpcomingEpisodes(&anime.NewUpcomingEpisodesOptions{
 		AnimeCollection:     animeCollection,
@@ -658,7 +664,7 @@ func (h *Handler) HandleUpdateAnimeEntryProgress(c echo.Context) error {
 	}
 
 	// Update the progress on AniList
-	err := h.App.AnilistPlatformRef.Get().UpdateEntryProgress(
+	err := h.getAnilistPlatform(c).UpdateEntryProgress(
 		c.Request().Context(),
 		b.MediaId,
 		b.EpisodeNumber,
@@ -668,7 +674,7 @@ func (h *Handler) HandleUpdateAnimeEntryProgress(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	_, _ = h.App.RefreshAnimeCollection() // Refresh the AniList collection
+	_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context()) // Refresh the AniList collection
 
 	return h.RespondWithData(c, true)
 }
@@ -694,7 +700,7 @@ func (h *Handler) HandleUpdateAnimeEntryRepeat(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err := h.App.AnilistPlatformRef.Get().UpdateEntryRepeat(
+	err := h.getAnilistPlatform(c).UpdateEntryRepeat(
 		c.Request().Context(),
 		b.MediaId,
 		b.Repeat,

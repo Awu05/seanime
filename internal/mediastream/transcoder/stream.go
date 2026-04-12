@@ -197,7 +197,7 @@ func (ts *Stream) GetSegment(segment int32) (string, error) {
 			return "", fmt.Errorf("transcoder: Stream killed while waiting for segment %d", segment)
 		case <-readyChan:
 			break
-		case <-time.After(25 * time.Second):
+		case <-time.After(60 * time.Second):
 			streamLogger.Error().Msgf("transcoder: Could not retrieve %s segment %d (timeout)", ts.kind, segment)
 			return "", errors.New("could not retrieve segment (timeout)")
 		}
@@ -299,9 +299,6 @@ func (ts *Stream) KillHead(encoderId int) {
 	ts.heads[encoderId] = DeletedHead
 }
 
-func (ts *Stream) SetIsKilled() {
-}
-
 //////////////////////////////
 
 // Remember to lock before calling this.
@@ -385,7 +382,10 @@ func (ts *Stream) run(start int32) error {
 		//  - Video: if a segment is really short (between 20 and 100ms), the padding given in the else block bellow is not enough and
 		// the previous segment is played another time. the -segment_times is way more precise, so it does not do the same with this one
 		startSeg = start - 1
-		if ts.handle.getFlags()&AudioF != 0 {
+		if ts.handle.getFlags()&AudioF != 0 || ts.file.Keyframes.IsEstimated {
+			// For audio: need context before the starting point to avoid ~100ms silence gap.
+			// For estimated keyframes: skip the midpoint hack since the 4-second intervals would
+			// create a ~2 second offset between audio and video seek positions, causing desync.
 			startRef = ts.file.Keyframes.Get(startSeg)
 		} else {
 			// the param for the -ss takes the keyframe before the specified time
@@ -447,7 +447,7 @@ func (ts *Stream) run(start int32) error {
 		)
 	}
 	args = append(args,
-		"-i", ts.file.Path,
+		"-i", ts.file.GetInputPath(startRef),
 		// this makes behaviors consistent between soft and hardware decodes.
 		// this also means that after a -ss 50, the output video will start at 50s
 		"-start_at_zero",

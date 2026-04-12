@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
+	"strings"
 	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/util/result"
 	"strconv"
@@ -23,24 +24,22 @@ import (
 func (h *Handler) HandleGetAnimeCollection(c echo.Context) error {
 
 	bypassCache := c.Request().Method == "POST"
+	plat := h.getAnilistPlatform(c)
 
-	if !bypassCache {
-		// Get the user's anilist collection
-		animeCollection, err := h.App.GetAnimeCollection(false)
-		if err != nil {
-			return h.RespondWithError(c, err)
+	animeCollection, err := plat.GetAnimeCollection(c.Request().Context(), bypassCache)
+	if err != nil || animeCollection == nil {
+		animeCollection = &anilist.AnimeCollection{
+			MediaListCollection: &anilist.AnimeCollection_MediaListCollection{
+				Lists: []*anilist.AnimeCollection_MediaListCollection_Lists{},
+			},
 		}
-		return h.RespondWithData(c, animeCollection)
 	}
 
-	animeCollection, err := h.App.RefreshAnimeCollection()
-	if err != nil {
-		return h.RespondWithError(c, err)
+	if bypassCache {
+		go func() {
+			_, _ = plat.RefreshMangaCollection(c.Request().Context())
+		}()
 	}
-
-	go func() {
-		_, _ = h.App.RefreshMangaCollection()
-	}()
 
 	return h.RespondWithData(c, animeCollection)
 }
@@ -56,7 +55,8 @@ func (h *Handler) HandleGetRawAnimeCollection(c echo.Context) error {
 	bypassCache := c.Request().Method == "POST"
 
 	// Get the user's anilist collection
-	animeCollection, err := h.App.GetRawAnimeCollection(bypassCache)
+	plat := h.getAnilistPlatform(c)
+	animeCollection, err := plat.GetRawAnimeCollection(c.Request().Context(), bypassCache)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -89,7 +89,7 @@ func (h *Handler) HandleEditAnilistListEntry(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err := h.App.AnilistPlatformRef.Get().UpdateEntry(
+	err := h.getAnilistPlatform(c).UpdateEntry(
 		c.Request().Context(),
 		*p.MediaId,
 		p.Status,
@@ -104,12 +104,12 @@ func (h *Handler) HandleEditAnilistListEntry(c echo.Context) error {
 
 	switch p.Type {
 	case "anime":
-		_, _ = h.App.RefreshAnimeCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context())
 	case "manga":
-		_, _ = h.App.RefreshMangaCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshMangaCollection(c.Request().Context())
 	default:
-		_, _ = h.App.RefreshAnimeCollection()
-		_, _ = h.App.RefreshMangaCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context())
+		_, _ = h.getAnilistPlatform(c).RefreshMangaCollection(c.Request().Context())
 	}
 
 	return h.RespondWithData(c, true)
@@ -138,7 +138,7 @@ func (h *Handler) HandleGetAnilistAnimeDetails(c echo.Context) error {
 	if details, ok := detailsCache.Get(mId); ok {
 		return h.RespondWithData(c, details)
 	}
-	details, err := h.App.AnilistPlatformRef.Get().GetAnimeDetails(c.Request().Context(), mId)
+	details, err := h.getAnilistPlatform(c).GetAnimeDetails(c.Request().Context(), mId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -168,7 +168,7 @@ func (h *Handler) HandleGetAnilistStudioDetails(c echo.Context) error {
 	if details, ok := studioDetailsMap.Get(mId); ok {
 		return h.RespondWithData(c, details)
 	}
-	details, err := h.App.AnilistPlatformRef.Get().GetStudioDetails(c.Request().Context(), mId)
+	details, err := h.getAnilistPlatform(c).GetStudioDetails(c.Request().Context(), mId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -213,7 +213,7 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 	switch *p.Type {
 	case "anime":
 		// Get the list entry ID
-		animeCollection, err := h.App.GetAnimeCollection(false)
+		animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -225,7 +225,7 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 		listEntryID = listEntry.ID
 	case "manga":
 		// Get the list entry ID
-		mangaCollection, err := h.App.GetMangaCollection(false)
+		mangaCollection, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -238,16 +238,16 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 	}
 
 	// Delete the list entry
-	err := h.App.AnilistPlatformRef.Get().DeleteEntry(c.Request().Context(), *p.MediaId, listEntryID)
+	err := h.getAnilistPlatform(c).DeleteEntry(c.Request().Context(), *p.MediaId, listEntryID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
 	switch *p.Type {
 	case "anime":
-		_, _ = h.App.RefreshAnimeCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshAnimeCollection(c.Request().Context())
 	case "manga":
-		_, _ = h.App.RefreshMangaCollection()
+		_, _ = h.getAnilistPlatform(c).RefreshMangaCollection(c.Request().Context())
 	}
 
 	return h.RespondWithData(c, true)
@@ -258,6 +258,7 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 var (
 	anilistListAnimeCache       = result.NewCache[string, *anilist.ListAnime]()
 	anilistListRecentAnimeCache = result.NewCache[string, *anilist.ListRecentAnime]() // holds 1 value
+	anilistListSeasonAnimeCache = result.NewCache[string, []*anilist.BaseAnime]()
 )
 
 // HandleAnilistListAnime
@@ -295,7 +296,11 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 
 	isAdult := false
 	if p.IsAdult != nil {
-		isAdult = *p.IsAdult && h.App.Settings.GetAnilist().EnableAdultContent
+		enableAdult := false
+		if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil && currentSettings.GetAnilist() != nil {
+			enableAdult = currentSettings.GetAnilist().EnableAdultContent
+		}
+		isAdult = *p.IsAdult && enableAdult
 	}
 
 	cacheKey := anilist.ListAnimeCacheKey(
@@ -344,6 +349,106 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 	}
 
 	return h.RespondWithData(c, ret)
+}
+
+// HandleAnilistListSeasonAnime
+//
+//	@summary returns all anime in a given AniList season, aggregated across pages.
+//	@desc Used by the schedule page's "This Season" tab. Loops AniList's ListAnime query
+//	@desc server-side until the season is exhausted and returns a flat array of anime.
+//	@desc Per-profile adult content filtering is applied: if the profile has
+//	@desc EnableAdultContent=false, adult entries are excluded; if true, both adult and
+//	@desc non-adult entries are returned (isAdult filter is omitted from the AniList query).
+//	@route /api/v1/anilist/season-anime [POST]
+//	@returns []anilist.BaseAnime
+func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
+
+	type body struct {
+		Season     *anilist.MediaSeason `json:"season"`
+		SeasonYear *int                 `json:"seasonYear"`
+		Sort       []*anilist.MediaSort `json:"sort"`
+	}
+
+	p := new(body)
+	if err := c.Bind(p); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	if p.Season == nil || p.SeasonYear == nil {
+		return h.RespondWithError(c, errors.New("season and seasonYear are required"))
+	}
+
+	// Per-profile adult content handling: if disabled, force isAdult=false so the AniList
+	// query excludes adult entries. If enabled, pass nil so AniList returns both.
+	enableAdult := false
+	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil && currentSettings.GetAnilist() != nil {
+		enableAdult = currentSettings.GetAnilist().EnableAdultContent
+	}
+	var isAdultPtr *bool
+	if !enableAdult {
+		falseVal := false
+		isAdultPtr = &falseVal
+	}
+
+	sortParts := make([]string, len(p.Sort))
+	for i, s := range p.Sort {
+		sortParts[i] = string(*s)
+	}
+	cacheKey := fmt.Sprintf("%s-%d-%s-%v", *p.Season, *p.SeasonYear, strings.Join(sortParts, ","), isAdultPtr != nil)
+	if cached, ok := anilistListSeasonAnimeCache.Get(cacheKey); ok {
+		return h.RespondWithData(c, cached)
+	}
+
+	perPage := 50
+	results := make([]*anilist.BaseAnime, 0, 100)
+	page := 1
+	cacheLayer := shared_platform.NewCacheLayer(h.App.AnilistClientRef)
+	for {
+		ret, err := anilist.ListAnimeM(
+			cacheLayer,
+			&page,
+			nil, // search
+			&perPage,
+			p.Sort,
+			nil, // status
+			nil, // genres
+			nil, // averageScoreGreater
+			p.Season,
+			p.SeasonYear,
+			nil, // format
+			isAdultPtr,
+			nil, // countryOfOrigin
+			h.App.Logger,
+			h.App.GetUserAnilistToken(),
+		)
+		if err != nil {
+			return h.RespondWithError(c, err)
+		}
+		if ret == nil || ret.GetPage() == nil {
+			break
+		}
+
+		media := ret.GetPage().GetMedia()
+		if len(media) == 0 {
+			break
+		}
+		results = append(results, media...)
+
+		pageInfo := ret.GetPage().GetPageInfo()
+		if pageInfo == nil || pageInfo.GetHasNextPage() == nil || !*pageInfo.GetHasNextPage() {
+			break
+		}
+
+		page++
+		// Safety cap: 20 * 50 = 1000 entries. No real AniList season exceeds this.
+		if page > 20 {
+			break
+		}
+	}
+
+	anilistListSeasonAnimeCache.SetT(cacheKey, results, time.Minute*10)
+
+	return h.RespondWithData(c, results)
 }
 
 // HandleAnilistListRecentAiringAnime
@@ -420,7 +525,7 @@ func (h *Handler) HandleAnilistListMissedSequels(c echo.Context) error {
 	}
 
 	// Get complete anime collection
-	animeCollection, err := h.App.AnilistPlatformRef.Get().GetAnimeCollectionWithRelations(c.Request().Context())
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollectionWithRelations(c.Request().Context())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -456,7 +561,7 @@ func (h *Handler) HandleGetAniListStats(c echo.Context) error {
 		return h.RespondWithData(c, cached)
 	}
 
-	stats, err := h.App.AnilistPlatformRef.Get().GetViewerStats(c.Request().Context())
+	stats, err := h.getAnilistPlatform(c).GetViewerStats(c.Request().Context())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

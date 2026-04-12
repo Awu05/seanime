@@ -42,6 +42,7 @@ export const __playback_downloadedMediaAtom = atomWithStorage<string>("sea-playb
 
 export const enum PlaybackTorrentStreaming {
     Default = "default", // Desktop media player
+    NativePlayer = "nativePlayer", // Transcoding / Direct Play (in-browser)
     ExternalPlayerLink = "externalPlayerLink",
 }
 
@@ -51,6 +52,12 @@ export const playbackTorrentStreamingOptions = [
             <PiVideoFill className="text-2xl flex-none" />
             <p className="max-w-[90%]">Desktop media player</p>
         </div>, value: PlaybackTorrentStreaming.Default,
+    },
+    {
+        label: <div className="flex items-center gap-4 md:gap-2 w-full">
+            <PiVideoFill className="text-2xl flex-none" />
+            <p className="max-w-[90%]">Native player (in-browser)</p>
+        </div>, value: PlaybackTorrentStreaming.NativePlayer,
     },
     {
         label: <div className="flex items-center gap-4 md:gap-2 w-full">

@@ -2,6 +2,7 @@ import { useServerMutation, useServerQuery } from "@/api/client/requests"
 import {
     AnilistListAnime_Variables,
     AnilistListRecentAiringAnime_Variables,
+    AnilistListSeasonAnime_Variables,
     DeleteAnilistListEntry_Variables,
     EditAnilistListEntry_Variables,
 } from "@/api/generated/endpoint.types"
@@ -121,6 +122,17 @@ export function useAnilistListAnime(variables: AnilistListAnime_Variables, enabl
         queryKey: [API_ENDPOINTS.ANILIST.AnilistListAnime.key, variables],
         data: variables,
         enabled: enabled ?? true,
+    })
+}
+
+export function useAnilistListSeasonAnime(variables: AnilistListSeasonAnime_Variables, enabled: boolean) {
+    return useServerQuery<Array<AL_BaseAnime>, AnilistListSeasonAnime_Variables>({
+        endpoint: API_ENDPOINTS.ANILIST.AnilistListSeasonAnime.endpoint,
+        method: API_ENDPOINTS.ANILIST.AnilistListSeasonAnime.methods[0],
+        queryKey: [API_ENDPOINTS.ANILIST.AnilistListSeasonAnime.key, variables],
+        data: variables,
+        enabled: enabled,
+        gcTime: 1000 * 60 * 10, // 10 minutes — match the backend cache TTL
     })
 }
 

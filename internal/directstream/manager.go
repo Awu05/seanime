@@ -7,7 +7,6 @@ import (
 	"seanime/internal/continuity"
 	discordrpc_presence "seanime/internal/discordrpc/presence"
 	"seanime/internal/events"
-	"seanime/internal/library/anime"
 	"seanime/internal/mkvparser"
 	"seanime/internal/nativeplayer"
 	"seanime/internal/platforms/platform"
@@ -15,10 +14,10 @@ import (
 	"seanime/internal/util/result"
 	"seanime/internal/videocore"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/samber/mo"
 )
 
 // Manager handles direct stream playback and progress tracking for the built-in video player.
@@ -44,31 +43,38 @@ type (
 
 		// --------- Playback Context -------- //
 
-		playbackMu            sync.Mutex
-		playbackCtx           context.Context
-		playbackCtxCancelFunc context.CancelFunc
+		playbackMu sync.Mutex
 
 		// ---------- Playback State ---------- //
 
-		currentStream mo.Option[Stream] // The current stream being played
+		streams *result.Map[string, Stream] // Active streams keyed by clientId
 
-		// \/ Stream playback
-		// This is set by [SetStreamEpisodeCollection]
-		currentStreamEpisodeCollection mo.Option[*anime.EpisodeCollection]
+		// settings is read on every playback event, so it uses atomic.Pointer for lock-free reads.
+		settings atomic.Pointer[Settings]
 
-		settings *Settings
-
-		isOfflineRef    *util.Ref[bool]
-		animeCollection mo.Option[*anilist.AnimeCollection]
+		isOfflineRef *util.Ref[bool]
+		// animeCollection is read on every playback event and from background goroutines.
+		// It uses atomic.Pointer for lock-free reads. nil means absent.
+		animeCollection atomic.Pointer[anilist.AnimeCollection]
 		animeCache      *result.Cache[int, *anilist.BaseAnime]
 
-		parserCache *result.Cache[string, *mkvparser.MetadataParser]
-		//playbackStatusSubscribers *result.Map[string, *PlaybackStatusSubscriber]
+		parserCache        *result.Cache[string, *mkvparser.MetadataParser]
+		transcodeRequester TranscodeRequester
 	}
 
 	Settings struct {
 		AutoPlayNextEpisode bool
 		AutoUpdateProgress  bool
+	}
+
+	// TranscodeRequester is an interface for requesting transcode streams.
+	// This avoids a direct dependency on the mediastream package.
+	TranscodeRequester interface {
+		RequestTranscodeStream(filepath string, clientId string) error
+		PreloadFirstSegments(filepath string, clientId string)
+		NotifyDownloadComplete(remotePath string, localPath string, expectedSize int64)
+		GetTranscodeDir() string
+		ShutdownTranscodeStream(clientId string)
 	}
 
 	NewManagerOptions struct {
@@ -83,6 +89,7 @@ type (
 		NativePlayer               *nativeplayer.NativePlayer
 		VideoCore                  *videocore.VideoCore
 		HMACTokenFunc              func(endpoint string, symbol string) string
+		TranscodeRequester         TranscodeRequester // Optional: used for debrid stream audio transcoding
 	}
 )
 
@@ -97,23 +104,51 @@ func NewManager(options NewManagerOptions) *Manager {
 		refreshAnimeCollectionFunc: options.RefreshAnimeCollectionFunc,
 		hmacTokenFunc:              options.HMACTokenFunc,
 		isOfflineRef:               options.IsOfflineRef,
-		currentStream:              mo.None[Stream](),
+		streams:                    result.NewMap[string, Stream](),
 		nativePlayer:               options.NativePlayer,
 		parserCache:                result.NewCache[string, *mkvparser.MetadataParser](),
+		animeCache:                 result.NewCache[int, *anilist.BaseAnime](),
 		videoCore:                  options.VideoCore,
+		transcodeRequester:         options.TranscodeRequester,
 	}
+	ret.settings.Store(&Settings{})
 	ret.videoCoreSubscriber = ret.videoCore.Subscribe("directstream")
 	ret.listenToPlayerEvents()
 
 	return ret
 }
 
+// TerminateAllStreams terminates every active stream in this manager and clears the streams map.
+// Safe to call on session eviction; does not touch VideoCore or NativePlayer.
+// Holds playbackMu to serialize against concurrent PlayLocalFile/PlayDebridStream which
+// load new streams into the map.
+func (m *Manager) TerminateAllStreams() {
+	m.playbackMu.Lock()
+	defer m.playbackMu.Unlock()
+	m.streams.Range(func(clientId string, s Stream) bool {
+		s.Terminate()
+		m.streams.Delete(clientId)
+		return true
+	})
+}
+
+// Shutdown releases per-manager resources on session eviction. Terminates any
+// active streams and unsubscribes from VideoCore so the listenToPlayerEvents
+// goroutine exits cleanly (range loop terminates when the channel is closed).
+// Safe to call multiple times.
+func (m *Manager) Shutdown() {
+	m.TerminateAllStreams()
+	if m.videoCore != nil && m.videoCoreSubscriber != nil {
+		m.videoCore.Unsubscribe(m.videoCoreSubscriber.GetId())
+	}
+}
+
 func (m *Manager) SetAnimeCollection(ac *anilist.AnimeCollection) {
-	m.animeCollection = mo.Some(ac)
+	m.animeCollection.Store(ac)
 }
 
 func (m *Manager) SetSettings(s *Settings) {
-	m.settings = s
+	m.settings.Store(s)
 }
 
 // GetHMACTokenQueryParam returns an HMAC token query param for the given endpoint, or empty string if not available.
@@ -133,8 +168,7 @@ func (m *Manager) getAnime(ctx context.Context, mediaId int) (*anilist.BaseAnime
 	}
 
 	// Find in anime collection
-	animeCollection, ok := m.animeCollection.Get()
-	if ok {
+	if animeCollection := m.animeCollection.Load(); animeCollection != nil {
 		media, ok := animeCollection.FindAnime(mediaId)
 		if ok {
 			return media, nil

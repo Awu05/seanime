@@ -179,7 +179,10 @@ func FfprobeGetInfo(ffprobePath, path, hash string) (*MediaInfo, error) {
 		return nil, err
 	}
 
-	ext := filepath.Ext(path)[1:]
+	ext := filepath.Ext(path)
+	if len(ext) > 1 {
+		ext = ext[1:] // Remove the leading dot
+	}
 
 	sizeUint64, _ := strconv.ParseUint(data.Format.Size, 10, 64)
 

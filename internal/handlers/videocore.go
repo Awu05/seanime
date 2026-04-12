@@ -18,7 +18,9 @@ func (h *Handler) HandleVideoCoreInSightGetCharacterDetails(c echo.Context) erro
 		return h.RespondWithError(c, err)
 	}
 
-	ret, err := h.App.VideoCore.InSight().GetCharacterInfo(malId)
+	session := h.getStreamSession(c)
+
+	ret, err := session.VideoCore.InSight().GetCharacterInfo(malId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

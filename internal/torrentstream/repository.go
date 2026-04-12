@@ -22,6 +22,7 @@ import (
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/util"
 	"seanime/internal/util/result"
+	"sync"
 	"sync/atomic"
 
 	itorrent "github.com/anacrolix/torrent"
@@ -60,6 +61,8 @@ type (
 		previousStreamOptions mo.Option[*StartStreamOptions]
 		preloadedStream       mo.Option[*preloadedStream]
 		shouldPreloadStream   atomic.Bool // Flag on whether the client should prepare a stream
+		currentClientIdMu     sync.RWMutex
+		currentClientId       string // Track the client ID of the current stream for session cleanup
 	}
 
 	Settings struct {
@@ -128,6 +131,27 @@ func NewRepository(opts *NewRepositoryOptions) *Repository {
 
 func (r *Repository) IsEnabled() bool {
 	return r.settings.IsPresent() && r.settings.MustGet().Enabled && r.client != nil
+}
+
+// GetClient returns the underlying torrent client wrapper.
+func (r *Repository) GetClient() *Client {
+	return r.client
+}
+
+// SetSettings sets the torrentstream settings without initializing the torrent client.
+// Used by per-session repositories that share the anacrolix engine.
+func (r *Repository) SetSettings(settings *models.TorrentstreamSettings, host string, port int) {
+	if settings != nil {
+		s := *settings
+		if s.DownloadDir == "" {
+			s.DownloadDir = r.getDefaultDownloadPath()
+		}
+		r.settings = mo.Some(Settings{
+			TorrentstreamSettings: s,
+			Host:                  host,
+			Port:                  port,
+		})
+	}
 }
 
 func (r *Repository) GetPreviousStreamOptions() (*StartStreamOptions, bool) {
@@ -223,17 +247,60 @@ func (r *Repository) Shutdown() {
 	r.client.Shutdown()
 }
 
-//// Cleanup shuts down the module and removes the download directory
-//func (r *Repository) Cleanup() {
-//	if r.settings.IsAbsent() {
-//		return
-//	}
-//	r.client.Close()
+// CleanupSession releases per-session resources without touching the shared
+// anacrolix torrent engine or other sessions' state. Safe to call from the
+// StreamSessionManager cleanup loop on idle session eviction.
 //
-//	// Remove the download directory
-//	downloadDir := r.GetDownloadDir()
-//	_ = os.RemoveAll(downloadDir)
-//}
+// It drops the torrent started by this session (if any), removes the session's
+// activeStreams entry, cancels any preloaded stream, and resets playback state.
+func (r *Repository) CleanupSession() {
+	// Belt-and-braces: torrent.Torrent.Drop() can panic if the underlying
+	// anacrolix client was already closed (shouldn't happen since we never
+	// close the shared engine from here, but recover keeps session eviction
+	// robust against any future regression in the shared-client lifecycle).
+	defer func() {
+		if rec := recover(); rec != nil {
+			r.logger.Warn().Interface("panic", rec).Msg("torrentstream: Panic in CleanupSession")
+		}
+	}()
+	r.logger.Debug().Msg("torrentstream: Cleaning up session resources")
+
+	if r.client == nil {
+		return
+	}
+
+	r.client.mu.Lock()
+	defer r.client.mu.Unlock()
+
+	// Drop this session's torrent (if any) and remove its activeStreams entry.
+	// Only affects the torrent this session was streaming, not the shared engine.
+	r.currentClientIdMu.Lock()
+	clientId := r.currentClientId
+	r.currentClientId = ""
+	r.currentClientIdMu.Unlock()
+	if clientId != "" {
+		if stream := r.client.GetActiveStream(clientId); stream != nil && stream.Torrent != nil {
+			stream.Torrent.Drop()
+		}
+		r.client.RemoveActiveStream(clientId)
+	}
+
+	// Cancel any preloaded stream for this session
+	if r.preloadedStream.IsPresent() {
+		ps := r.preloadedStream.MustGet()
+		if ps.CancelFunc != nil {
+			ps.CancelFunc()
+		}
+		r.preloadedStream = mo.None[*preloadedStream]()
+	}
+
+	// Reset per-session playback state
+	r.playback.currentVideoDuration = 0
+	if r.playback.mediaPlayerCtxCancelFunc != nil {
+		r.playback.mediaPlayerCtxCancelFunc()
+		r.playback.mediaPlayerCtxCancelFunc = nil
+	}
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

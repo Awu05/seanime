@@ -25,7 +25,7 @@ func (h *Handler) HandlePopulateFillerData(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	animeCollection, err := h.App.GetAnimeCollection(false)
+	animeCollection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -33,7 +33,7 @@ func (h *Handler) HandlePopulateFillerData(c echo.Context) error {
 	media, found := animeCollection.FindAnime(b.MediaId)
 	if !found {
 		// Fetch media
-		media, err = h.App.AnilistPlatformRef.Get().GetAnime(c.Request().Context(), b.MediaId)
+		media, err = h.getAnilistPlatform(c).GetAnime(c.Request().Context(), b.MediaId)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}

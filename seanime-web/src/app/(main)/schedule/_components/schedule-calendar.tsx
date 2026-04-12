@@ -1,4 +1,5 @@
 import { AL_MediaListStatus, Anime_ScheduleItem } from "@/api/generated/types"
+import { AdultContentBadge } from "@/app/(main)/_features/media/_components/media-entry-card-components"
 import { useGetAnimeCollectionSchedule } from "@/api/hooks/anime_collection.hooks"
 import { SeaImage } from "@/components/shared/sea-image"
 import { SeaLink } from "@/components/shared/sea-link"
@@ -15,7 +16,7 @@ import { useImmerAtom } from "jotai-immer"
 import { useAtom, useAtomValue } from "jotai/react"
 import { atomWithStorage } from "jotai/utils"
 import sortBy from "lodash/sortBy"
-import React, { Fragment } from "react"
+import React from "react"
 import { AiOutlineArrowLeft, AiOutlineArrowRight } from "react-icons/ai"
 import { BiCog } from "react-icons/bi"
 import { FaCheck, FaFlag } from "react-icons/fa6"
@@ -38,6 +39,7 @@ export const calendarParamsAtom = atomWithStorage("sea-release-calendar-params",
 type ScheduleCalendarProps = {
     children?: React.ReactNode
     items?: Anime_ScheduleItem[]
+    showAll?: boolean
 }
 
 export function ScheduleCalendar(props: ScheduleCalendarProps) {
@@ -45,14 +47,15 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
     const {
         children,
         items,
+        showAll = false,
         ...rest
     } = props
 
     const anilistListData = useAtomValue(__anilist_userAnimeListDataAtom)
 
-    const { data: _schedule } = useGetAnimeCollectionSchedule({ enabled: !items })
+    const { data: _schedule } = useGetAnimeCollectionSchedule({ enabled: !items, showAll })
     const schedule = items ?? _schedule
-    const isUserSchedule = !items
+    const isUserSchedule = !items && !showAll
 
     // State for the current displayed month
     const [currentDate, setCurrentDate] = React.useState(new Date())
@@ -116,6 +119,8 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
                     isSeasonFinale: item.isSeasonFinale && !item.isMovie,
                     isMovie: item.isMovie,
                     isWatched: isEpisodeWatched(item.mediaId, item.episodeNumber),
+                    isOnList: !!anilistListData[String(item.mediaId)],
+                    isAdult: item.isAdult === true,
                 }
             }) ?? []
             events = sortBy(events, (e) => e.episode)
@@ -252,7 +257,7 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
                     </div>
 
                     <div className="lg:hidden flex-auto bg-[--background] overflow-y-auto" data-schedule-calendar-mobile-list>
-                        <MobileCalendarList days={days} />
+                        <MobileCalendarList days={days} showAll={showAll} />
                     </div>
 
                     <div className="hidden lg:flex bg-[--background] text-xs leading-6 text-gray-200 flex-auto" data-schedule-calendar-desktop>
@@ -262,6 +267,7 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
                                     key={index}
                                     day={day}
                                     index={index}
+                                    showAll={showAll}
                                 />
                             ))}
                         </div>
@@ -283,13 +289,16 @@ type CalendarEvent = {
     isSeasonFinale: boolean
     isMovie: boolean
     isWatched: boolean
+    isOnList: boolean
+    isAdult: boolean
 }
 
 interface MobileCalendarListProps {
     days: any[]
+    showAll?: boolean
 }
 
-function MobileCalendarList({ days }: MobileCalendarListProps) {
+function MobileCalendarList({ days, showAll }: MobileCalendarListProps) {
     const calendarParams = useAtomValue(calendarParamsAtom)
 
     // Filter days to only show those with events or today
@@ -312,6 +321,7 @@ function MobileCalendarList({ days }: MobileCalendarListProps) {
                     key={day.date}
                     day={day}
                     calendarParams={calendarParams}
+                    showAll={showAll}
                 />
             ))}
         </div>
@@ -321,9 +331,10 @@ function MobileCalendarList({ days }: MobileCalendarListProps) {
 interface MobileDayItemProps {
     day: any
     calendarParams: CalendarParams
+    showAll?: boolean
 }
 
-function MobileDayItem({ day, calendarParams }: MobileDayItemProps) {
+function MobileDayItem({ day, calendarParams, showAll }: MobileDayItemProps) {
     const dayName = format(new Date(day.date), "EEEE")
     const dayNumber = day.date.split("-")?.pop()?.replace(/^0/, "")
     const monthDay = format(new Date(day.date), "MMM d")
@@ -375,6 +386,7 @@ function MobileDayItem({ day, calendarParams }: MobileDayItemProps) {
                             key={event.id}
                             event={event}
                             calendarParams={calendarParams}
+                            showAll={showAll}
                         />
                     ))}
                 </div>
@@ -392,13 +404,17 @@ function MobileDayItem({ day, calendarParams }: MobileDayItemProps) {
 interface MobileEventItemProps {
     event: CalendarEvent
     calendarParams: any
+    showAll?: boolean
 }
 
-function MobileEventItem({ event, calendarParams }: MobileEventItemProps) {
+function MobileEventItem({ event, calendarParams, showAll }: MobileEventItemProps) {
     return (
         <SeaLink href={event.href} className="block" data-schedule-calendar-mobile-list-day-item-event-link>
             <div
-                className="flex items-start gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg bg-gray-900/50 hover:bg-gray-800/50 transition-colors"
+                className={cn(
+                    "flex items-start gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg bg-gray-900/50 hover:bg-gray-800/50 transition-colors",
+                    showAll && event.isOnList && "border-l-2 border-[--brand]",
+                )}
                 data-schedule-calendar-mobile-list-day-item-event-content
             >
                 <div
@@ -423,7 +439,10 @@ function MobileEventItem({ event, calendarParams }: MobileEventItemProps) {
                             )}
                             data-schedule-calendar-mobile-list-day-item-event-text
                         >
-                            {event.name}
+                            <span className="inline-flex items-center gap-1">
+                                {event.name}
+                                {event.isAdult && <AdultContentBadge />}
+                            </span>
                         </p>
                         <div className="flex items-center gap-1 flex-shrink-0" data-schedule-calendar-mobile-list-day-item-event-icons>
                             {event.isSeasonFinale && !event.isWatched && (
@@ -521,9 +540,10 @@ function CalendarDayBackground({ events, isToday, hoveredEventId }: CalendarDayB
 interface CalendarEventListProps {
     events: CalendarEvent[]
     onEventHover: (eventId: string | null) => void
+    showAll?: boolean
 }
 
-function CalendarEventList({ events, onEventHover }: CalendarEventListProps) {
+function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListProps) {
     const handleEventMouseEnter = (eventId: string) => {
         onEventHover(eventId)
     }
@@ -543,7 +563,14 @@ function CalendarEventList({ events, onEventHover }: CalendarEventListProps) {
                     onMouseLeave={handleEventMouseLeave}
                     data-schedule-calendar-event-list-item
                 >
-                    <SeaLink className="group flex" href={event.href} data-schedule-calendar-event-item-link>
+                    <SeaLink
+                        className={cn(
+                            "group flex",
+                            showAll && event.isOnList && "pl-1.5 border-l-2 border-[--brand] rounded-l-sm",
+                        )}
+                        href={event.href}
+                        data-schedule-calendar-event-item-link
+                    >
                         <div className="flex-auto truncate" data-schedule-calendar-event-item-content>
                             <p
                                 className={cn(
@@ -563,8 +590,9 @@ function CalendarEventList({ events, onEventHover }: CalendarEventListProps) {
                                         className="size-2 lg:size-3 text-[--muted] flex-none group-hover:scale-[1.15] transition-transform duration-300"
                                         data-schedule-calendar-event-item-watched-icon
                                     />}
-                                <span className="truncate" data-schedule-calendar-event-item-name>
+                                <span className="truncate inline-flex items-center gap-1" data-schedule-calendar-event-item-name>
                                     {event.name}
+                                    {event.isAdult && <AdultContentBadge />}
                                 </span>
                                 {/*<span className="truncate hidden 2xl:inline-block" data-schedule-calendar-event-item-name>*/}
                                 {/*    {event.name.length > 40 ? event.name.slice(0, 37) + "..." : event.name}*/}
@@ -598,7 +626,14 @@ function CalendarEventList({ events, onEventHover }: CalendarEventListProps) {
                     <ol className="text-sm max-w-full block space-y-2" data-schedule-calendar-event-list-more>
                         {events.slice(MAX_EVENT_COUNT).map((event) => (
                             <li key={event.id} data-schedule-calendar-event-list-item-more>
-                                <SeaLink className="group flex gap-2" href={event.href} data-schedule-calendar-event-list-item-more-link>
+                                <SeaLink
+                                    className={cn(
+                                        "group flex gap-2",
+                                        showAll && event.isOnList && "pl-1.5 border-l-2 border-[--brand] rounded-l-sm",
+                                    )}
+                                    href={event.href}
+                                    data-schedule-calendar-event-list-item-more-link
+                                >
                                     <p
                                         className={cn("flex-auto truncate font-medium text-gray-100 flex items-center gap-2",
                                             event.isWatched && calendarParams.indicateWatchedEpisodes
@@ -610,7 +645,10 @@ function CalendarEventList({ events, onEventHover }: CalendarEventListProps) {
                                             <FaFlag className="size-3 text-[--blue] flex-none group-hover:scale-[1.15] transition-transform duration-300" />}
                                         {event.isWatched && calendarParams.indicateWatchedEpisodes &&
                                             <FaCheck className="size-3 text-[--muted] flex-none group-hover:scale-[1.15] transition-transform duration-300" />}
-                                        {event.name}
+                                        <span className="inline-flex items-center gap-1">
+                                            {event.name}
+                                            {event.isAdult && <AdultContentBadge />}
+                                        </span>
                                     </p>
                                     <p className="flex-none" data-schedule-calendar-event-list-item-more-episode>
                                         Ep. {event.episode}
@@ -632,7 +670,7 @@ function CalendarEventList({ events, onEventHover }: CalendarEventListProps) {
     )
 }
 
-function CalendarDay({ day, index }: { day: any, index: number }) {
+function CalendarDay({ day, index, showAll }: { day: any, index: number, showAll?: boolean }) {
     const [hoveredEventId, setHoveredEventId] = React.useState<string | null>(null)
 
     const hoveredEvent = React.useMemo(() => {
@@ -676,11 +714,14 @@ function CalendarDay({ day, index }: { day: any, index: number }) {
                         >
                             <p className="text-xs font-medium text-gray-100 line-clamp-2 leading-tight" data-schedule-calendar-day-hovered-event-text>
                                 <span
-                                    className="text-[--muted] font-normal"
+                                    className="inline-flex items-center gap-1 text-[--muted] font-normal"
                                     data-schedule-calendar-day-hovered-event-text-name
-                                >{hoveredEvent.name.slice(0, 28) + (hoveredEvent.name.length > 28
-                                    ? "..."
-                                    : "")}</span>
+                                >
+                                    {hoveredEvent.name.slice(0, 28) + (hoveredEvent.name.length > 28
+                                        ? "..."
+                                        : "")}
+                                    {hoveredEvent.isAdult && <AdultContentBadge />}
+                                </span>
                                 {hoveredEvent.isSeasonFinale &&
                                     <span className="text-[--blue] ml-1" data-schedule-calendar-day-hovered-event-text-finale>Finale</span>}
                                 <span className="ml-1" data-schedule-calendar-day-hovered-event-text-episode> Ep. {hoveredEvent.episode}</span>
@@ -707,6 +748,7 @@ function CalendarDay({ day, index }: { day: any, index: number }) {
                 <CalendarEventList
                     events={day.events}
                     onEventHover={setHoveredEventId}
+                    showAll={showAll}
                 />
             )}
         </div>

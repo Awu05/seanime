@@ -1,0 +1,50 @@
+services:
+  seanime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: rootless
+    container_name: seanime
+    environment:
+      # qBittorrent settings
+      - QBIT_WEBUI_PORT=8081
+      - QBIT_USERNAME=admin
+      - QBIT_PASSWORD=adminadmin
+      # Multi-user auth (admin created on first start)
+      - SEANIME_ADMIN_USERNAME=admin
+      - SEANIME_ADMIN_PASSWORD=changeme
+      - SEANIME_INSTANCE_ACCESS_CODE=1234
+    ports:
+      - "3211:43211" # Seanime Web UI
+      - "8081:8081" # qBittorrent Web UI
+    user: "1000:1000"
+    volumes:
+      - ./seanime-data/config:/home/seanime/.config
+      - ./seanime-data/anime:/anime
+      - ./seanime-data/downloads:/downloads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:43211"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+  stremthru:
+    image: muniftanjim/stremthru
+    container_name: stremthru
+    environment:
+      - STREMTHRU_BASE_URL=http://stremthru:8080
+      # StremThru credentials (username:password)
+      - STREMTHRU_AUTH=${STREMTHRU_USER}:${STREMTHRU_PASSWORD}
+      # Link a debrid store (username:store_name:store_token)
+      # store_name options: alldebrid, debridlink, easydebrid, offcloud, pikpak, premiumize, realdebrid, torbox
+      - STREMTHRU_STORE_AUTH=${STREMTHRU_STORE_AUTH_USERNAME}:${STREMTHRU_STORE_AUTH_STORE}:${STREMTHRU_STORE_AUTH_API_KEY}
+    ports:
+      - "8080:8080" # StremThru API
+    volumes:
+      - ./seanime-data/stremthru-data:/app/data
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1

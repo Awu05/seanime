@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/platforms/anilist_platform"
 	"seanime/internal/util"
@@ -53,21 +54,53 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 	}
 
 	// Save account data in database
-	_, err = h.App.Database.UpsertAccount(&models.Account{
-		BaseModel: models.BaseModel{
-			ID:        1,
-			UpdatedAt: time.Now(),
-		},
-		Username: getViewer.Viewer.Name,
-		Token:    b.Token,
-		Viewer:   bytes,
-	})
+	profileID := core.GetProfileIDFromContext(c)
+
+	if profileID == "" {
+		// Legacy single-user mode
+		_, err = h.App.Database.UpsertAccount(&models.Account{
+			BaseModel: models.BaseModel{
+				ID:        1,
+				UpdatedAt: time.Now(),
+			},
+			Username: getViewer.Viewer.Name,
+			Token:    b.Token,
+			Viewer:   bytes,
+		})
+	} else {
+		// Multi-user: save token for this profile
+		_, err = h.App.Database.UpsertAccountForProfile(
+			profileID,
+			getViewer.Viewer.Name,
+			b.Token,
+			bytes,
+		)
+	}
 
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
+	// Sync the adult content setting from AniList
+	if getViewer.Viewer.Options != nil && getViewer.Viewer.Options.GetDisplayAdultContent() != nil {
+		anilistAdult := *getViewer.Viewer.Options.GetDisplayAdultContent()
+		currentSettings, settingsErr := h.getSettings(c)
+		if settingsErr == nil && currentSettings.Anilist != nil && currentSettings.Anilist.EnableAdultContent != anilistAdult {
+			currentSettings.Anilist.EnableAdultContent = anilistAdult
+			if h.App.MultiUserEnabled && profileID != "" {
+				_, _ = h.App.Database.UpsertSettingsForProfile(profileID, currentSettings)
+			} else {
+				_, _ = h.App.Database.UpsertSettings(currentSettings)
+			}
+		}
+	}
+
 	h.App.Logger.Info().Msg("app: Authenticated to AniList")
+
+	// Invalidate the pool cache for this profile so it picks up the new token
+	if h.App.AnilistPool != nil && profileID != "" {
+		h.App.AnilistPool.InvalidateProfile(profileID)
+	}
 
 	// Update the platform
 	anilistPlatform := anilist_platform.NewAnilistPlatform(h.App.AnilistClientRef, h.App.ExtensionBankRef, h.App.Logger, h.App.Database, h.App.LogoutFromAnilist)
@@ -100,7 +133,16 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 //	@route /api/v1/auth/logout [POST]
 //	@returns handlers.Status
 func (h *Handler) HandleLogout(c echo.Context) error {
-	h.App.LogoutFromAnilist()
+	profileID := core.GetProfileIDFromContext(c)
+
+	if profileID != "" {
+		_ = h.App.Database.ClearAccountForProfile(profileID)
+		if h.App.AnilistPool != nil {
+			h.App.AnilistPool.InvalidateProfile(profileID)
+		}
+	} else {
+		h.App.LogoutFromAnilist()
+	}
 
 	status := h.NewStatus(c)
 	return h.RespondWithData(c, status)

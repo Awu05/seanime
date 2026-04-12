@@ -1,7 +1,9 @@
 package core
 
 import (
+	"os"
 	"seanime/internal/api/anilist"
+	"time"
 	"seanime/internal/continuity"
 	"seanime/internal/database/db"
 	"seanime/internal/database/db_bridge"
@@ -38,13 +40,26 @@ import (
 	"seanime/internal/videocore"
 
 	"github.com/cli/browser"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // initModulesOnce will initialize modules that need to persist.
 // This function is called once after the App instance is created.
 // The settings of these modules will be set/refreshed in InitOrRefreshModules.
 func (a *App) initModulesOnce() {
+
+	if a.StreamSessionManager == nil {
+		a.StreamSessionManager = NewStreamSessionManager(30 * time.Minute)
+		a.Cleanups = append(a.Cleanups, func() {
+			a.StreamSessionManager.Stop()
+		})
+	}
+
+	if a.AnilistPool == nil {
+		a.AnilistPool = NewAnilistClientPool(a)
+	}
 
 	a.LocalManager.SetRefreshAnilistCollectionsFunc(func() {
 		_, _ = a.RefreshAnimeCollection()
@@ -205,6 +220,7 @@ func (a *App) initModulesOnce() {
 			}
 			return qp
 		},
+		TranscodeRequester: &mediastreamTranscodeAdapter{repo: a.MediastreamRepository},
 	})
 
 	// +---------------------+
@@ -390,6 +406,47 @@ func (a *App) InitOrRefreshModules() {
 		shared_platform.ShouldCache.Store(!settings.Anilist.DisableCacheLayer)
 	}
 
+	// Initialize JWT secret if not set — load from DB or generate and persist
+	if a.JWTSecret == "" {
+		config, configErr := a.Database.GetInstanceConfig()
+		if configErr == nil && config.JWTSecret != "" {
+			a.JWTSecret = config.JWTSecret
+		} else {
+			secret, genErr := GenerateJWTSecret()
+			if genErr != nil {
+				a.Logger.Error().Err(genErr).Msg("app: Failed to generate JWT secret")
+			} else {
+				a.JWTSecret = secret
+				// Persist to DB — load existing config to avoid overwriting other fields
+				if config == nil {
+					config = &models.InstanceConfig{}
+				}
+				config.JWTSecret = secret
+				_, _ = a.Database.UpsertInstanceConfig(config)
+			}
+		}
+	}
+
+	// Bootstrap admin from environment variables (Docker)
+	if !a.IsDesktopSidecar {
+		adminExists, _ := a.Database.AdminExists()
+		if !adminExists {
+			adminUser := os.Getenv("SEANIME_ADMIN_USERNAME")
+			adminPass := os.Getenv("SEANIME_ADMIN_PASSWORD")
+			if adminUser != "" && adminPass != "" {
+				a.bootstrapAdminFromEnv(adminUser, adminPass, os.Getenv("SEANIME_INSTANCE_ACCESS_CODE"))
+			}
+		}
+		exists, _ := a.Database.AdminExists()
+		a.MultiUserEnabled = exists
+	} else {
+		exists, _ := a.Database.AdminExists()
+		a.MultiUserEnabled = exists
+		if !exists {
+			a.ensureDefaultProfile()
+		}
+	}
+
 	// +---------------------+
 	// |   Module settings   |
 	// +---------------------+
@@ -446,29 +503,49 @@ func (a *App) InitOrRefreshModules() {
 		a.MediaPlayer.Mpv = mpv.New(a.Logger, settings.MediaPlayer.MpvSocket, settings.MediaPlayer.MpvPath, settings.MediaPlayer.MpvArgs)
 		a.MediaPlayer.Iina = iina.New(a.Logger, settings.MediaPlayer.IinaSocket, settings.MediaPlayer.IinaPath, settings.MediaPlayer.IinaArgs)
 
-		// Set media player repository
-		a.MediaPlayerRepository = mediaplayer.NewRepository(&mediaplayer.NewRepositoryOptions{
-			Logger:            a.Logger,
-			Default:           settings.MediaPlayer.Default,
-			VLC:               a.MediaPlayer.VLC,
-			MpcHc:             a.MediaPlayer.MpcHc,
-			Mpv:               a.MediaPlayer.Mpv, // Socket
-			Iina:              a.MediaPlayer.Iina,
-			WSEventManager:    a.WSEventManager,
-			ContinuityManager: a.ContinuityManager,
-		})
+		// Atomically update shared state and propagate to all active sessions.
+		// Holding the session manager write lock serializes against concurrent session creation,
+		// so newly-created sessions observe either the full old state or the full new state.
+		a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+			// Set media player repository
+			a.MediaPlayerRepository = mediaplayer.NewRepository(&mediaplayer.NewRepositoryOptions{
+				Logger:            a.Logger,
+				Default:           settings.MediaPlayer.Default,
+				VLC:               a.MediaPlayer.VLC,
+				MpcHc:             a.MediaPlayer.MpcHc,
+				Mpv:               a.MediaPlayer.Mpv, // Socket
+				Iina:              a.MediaPlayer.Iina,
+				WSEventManager:    a.WSEventManager,
+				ContinuityManager: a.ContinuityManager,
+			})
 
-		a.PlaybackManager.SetMediaPlayerRepository(a.MediaPlayerRepository)
-		a.PlaybackManager.SetSettings(&playbackmanager.Settings{
-			AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
-		})
+			pmSettings := &playbackmanager.Settings{
+				AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
+			}
+			dsmSettings := &directstream.Settings{
+				AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
+				AutoUpdateProgress:  a.Settings.GetLibrary().AutoUpdateProgress,
+			}
 
-		a.DirectStreamManager.SetSettings(&directstream.Settings{
-			AutoPlayNextEpisode: a.Settings.GetLibrary().AutoPlayNextEpisode,
-			AutoUpdateProgress:  a.Settings.GetLibrary().AutoUpdateProgress,
-		})
+			a.PlaybackManager.SetMediaPlayerRepository(a.MediaPlayerRepository)
+			a.PlaybackManager.SetSettings(pmSettings)
+			a.DirectStreamManager.SetSettings(dsmSettings)
+			a.TorrentstreamRepository.SetMediaPlayerRepository(a.MediaPlayerRepository)
 
-		a.TorrentstreamRepository.SetMediaPlayerRepository(a.MediaPlayerRepository)
+			// Propagate to active per-profile stream sessions
+			for _, session := range sessions {
+				if session.PlaybackManager != nil {
+					session.PlaybackManager.SetMediaPlayerRepository(a.MediaPlayerRepository)
+					session.PlaybackManager.SetSettings(pmSettings)
+				}
+				if session.DirectStreamManager != nil {
+					session.DirectStreamManager.SetSettings(dsmSettings)
+				}
+				if session.TorrentStream != nil {
+					session.TorrentStream.SetMediaPlayerRepository(a.MediaPlayerRepository)
+				}
+			}
+		})
 
 		plugin.GlobalAppContext.SetModulesPartial(plugin.AppContextModules{
 			MediaPlayerRepository: a.MediaPlayerRepository,
@@ -477,8 +554,14 @@ func (a *App) InitOrRefreshModules() {
 		a.Logger.Warn().Msg("app: Did not initialize media player module, no settings found")
 	}
 
+	// Atomically update VideoCore settings and propagate to all active sessions.
 	if a.VideoCore != nil {
-		a.VideoCore.SetSettings(settings)
+		a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+			a.VideoCore.SetSettings(settings)
+			for _, session := range sessions {
+				session.VideoCore.SetSettings(settings)
+			}
+		})
 	}
 
 	// +---------------------+
@@ -562,9 +645,28 @@ func (a *App) InitOrRefreshModules() {
 	// |   Library Watcher   |
 	// +---------------------+
 
-	// Initialize library watcher
-	if settings.Library != nil && len(settings.Library.LibraryPath) > 0 {
-		go a.initLibraryWatcher(settings.Library.GetLibraryPaths())
+	// Initialize library watcher with paths from both settings and library_paths table
+	if settings.Library != nil && settings.Library.AutoScan {
+		watchPaths := settings.Library.GetLibraryPaths()
+
+		// Also include paths from the library_paths table
+		dbPaths, err := a.Database.GetAllLibraryPathStrings()
+		if err == nil && len(dbPaths) > 0 {
+			seen := make(map[string]bool)
+			for _, p := range watchPaths {
+				seen[p] = true
+			}
+			for _, p := range dbPaths {
+				if !seen[p] {
+					watchPaths = append(watchPaths, p)
+					seen[p] = true
+				}
+			}
+		}
+
+		if len(watchPaths) > 0 {
+			go a.initLibraryWatcher(watchPaths)
+		}
 	}
 
 	// +---------------------+
@@ -627,6 +729,7 @@ func (a *App) InitOrRefreshMediastreamSettings() {
 	}
 
 	a.MediastreamRepository.InitializeModules(settings, a.Config.Cache.Dir, a.Config.Cache.TranscodeDir)
+	a.MediastreamRepository.MarkSettingsDirty()
 
 	// Cleanup cache
 	go func() {
@@ -692,9 +795,18 @@ func (a *App) InitOrRefreshTorrentstreamSettings() {
 		a.TorrentstreamRepository.Shutdown()
 	})
 
-	// Set torrent streaming settings in secondary settings
-	// so the client can use them
-	a.SecondarySettings.Torrentstream = settings
+	// Atomically update secondary settings and propagate to all active sessions.
+	// Holding the session manager write lock serializes against concurrent session creation
+	// (which reads a.SecondarySettings.Torrentstream in the factory), so new sessions either
+	// see the old settings + get propagated the new ones, or observe the new settings directly.
+	a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+		a.SecondarySettings.Torrentstream = settings
+		for _, session := range sessions {
+			if session.TorrentStream != nil {
+				session.TorrentStream.SetSettings(settings, a.Config.Server.Host, a.Config.Server.Port)
+			}
+		}
+	})
 }
 
 func (a *App) InitOrRefreshDebridSettings() {
@@ -813,4 +925,96 @@ func (a *App) performActionsOnce() {
 		}
 	}()
 
+}
+
+func (a *App) bootstrapAdminFromEnv(username, password, accessCode string) {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to hash admin password from env")
+		return
+	}
+
+	profile, err := a.Database.CreateProfile(&models.Profile{
+		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+		Name:          username,
+		IsAdmin:       true,
+	})
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to create admin profile from env")
+		return
+	}
+
+	_, err = a.Database.CreateAdmin(&models.Admin{
+		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+		Username:      username,
+		PasswordHash:  string(passwordHash),
+		ProfileID:     profile.ID,
+	})
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to create admin from env")
+		return
+	}
+
+	// Clone global settings for the admin profile
+	_, _ = a.Database.CloneSettingsForProfile(profile.ID)
+	a.Database.CloneMediastreamSettingsForProfile(profile.ID)
+	a.Database.CloneTorrentstreamSettingsForProfile(profile.ID)
+	a.Database.CloneDebridSettingsForProfile(profile.ID)
+
+	if accessCode != "" {
+		codeHash, err := bcrypt.GenerateFromPassword([]byte(accessCode), bcrypt.DefaultCost)
+		if err == nil {
+			_, _ = a.Database.UpsertInstanceConfig(&models.InstanceConfig{
+				AccessCodeHash: string(codeHash),
+			})
+		}
+	}
+
+	a.Logger.Info().Str("username", username).Msg("app: Admin account bootstrapped from environment variables")
+}
+
+func (a *App) ensureDefaultProfile() {
+	count, _ := a.Database.CountProfiles()
+	if count > 0 {
+		return
+	}
+	profile, err := a.Database.CreateProfile(&models.Profile{
+		UUIDBaseModel: models.UUIDBaseModel{ID: uuid.New().String()},
+		Name:          "Default",
+		IsAdmin:       true,
+	})
+	if err != nil {
+		a.Logger.Error().Err(err).Msg("app: Failed to create default profile")
+		return
+	}
+	_, _ = a.Database.CloneSettingsForProfile(profile.ID)
+	a.Database.CloneMediastreamSettingsForProfile(profile.ID)
+	a.Database.CloneTorrentstreamSettingsForProfile(profile.ID)
+	a.Database.CloneDebridSettingsForProfile(profile.ID)
+}
+
+// mediastreamTranscodeAdapter adapts MediastreamRepository to the directstream.TranscodeRequester interface.
+type mediastreamTranscodeAdapter struct {
+	repo *mediastream.Repository
+}
+
+func (a *mediastreamTranscodeAdapter) RequestTranscodeStream(filepath string, clientId string) error {
+	_, err := a.repo.RequestTranscodeStream(filepath, clientId)
+	return err
+}
+
+func (a *mediastreamTranscodeAdapter) PreloadFirstSegments(filepath string, clientId string) {
+	a.repo.PreloadFirstSegments(filepath, clientId)
+}
+
+func (a *mediastreamTranscodeAdapter) NotifyDownloadComplete(remotePath string, localPath string, expectedSize int64) {
+	a.repo.NotifyDownloadComplete(remotePath, localPath, expectedSize)
+}
+
+func (a *mediastreamTranscodeAdapter) GetTranscodeDir() string {
+	return a.repo.GetTranscodeDir()
+}
+
+func (a *mediastreamTranscodeAdapter) ShutdownTranscodeStream(clientId string) {
+	a.repo.ShutdownTranscodeStream(clientId)
 }

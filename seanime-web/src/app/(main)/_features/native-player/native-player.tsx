@@ -172,6 +172,8 @@ export function NativePlayer() {
         if (videoElement) {
             log.info("Cleaning up media")
             videoElement.pause()
+            videoElement.removeAttribute("src")
+            videoElement.load() // Force the browser to release the media resource
         }
 
         setMiniPlayer(true)

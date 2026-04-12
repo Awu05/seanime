@@ -109,7 +109,7 @@ func (s *Nakama) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err error) 
 		id := uuid.New().String()
 
 		var entryListData *anime.EntryListData
-		if animeCollection, ok := s.manager.animeCollection.Get(); ok {
+		if animeCollection := s.manager.animeCollection.Load(); animeCollection != nil {
 			if listEntry, ok := animeCollection.GetListEntryFromAnimeId(s.media.ID); ok {
 				entryListData = anime.NewEntryListData(listEntry)
 			}
@@ -122,7 +122,7 @@ func (s *Nakama) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err error) 
 			StreamType:        s.Type(),
 			MimeType:          contentType,
 			StreamPath:        "",
-			StreamUrl:         "{{SERVER_URL}}/api/v1/directstream/stream?id=" + id + s.manager.GetHMACTokenQueryParam("/api/v1/directstream/stream", "&"),
+			StreamUrl:         "{{SERVER_URL}}/api/v1/directstream/stream?id=" + id + "&clientId=" + s.clientId + s.manager.GetHMACTokenQueryParam("/api/v1/directstream/stream", "&"),
 			ContentLength:     s.contentLength, // loaded by LoadContentType
 			MkvMetadata:       nil,
 			MkvMetadataParser: mo.None[*mkvparser.MetadataParser](),
@@ -169,7 +169,7 @@ func (s *Nakama) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err error) 
 }
 
 func (s *Nakama) GetAttachmentByName(filename string) (*mkvparser.AttachmentInfo, bool) {
-	return getAttachmentByName(s.manager.playbackCtx, s, filename)
+	return getAttachmentByName(s.streamCtx, s, filename)
 }
 
 func (s *Nakama) GetStreamHandler() http.Handler {
@@ -230,7 +230,7 @@ func (s *Nakama) GetStreamHandler() http.Handler {
 				return
 			}
 			if ra.Start < s.contentLength-1024*1024 {
-				go s.StartSubtitleStreamP(s, s.manager.playbackCtx, subReader, ra.Start, 0)
+				go s.StartSubtitleStreamP(s, s.streamCtx, subReader, ra.Start, 0)
 			}
 		}
 
@@ -353,7 +353,7 @@ func (s *Nakama) initializeStream() error {
 	s.logger.Debug().Msgf("directstream(nakama): Initializing FileStream for stream URL: %s", s.streamUrl)
 
 	// Create a file-backed stream with the known content length
-	cache, err := httputil.NewFileStream(s.manager.playbackCtx, s.logger, s.contentLength)
+	cache, err := httputil.NewFileStream(s.streamCtx, s.logger, s.contentLength)
 	if err != nil {
 		return fmt.Errorf("failed to create FileStream: %w", err)
 	}

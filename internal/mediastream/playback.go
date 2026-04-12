@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"seanime/internal/mediastream/videofile"
+	"strings"
 	"seanime/internal/util/result"
 
 	"github.com/rs/zerolog"
-	"github.com/samber/mo"
 )
 
 const (
@@ -20,10 +20,10 @@ type (
 	StreamType string
 
 	PlaybackManager struct {
-		logger                *zerolog.Logger
-		currentMediaContainer mo.Option[*MediaContainer] // The current media being played.
-		repository            *Repository
-		mediaContainers       *result.Map[string, *MediaContainer] // Temporary cache for the media containers.
+		logger           *zerolog.Logger
+		clientContainers *result.Map[string, *MediaContainer] // Per-client active media containers, keyed by clientId.
+		repository       *Repository
+		mediaContainers  *result.Map[string, *MediaContainer] // Cache for media containers, keyed by hash.
 	}
 
 	PlaybackState struct {
@@ -43,24 +43,27 @@ type (
 
 func NewPlaybackManager(repository *Repository) *PlaybackManager {
 	return &PlaybackManager{
-		logger:          repository.logger,
-		repository:      repository,
-		mediaContainers: result.NewMap[string, *MediaContainer](),
+		logger:           repository.logger,
+		repository:       repository,
+		clientContainers: result.NewMap[string, *MediaContainer](),
+		mediaContainers:  result.NewMap[string, *MediaContainer](),
 	}
 }
 
-func (p *PlaybackManager) KillPlayback() {
-	p.logger.Debug().Msg("mediastream: Killing playback")
-	if p.currentMediaContainer.IsPresent() {
-		p.currentMediaContainer = mo.None[*MediaContainer]()
-		p.logger.Trace().Msg("mediastream: Removed current media container")
-	}
+func (p *PlaybackManager) KillPlayback(clientId string) {
+	p.logger.Debug().Str("clientId", clientId).Msg("mediastream: Killing playback for client")
+	p.clientContainers.Delete(clientId)
+}
+
+func (p *PlaybackManager) KillAllPlayback() {
+	p.logger.Debug().Msg("mediastream: Killing all playback")
+	p.clientContainers.Clear()
 }
 
 // RequestPlayback is called by the frontend to stream a media file
-func (p *PlaybackManager) RequestPlayback(filepath string, streamType StreamType) (ret *MediaContainer, err error) {
+func (p *PlaybackManager) RequestPlayback(filepath string, streamType StreamType, clientId string) (ret *MediaContainer, err error) {
 
-	p.logger.Debug().Str("filepath", filepath).Any("type", streamType).Msg("mediastream: Requesting playback")
+	p.logger.Debug().Str("filepath", filepath).Str("clientId", clientId).Any("type", streamType).Msg("mediastream: Requesting playback")
 
 	// Create a new media container
 	ret, err = p.newMediaContainer(filepath, streamType)
@@ -70,12 +73,38 @@ func (p *PlaybackManager) RequestPlayback(filepath string, streamType StreamType
 		return nil, fmt.Errorf("failed to create media container: %v", err)
 	}
 
-	// Set the current media container.
-	p.currentMediaContainer = mo.Some(ret)
+	// Create a client-specific copy with clientId in the stream URL
+	clientContainer := *ret
+	if clientContainer.StreamType == StreamTypeTranscode && !strings.Contains(clientContainer.StreamUrl, "clientId=") {
+		if strings.Contains(clientContainer.StreamUrl, "?") {
+			clientContainer.StreamUrl += "&clientId=" + clientId
+		} else {
+			clientContainer.StreamUrl += "?clientId=" + clientId
+		}
+	}
 
-	p.logger.Info().Str("filepath", filepath).Msg("mediastream: Ready to play media")
+	// Store the media container for this client.
+	p.clientContainers.Set(clientId, &clientContainer)
 
+	p.logger.Info().Str("filepath", filepath).Str("clientId", clientId).Msg("mediastream: Ready to play media")
+
+	ret = &clientContainer
 	return
+}
+
+// GetMediaContainer returns the media container for the given client, or false if not found.
+func (p *PlaybackManager) GetMediaContainer(clientId string) (*MediaContainer, bool) {
+	return p.clientContainers.Get(clientId)
+}
+
+// HasActiveSessions returns true if any client has an active media container.
+func (p *PlaybackManager) HasActiveSessions() bool {
+	count := 0
+	p.clientContainers.Range(func(_ string, _ *MediaContainer) bool {
+		count++
+		return false // stop after first
+	})
+	return count > 0
 }
 
 // PreloadPlayback is called by the frontend to preload a media container so that the data is stored in advanced
@@ -134,16 +163,20 @@ func (p *PlaybackManager) newMediaContainer(filepath string, streamType StreamTy
 		return nil, err
 	}
 
-	p.logger.Debug().Msg("mediastream: Extracted media info, extracting attachments")
+	// Skip attachment extraction for remote URLs (too slow for large files)
+	if !strings.HasPrefix(filepath, "http://") && !strings.HasPrefix(filepath, "https://") {
+		p.logger.Debug().Msg("mediastream: Extracted media info, extracting attachments")
 
-	// Extract the attachments from the file.
-	err = videofile.ExtractAttachment(p.repository.settings.MustGet().FfmpegPath, filepath, hash, ret.MediaInfo, p.repository.cacheDir, p.logger)
-	if err != nil {
-		p.logger.Error().Err(err).Msg("mediastream: Failed to extract attachments")
-		return nil, err
+		err = videofile.ExtractAttachment(p.repository.settings.MustGet().FfmpegPath, filepath, hash, ret.MediaInfo, p.repository.cacheDir, p.logger)
+		if err != nil {
+			p.logger.Error().Err(err).Msg("mediastream: Failed to extract attachments")
+			return nil, err
+		}
+
+		p.logger.Debug().Msg("mediastream: Extracted attachments")
+	} else {
+		p.logger.Debug().Msg("mediastream: Skipping attachment extraction for remote URL")
 	}
-
-	p.logger.Debug().Msg("mediastream: Extracted attachments")
 
 	streamUrl := ""
 	switch streamType {

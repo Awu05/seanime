@@ -13,6 +13,14 @@ func (h *Handler) OptionalAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc
 			return next(c)
 		}
 
+		// Skip instance password check if multi-user JWT auth already validated
+		if h.App.MultiUserEnabled {
+			authScope := c.Get("authScope")
+			if authScope != nil && authScope != "" {
+				return next(c)
+			}
+		}
+
 		path := c.Request().URL.Path
 		passwordHash := c.Request().Header.Get("X-Seanime-Token")
 

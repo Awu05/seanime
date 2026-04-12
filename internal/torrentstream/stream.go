@@ -140,8 +140,15 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//
 	// Set current file & torrent
 	//
+	r.currentClientIdMu.Lock()
+	r.currentClientId = opts.ClientId
+	r.currentClientIdMu.Unlock()
+	// Legacy fields are guarded by c.mu — the monitor loop reads them under the same lock.
+	r.client.mu.Lock()
 	r.client.currentFile = mo.Some(torrentToStream.File)
 	r.client.currentTorrent = mo.Some(torrentToStream.Torrent)
+	r.client.mu.Unlock()
+	r.client.SetActiveStream(opts.ClientId, torrentToStream.Torrent, torrentToStream.File)
 
 	r.sendStateEvent(eventLoading, TLSStateSendingStreamToMediaPlayer)
 
@@ -353,34 +360,45 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	// This will stop the stream and close the server
 	// This also sends the eventTorrentStopped event
 	r.client.mu.Lock()
-	//r.client.stopCh = make(chan struct{})
-	r.client.repository.logger.Debug().Msg("torrentstream: Handling media player stopped event")
-	// This is to prevent the client from downloading the whole torrent when the user stops watching
-	// Also, the torrent might be a batch - so we don't want to download the whole thing
+	r.client.repository.logger.Debug().Msg("torrentstream: Stopping stream and freeing all resources")
+
+	// Drop all torrents — stop seeding, close connections, free disk
 	if r.client.currentTorrent.IsPresent() {
-		currentTorrent := r.client.currentTorrent.MustGet()
-		shouldDrop := r.client.currentTorrentStatus.ProgressPercentage < 70
-
-		// Don't drop if this is the prepared torrent
-		if r.preloadedStream.IsPresent() {
-			prepared := r.preloadedStream.MustGet()
-			if currentTorrent.InfoHash() == prepared.Torrent.InfoHash() {
-				r.client.repository.logger.Debug().Msg("torrentstream: Not dropping torrent as it's being prepared for next episode")
-				shouldDrop = false
-			}
-		}
-
-		if shouldDrop {
-			r.client.repository.logger.Debug().Msg("torrentstream: Dropping torrent, completion is less than 70%")
-			r.client.dropTorrents()
-		}
-		r.client.repository.logger.Debug().Msg("torrentstream: Resetting current torrent and status")
+		r.client.dropTorrents()
 	}
-	r.client.currentTorrent = mo.None[*torrent.Torrent]()        // Reset the current torrent
-	r.client.currentFile = mo.None[*torrent.File]()              // Reset the current file
-	r.client.currentTorrentStatus = TorrentStatus{}              // Reset the torrent status
-	r.client.repository.sendStateEvent(eventTorrentStopped, nil) // Send torrent stopped event
-	r.client.repository.mediaPlayerRepository.Stop()             // Stop the media player gracefully if it's running
+
+	// Remove this session's active stream
+	r.currentClientIdMu.RLock()
+	clientId := r.currentClientId
+	r.currentClientIdMu.RUnlock()
+	if clientId != "" {
+		r.client.RemoveActiveStream(clientId)
+	}
+
+	// Reset all torrent state
+	r.client.currentTorrent = mo.None[*torrent.Torrent]()
+	r.client.currentFile = mo.None[*torrent.File]()
+	r.client.currentTorrentStatus = TorrentStatus{}
+
+	// Clear preloaded/prepared stream
+	if r.preloadedStream.IsPresent() {
+		ps := r.preloadedStream.MustGet()
+		if ps.CancelFunc != nil {
+			ps.CancelFunc()
+		}
+		r.preloadedStream = mo.None[*preloadedStream]()
+	}
+
+	// Reset playback state
+	r.playback.currentVideoDuration = 0
+	if r.playback.mediaPlayerCtxCancelFunc != nil {
+		r.playback.mediaPlayerCtxCancelFunc()
+		r.playback.mediaPlayerCtxCancelFunc = nil
+	}
+
+	// Send stopped event and stop media player
+	r.client.repository.sendStateEvent(eventTorrentStopped, nil)
+	r.client.repository.mediaPlayerRepository.Stop()
 	r.client.mu.Unlock()
 
 	if len(fromNativePlayer) == 0 || fromNativePlayer[0] == false {
@@ -391,7 +409,7 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 		}()
 	}
 
-	r.logger.Info().Msg("torrentstream: Stream stopped")
+	r.logger.Info().Msg("torrentstream: Stream stopped, all resources freed")
 
 	return nil
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (r *Repository) ServeEchoExtractedSubtitles(c echo.Context) error {
+func (r *Repository) ServeEchoExtractedSubtitles(c echo.Context, clientId string) error {
 
 	if !r.IsInitialized() {
 		r.wsEventManager.SendEvent(events.MediastreamShutdownStream, "Module not initialized")
@@ -26,7 +26,7 @@ func (r *Repository) ServeEchoExtractedSubtitles(c echo.Context) error {
 	subFilePath := c.Param("*")
 
 	// Get current media
-	mediaContainer, found := r.playbackManager.currentMediaContainer.Get()
+	mediaContainer, found := r.playbackManager.GetMediaContainer(clientId)
 	if !found {
 		return errors.New("no file has been loaded")
 	}
@@ -42,7 +42,7 @@ func (r *Repository) ServeEchoExtractedSubtitles(c echo.Context) error {
 	return c.File(filepath.Join(retPath, subFilePath))
 }
 
-func (r *Repository) ServeEchoExtractedAttachments(c echo.Context) error {
+func (r *Repository) ServeEchoExtractedAttachments(c echo.Context, clientId string) error {
 	if !r.IsInitialized() {
 		r.wsEventManager.SendEvent(events.MediastreamShutdownStream, "Module not initialized")
 		return errors.New("module not initialized")
@@ -57,7 +57,7 @@ func (r *Repository) ServeEchoExtractedAttachments(c echo.Context) error {
 	subFilePath := c.Param("*")
 
 	// Get current media
-	mediaContainer, found := r.playbackManager.currentMediaContainer.Get()
+	mediaContainer, found := r.playbackManager.GetMediaContainer(clientId)
 	if !found {
 		return errors.New("no file has been loaded")
 	}

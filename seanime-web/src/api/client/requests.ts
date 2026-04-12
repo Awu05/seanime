@@ -150,9 +150,11 @@ export function useServerQuery<R, V = any>(
 
     useEffect(() => {
         if (!muteError && props.isError) {
-            if (props.error?.response?.data?.error === "UNAUTHENTICATED" && pathname !== "/public/auth") {
+            if (props.error?.response?.data?.error === "UNAUTHENTICATED" &&
+                !pathname.startsWith("/login") && !pathname.startsWith("/access") &&
+                !pathname.startsWith("/profiles") && !pathname.startsWith("/setup")) {
                 setPassword(undefined)
-                window.location.href = "/public/auth"
+                window.location.href = "/login"
                 return
             }
             console.log("Server error", props.error)

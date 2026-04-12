@@ -26,8 +26,75 @@ type FileStream struct {
 	Info      *videofile.MediaInfo               // The media information of the file.
 	videos    *result.Map[Quality, *VideoStream] // A map of video streams.
 	audios    *result.Map[int32, *AudioStream]   // A map of audio streams.
-	logger    *zerolog.Logger
-	settings  *Settings
+	logger      *zerolog.Logger
+	settings    *Settings
+	localPathMu  sync.RWMutex
+	localPath    string
+	expectedSize int64 // total file size, used to check partial download coverage
+}
+
+// SetLocalPath sets a local file path for ffmpeg to use instead of the remote URL.
+// expectedSize is the total file size — used to determine if a seek position is within the downloaded range.
+// Pass 0 if the file is already fully downloaded.
+func (fs *FileStream) SetLocalPath(path string, expectedSize int64) {
+	fs.localPathMu.Lock()
+	defer fs.localPathMu.Unlock()
+	fs.localPath = path
+	fs.expectedSize = expectedSize
+	fs.logger.Info().Str("localPath", path).Int64("expectedSize", expectedSize).Msg("filestream: Local path set, new encoder heads will use local file")
+}
+
+// GetInputPath returns the best input path for ffmpeg at the given seek time.
+// If a local file exists and covers the seek position, it returns the local path.
+// Otherwise it returns the remote URL.
+func (fs *FileStream) GetInputPath(seekTime float64) string {
+	fs.localPathMu.RLock()
+	localPath := fs.localPath
+	expectedSize := fs.expectedSize
+	fs.localPathMu.RUnlock()
+
+	if localPath == "" {
+		return fs.Path
+	}
+
+	// If no expected size set, assume file is complete
+	if expectedSize <= 0 {
+		return localPath
+	}
+
+	// Check if the seek position is within the downloaded range
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return fs.Path
+	}
+
+	fileSize := info.Size()
+	if fileSize >= expectedSize {
+		return localPath // fully downloaded
+	}
+
+	// Estimate whether the local file covers the seek position
+	duration := float64(fs.Info.Duration)
+	if duration <= 0 {
+		return fs.Path
+	}
+	downloadedFraction := float64(fileSize) / float64(expectedSize)
+	seekFraction := seekTime / duration
+
+	// Use local file only if the seek position is safely within the downloaded range (2% buffer)
+	if seekFraction < downloadedFraction-0.02 {
+		return localPath
+	}
+
+	fs.logger.Debug().
+		Float64("seekTime", seekTime).
+		Float64("downloadedPct", downloadedFraction*100).
+		Msg("filestream: Seek position beyond downloaded range, using remote URL")
+	return fs.Path
+}
+
+func isRemoteURL(path string) bool {
+	return strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://")
 }
 
 // NewFileStream creates a new FileStream.
@@ -48,11 +115,19 @@ func NewFileStream(
 		Info:     mediaInfo,
 	}
 
-	ret.ready.Add(1)
-	go func() {
-		defer ret.ready.Done()
-		ret.Keyframes = GetKeyframes(path, sha, logger, settings)
-	}()
+	// Use estimated keyframes for remote URLs to skip the slow 10-60s keyframe extraction.
+	// Interval must be large enough to guarantee at least one real keyframe per segment —
+	// high-quality encodes can have keyframe intervals of 10-30 seconds.
+	if isRemoteURL(path) && mediaInfo.Duration > 0 {
+		logger.Info().Float64("duration", float64(mediaInfo.Duration)).Msg("filestream: Using estimated keyframes for remote URL (fast start)")
+		ret.Keyframes = GetEstimatedKeyframes(float64(mediaInfo.Duration), 10.0, sha)
+	} else {
+		ret.ready.Add(1)
+		go func() {
+			defer ret.ready.Done()
+			ret.Keyframes = GetKeyframes(path, sha, logger, settings)
+		}()
+	}
 
 	return ret
 }
@@ -172,16 +247,10 @@ func (fs *FileStream) getVideoStream(quality Quality) *VideoStream {
 }
 
 // GetVideoSegment gets a segment of a video stream of a specific quality.
-//func (fs *FileStream) GetVideoSegment(quality Quality, segment int32) (string, error) {
-//	stream := fs.getVideoStream(quality)
-//	return stream.GetSegment(segment)
-//}
-
-// GetVideoSegment gets a segment of a video stream of a specific quality.
 func (fs *FileStream) GetVideoSegment(quality Quality, segment int32) (string, error) {
 	streamLogger.Debug().Msgf("filestream: Retrieving video segment %d (%s)", segment, quality)
 	// Debug
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*65)
 	defer cancel()
 	debugStreamRequest(fmt.Sprintf("video %s, segment %d", quality, segment), ctx)
 

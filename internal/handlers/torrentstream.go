@@ -5,6 +5,7 @@ import (
 	"os"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/events"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
@@ -20,8 +21,8 @@ import (
 //	@returns models.TorrentstreamSettings
 //	@route /api/v1/torrentstream/settings [GET]
 func (h *Handler) HandleGetTorrentstreamSettings(c echo.Context) error {
-	torrentstreamSettings, found := h.App.Database.GetTorrentstreamSettings()
-	if !found {
+	torrentstreamSettings := h.getTorrentstreamSettings(c)
+	if torrentstreamSettings == nil {
 		return h.RespondWithError(c, errors.New("torrent streaming settings not found"))
 	}
 
@@ -37,6 +38,8 @@ func (h *Handler) HandleGetTorrentstreamSettings(c echo.Context) error {
 //	@route /api/v1/torrentstream/settings [PATCH]
 func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	type body struct {
 		Settings models.TorrentstreamSettings `json:"settings"`
 	}
@@ -51,17 +54,24 @@ func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 		dir, err := os.Stat(b.Settings.DownloadDir)
 		if err != nil {
 			h.App.Logger.Error().Err(err).Msgf("torrentstream: Download directory %s does not exist", b.Settings.DownloadDir)
-			h.App.WSEventManager.SendEvent(events.ErrorToast, "Download directory does not exist")
+			h.App.WSEventManager.SendToProfile(profileID, events.ErrorToast, "Download directory does not exist")
 			b.Settings.DownloadDir = ""
 		}
 		if !dir.IsDir() {
 			h.App.Logger.Error().Msgf("torrentstream: Download directory %s is not a directory", b.Settings.DownloadDir)
-			h.App.WSEventManager.SendEvent(events.ErrorToast, "Download directory is not a directory")
+			h.App.WSEventManager.SendToProfile(profileID, events.ErrorToast, "Download directory is not a directory")
 			b.Settings.DownloadDir = ""
 		}
 	}
 
-	settings, err := h.App.Database.UpsertTorrentstreamSettings(&b.Settings)
+	var settings *models.TorrentstreamSettings
+	var err error
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertTorrentstreamSettingsForProfile(profileID, &b.Settings)
+	} else {
+		b.Settings.BaseModel = models.BaseModel{ID: 1}
+		settings, err = h.App.Database.UpsertTorrentstreamSettings(&b.Settings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -105,7 +115,9 @@ func (h *Handler) HandleGetTorrentstreamTorrentFilePreviews(c echo.Context) erro
 		absoluteOffset = animeMetadata.GetOffset()
 	}
 
-	files, err := h.App.TorrentstreamRepository.GetTorrentFilePreviewsFromManualSelection(&torrentstream.GetTorrentFilePreviewsOptions{
+	session := h.getStreamSession(c)
+
+	files, err := session.TorrentStream.GetTorrentFilePreviewsFromManualSelection(&torrentstream.GetTorrentFilePreviewsOptions{
 		Torrent:        b.Torrent,
 		Magnet:         magnet,
 		EpisodeNumber:  b.EpisodeNumber,
@@ -161,13 +173,15 @@ func (h *Handler) HandleTorrentstreamStartStream(c echo.Context) error {
 		BatchEpisodeFiles: b.BatchEpisodeFiles,
 	}
 
+	session := h.getStreamSession(c)
+
 	if !b.Preload {
-		err := h.App.TorrentstreamRepository.StartStream(c.Request().Context(), opts)
+		err := session.TorrentStream.StartStream(c.Request().Context(), opts)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
 	} else {
-		err := h.App.TorrentstreamRepository.PreloadStream(c.Request().Context(), opts)
+		err := session.TorrentStream.PreloadStream(c.Request().Context(), opts)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
@@ -184,8 +198,9 @@ func (h *Handler) HandleTorrentstreamStartStream(c echo.Context) error {
 //	@returns bool
 //	@route /api/v1/torrentstream/stop [POST]
 func (h *Handler) HandleTorrentstreamStopStream(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.TorrentstreamRepository.StopStream()
+	err := session.TorrentStream.StopStream()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -201,8 +216,9 @@ func (h *Handler) HandleTorrentstreamStopStream(c echo.Context) error {
 //	@returns bool
 //	@route /api/v1/torrentstream/drop [POST]
 func (h *Handler) HandleTorrentstreamDropTorrent(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.TorrentstreamRepository.DropTorrent()
+	err := session.TorrentStream.DropTorrent()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -225,12 +241,15 @@ func (h *Handler) HandleGetTorrentstreamBatchHistory(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	ret := h.App.TorrentstreamRepository.GetBatchHistory(b.MediaID)
+	session := h.getStreamSession(c)
+
+	ret := session.TorrentStream.GetBatchHistory(b.MediaID)
 	return h.RespondWithData(c, ret)
 }
 
 // route /api/v1/torrentstream/stream/*
 func (h *Handler) HandleTorrentstreamServeStream(c echo.Context) error {
-	h.App.TorrentstreamRepository.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
+	session := h.getStreamSession(c)
+	session.TorrentStream.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
 	return nil
 }

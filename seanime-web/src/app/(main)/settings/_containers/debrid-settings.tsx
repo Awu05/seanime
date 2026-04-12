@@ -17,6 +17,9 @@ const debridSettingsSchema = defineSchema(({ z }) => z.object({
     enabled: z.boolean().default(false),
     provider: z.string().default(""),
     apiKey: z.string().optional().default(""),
+    apiUrl: z.string().optional().default(""),
+    storeName: z.string().optional().default(""),
+    storeApiKey: z.string().optional().default(""),
     includeDebridStreamInLibrary: z.boolean().default(false),
     streamAutoSelect: z.boolean().default(false),
     streamPreferredResolution: z.string(),
@@ -56,13 +59,14 @@ export function DebridSettings(props: DebridSettingsProps) {
                 onSubmit={data => {
                     if (settings) {
                         mutate({
-                                settings: {
-                                    ...settings,
-                                    ...data,
-                                    provider: data.provider === "-" ? "" : data.provider,
-                                    streamPreferredResolution: data.streamPreferredResolution === "-" ? "" : data.streamPreferredResolution,
-                                },
+                            settings: {
+                                ...settings,
+                                ...data,
+                                provider: data.provider === "-" ? "" : data.provider,
+                                storeName: data.storeName === "-" ? "" : data.storeName,
+                                streamPreferredResolution: data.streamPreferredResolution === "-" ? "" : data.streamPreferredResolution,
                             },
+                        },
                             {
                                 onSuccess: () => {
                                     formRef.current?.reset(formRef.current.getValues())
@@ -76,6 +80,9 @@ export function DebridSettings(props: DebridSettingsProps) {
                     enabled: settings?.enabled,
                     provider: settings?.provider || "-",
                     apiKey: settings?.apiKey,
+                    apiUrl: settings?.apiUrl || "",
+                    storeName: settings?.storeName || "-",
+                    storeApiKey: settings?.storeApiKey || "",
                     includeDebridStreamInLibrary: settings?.includeDebridStreamInLibrary,
                     streamAutoSelect: settings?.streamAutoSelect ?? false,
                     streamPreferredResolution: settings?.streamPreferredResolution || "-",
@@ -97,9 +104,9 @@ export function DebridSettings(props: DebridSettingsProps) {
                                     title="Auto Downloader not using Debrid"
                                     description={<p>
                                         Auto Downloader is enabled but not using Debrid. Change the <SeaLink
-                                        href="/auto-downloader"
-                                        className="underline"
-                                    >Auto Downloader settings</SeaLink> to use your Debrid service.
+                                            href="/auto-downloader"
+                                            className="underline"
+                                        >Auto Downloader settings</SeaLink> to use your Debrid service.
                                     </p>}
                                 />
                             )}
@@ -113,16 +120,62 @@ export function DebridSettings(props: DebridSettingsProps) {
                                     { label: "TorBox", value: "torbox" },
                                     { label: "Real-Debrid", value: "realdebrid" },
                                     { label: "AllDebrid", value: "alldebrid" },
+                                    { label: "StremThru", value: "stremthru" },
                                 ]}
                                 name="provider"
                                 label="Provider"
                             />
 
-                            <Field.Text
-                                name="apiKey"
-                                label="API Key"
-                                type="password"
-                            />
+                            {f.watch("provider") === "stremthru" && (
+                                <>
+                                    <Field.Text
+                                        name="apiUrl"
+                                        label="StremThru URL"
+                                        placeholder="http://stremthru:8080"
+                                        help="The base URL of your StremThru instance. Use the Docker service name if running in the same compose stack."
+                                    />
+                                    <Field.Text
+                                        name="apiKey"
+                                        label="StremThru Credentials"
+                                        type="password"
+                                        placeholder="username:password"
+                                        help="The credentials set in STREMTHRU_AUTH (e.g. username:password)."
+                                    />
+                                    <Field.Select
+                                        name="storeName"
+                                        label="Debrid Store"
+                                        help="Select the debrid store to use. Leave as Default if you only have one store configured."
+                                        options={[
+                                            { label: "Default", value: "-" },
+                                            { label: "AllDebrid", value: "alldebrid" },
+                                            { label: "Debrid-Link", value: "debridlink" },
+                                            { label: "EasyDebrid", value: "easydebrid" },
+                                            { label: "Offcloud", value: "offcloud" },
+                                            { label: "PikPak", value: "pikpak" },
+                                            { label: "Premiumize", value: "premiumize" },
+                                            { label: "Real-Debrid", value: "realdebrid" },
+                                            { label: "TorBox", value: "torbox" },
+                                        ]}
+                                    />
+                                    {f.watch("storeName") !== "-" && (
+                                        <Field.Text
+                                            name="storeApiKey"
+                                            label="Store API Key"
+                                            type="password"
+                                            placeholder="Your debrid service API key"
+                                            help="Required for public StremThru instances. Your debrid provider's API key (e.g. TorBox API key). Leave blank for self-hosted instances where the store auth is configured server-side."
+                                        />
+                                    )}
+                                </>
+                            )}
+
+                            {f.watch("provider") !== "stremthru" && (
+                                <Field.Text
+                                    name="apiKey"
+                                    label="API Key"
+                                    type="password"
+                                />
+                            )}
                         </SettingsCard>
 
                         <SettingsPageHeader

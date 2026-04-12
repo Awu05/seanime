@@ -49,7 +49,9 @@ type (
 		MediaPlayerRepository *mediaplayer.Repository // MediaPlayerRepository is used to control the media player
 		continuityManager     *continuity.Manager
 
-		settings *Settings
+		// settings is read on every playback event, so it uses atomic.Pointer for lock-free reads.
+		// Always non-nil after construction.
+		settings atomic.Pointer[Settings]
 
 		discordPresence            *discordrpc_presence.Presence     // DiscordPresence is used to update the user's Discord presence
 		mediaPlayerRepoSubscriber  *mediaplayer.RepositorySubscriber // Used to listen for media player events
@@ -95,8 +97,10 @@ type (
 		currentManualTrackingState  mo.Option[*ManualTrackingState]
 		manualTrackingWg            sync.WaitGroup
 
-		isOfflineRef    *util.Ref[bool]
-		animeCollection mo.Option[*anilist.AnimeCollection]
+		isOfflineRef *util.Ref[bool]
+		// animeCollection is read on every playback event and from background goroutines.
+		// It uses atomic.Pointer for lock-free reads. nil means absent.
+		animeCollection atomic.Pointer[anilist.AnimeCollection]
 
 		playbackStatusSubscribers *result.Map[string, *PlaybackStatusSubscriber]
 
@@ -210,7 +214,6 @@ func New(opts *NewPlaybackManagerOptions) *PlaybackManager {
 	pm := &PlaybackManager{
 		Logger:                       opts.Logger,
 		Database:                     opts.Database,
-		settings:                     &Settings{},
 		discordPresence:              opts.DiscordPresence,
 		wsEventManager:               opts.WSEventManager,
 		platformRef:                  opts.PlatformRef,
@@ -225,7 +228,6 @@ func New(opts *NewPlaybackManagerOptions) *PlaybackManager {
 		currentStreamEpisode:         mo.None[*anime.Episode](),
 		currentStreamMedia:           mo.None[*anilist.BaseAnime](),
 		currentStreamAniDbEpisode:    mo.None[string](),
-		animeCollection:              mo.None[*anilist.AnimeCollection](),
 		currentManualTrackingState:   mo.None[*ManualTrackingState](),
 		currentLocalFile:             mo.None[*anime.LocalFile](),
 		currentLocalFileWrapperEntry: mo.None[*anime.LocalFileWrapperEntry](),
@@ -233,16 +235,17 @@ func New(opts *NewPlaybackManagerOptions) *PlaybackManager {
 		continuityManager:            opts.ContinuityManager,
 		playbackStatusSubscribers:    result.NewMap[string, *PlaybackStatusSubscriber](),
 	}
+	pm.settings.Store(&Settings{})
 
 	return pm
 }
 
 func (pm *PlaybackManager) SetAnimeCollection(ac *anilist.AnimeCollection) {
-	pm.animeCollection = mo.Some(ac)
+	pm.animeCollection.Store(ac)
 }
 
 func (pm *PlaybackManager) SetSettings(s *Settings) {
-	pm.settings = s
+	pm.settings.Store(s)
 }
 
 // SetMediaPlayerRepository sets the media player repository and starts listening to media player events
@@ -532,7 +535,7 @@ func (pm *PlaybackManager) AutoPlayNextEpisode() error {
 
 	pm.Logger.Trace().Msg("playback manager: Auto play request received")
 
-	if !pm.settings.AutoPlayNextEpisode {
+	if !pm.settings.Load().AutoPlayNextEpisode {
 		return nil
 	}
 
@@ -619,13 +622,13 @@ func (pm *PlaybackManager) SetPlaylistActive(isActive bool) {
 func (pm *PlaybackManager) checkOrLoadAnimeCollection() (err error) {
 	defer util.HandlePanicInModuleWithError("library/playbackmanager/checkOrLoadAnimeCollection", &err)
 
-	if pm.animeCollection.IsAbsent() {
+	if pm.animeCollection.Load() == nil {
 		// If the anime collection is not present, we retrieve it from the platform
 		collection, err := pm.platformRef.Get().GetAnimeCollection(context.Background(), false)
 		if err != nil {
 			return err
 		}
-		pm.animeCollection = mo.Some(collection)
+		pm.animeCollection.Store(collection)
 	}
 	return nil
 }

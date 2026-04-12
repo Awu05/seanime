@@ -114,6 +114,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	//
 	// Auth middleware
 	//
+	v1.Use(h.MultiUserAuthMiddleware)
 	v1.Use(h.OptionalAuthMiddleware)
 	v1.Use(h.FeaturesMiddleware)
 
@@ -145,6 +146,35 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	// Auth
 	v1.POST("/auth/login", h.HandleLogin)
 	v1.POST("/auth/logout", h.HandleLogout)
+
+	// Multi-user auth routes
+	v1.GET("/auth/setup-check", h.HandleSetupCheck)
+	v1.POST("/auth/setup", h.HandleAdminSetup)
+	v1.POST("/auth/admin-login", h.HandleAdminLogin)
+	v1.POST("/auth/access-code", h.HandleAccessCode)
+	v1.GET("/auth/profiles", h.HandleGetProfiles)
+	v1.POST("/auth/select-profile", h.HandleSelectProfile)
+	v1.POST("/auth/create-profile", h.HandleSelfCreateProfile)
+	v1.GET("/auth/me", h.HandleGetMe)
+	v1.POST("/auth/logout-session", h.HandleLogoutAuth)
+
+	// Admin profile management
+	v1.POST("/admin/profiles", h.HandleCreateProfile)
+	v1.DELETE("/admin/profiles/:id", h.HandleDeleteProfile)
+	v1.POST("/admin/profiles/delete", h.HandleDeleteProfile)
+	v1.POST("/admin/access-code", h.HandleSetAccessCode)
+	v1.POST("/profiles/:id/pin", h.HandleUpdateProfilePin)
+	v1.POST("/profiles/:id/name", h.HandleUpdateProfileName)
+
+	// Profile settings
+	v1.GET("/profile-settings", h.HandleGetProfileSettings)
+	v1.POST("/profile-settings", h.HandleSaveProfileSettings)
+	v1.GET("/profile-settings/merged", h.HandleGetMergedSettings)
+
+	// Library path management
+	v1.GET("/library-paths", h.HandleGetLibraryPaths)
+	v1.POST("/library-paths", h.HandleAddLibraryPath)
+	v1.DELETE("/library-paths/:id", h.HandleDeleteLibraryPath)
 
 	// Settings
 	v1.GET("/settings", h.HandleGetSettings)
@@ -202,6 +232,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1Anilist.DELETE("/list-entry", h.HandleDeleteAnilistListEntry)
 
 	v1Anilist.POST("/list-anime", h.HandleAnilistListAnime)
+	v1Anilist.POST("/season-anime", h.HandleAnilistListSeasonAnime)
 
 	v1Anilist.POST("/list-recent-anime", h.HandleAnilistListRecentAiringAnime)
 
@@ -445,8 +476,8 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	// Direct Stream
 	//
 	v1.POST("/directstream/play/localfile", h.HandleDirectstreamPlayLocalFile)
-	v1.GET("/directstream/stream", echo.WrapHandler(h.HandleDirectstreamGetStream()))
-	v1.HEAD("/directstream/stream", echo.WrapHandler(h.HandleDirectstreamGetStream()))
+	v1.GET("/directstream/stream", h.HandleDirectstreamGetStream)
+	v1.HEAD("/directstream/stream", h.HandleDirectstreamGetStream)
 	v1.GET("/directstream/att/*", h.HandleDirectstreamGetAttachments)
 	v1.POST("/directstream/subs/convert-subs", h.HandleDirectstreamConvertSubs)
 
@@ -534,6 +565,9 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.DELETE("/debrid/torrent", h.HandleDebridDeleteTorrent)
 	v1.GET("/debrid/torrents", h.HandleDebridGetTorrents)
 	v1.POST("/debrid/torrents/info", h.HandleDebridGetTorrentInfo)
+	v1.POST("/debrid/torrents/play", h.HandleDebridPlayTorrent)
+	v1.GET("/debrid/torrents/local-downloads", h.HandleDebridGetLocalDownloads)
+	v1.DELETE("/debrid/torrents/local-download", h.HandleDebridDeleteLocalDownload)
 	v1.POST("/debrid/torrents/file-previews", h.HandleDebridGetTorrentFilePreviews)
 	v1.POST("/debrid/stream/start", h.HandleDebridStartStream)
 	v1.POST("/debrid/stream/cancel", h.HandleDebridCancelStream)

@@ -66,7 +66,10 @@ Seanime is a **media server** with a **web interface** and **desktop app** for m
 - **Customizable UI**: Personalize the interface with color themes, background images, and layout options
 - **Discord Rich Presence**: Display your watching activity automatically
 - **Offline Mode**: Access your anime and manga library without an internet connection
-- **Schedule**: Track upcoming releases and missed episodes
+- **Schedule & Season Browser**: Track upcoming releases and missed episodes, browse current/previous/next season anime with filters and sorting
+- **Multi-User Profiles**: Netflix-style profiles with per-user AniList accounts, independent settings (library, torrent, debrid, mediastream), and concurrent streaming sessions
+- **Debrid Integration**: Stream via Real-Debrid, AllDebrid, TorBox, or StremThru with background downloading, estimated keyframes for fast HLS start, and local file switchover
+- **Docker Support**: Official Docker images (default, rootless, hardware-accelerated, CUDA) published to GitHub Container Registry
 
 ## Get started
 

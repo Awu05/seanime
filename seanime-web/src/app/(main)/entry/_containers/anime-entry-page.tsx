@@ -32,8 +32,12 @@ import { useUnmount } from "react-use"
 
 export const __anime_entryPageViewAtom = atom<"library" | "torrentstream" | "debridstream" | "onlinestream">("library")
 
+// Remembers the user's last manually-selected streaming mode across navigations
+const __preferredStreamingModeAtom = atom<"torrentstream" | "debridstream" | "onlinestream" | null>(null)
+
 export function useAnimeEntryPageView() {
     const [currentView, setView] = useAtom(__anime_entryPageViewAtom)
+    const [preferredMode, setPreferredMode] = useAtom(__preferredStreamingModeAtom)
 
     const isLibraryView = currentView === "library"
     const isTorrentStreamingView = currentView === "torrentstream"
@@ -41,20 +45,33 @@ export function useAnimeEntryPageView() {
     const isOnlineStreamingView = currentView === "onlinestream"
 
     function toggleTorrentStreamingView() {
-        setView(p => p === "torrentstream" ? "library" : "torrentstream")
+        setView(p => {
+            const next = p === "torrentstream" ? "library" : "torrentstream"
+            if (next !== "library") setPreferredMode("torrentstream")
+            return next
+        })
     }
 
     function toggleDebridStreamingView() {
-        setView(p => p === "debridstream" ? "library" : "debridstream")
+        setView(p => {
+            const next = p === "debridstream" ? "library" : "debridstream"
+            if (next !== "library") setPreferredMode("debridstream")
+            return next
+        })
     }
 
     function toggleOnlineStreamingView() {
-        setView(p => p === "onlinestream" ? "library" : "onlinestream")
+        setView(p => {
+            const next = p === "onlinestream" ? "library" : "onlinestream"
+            if (next !== "library") setPreferredMode("onlinestream")
+            return next
+        })
     }
 
     return {
         currentView,
         setView,
+        preferredMode,
         isLibraryView,
         isTorrentStreamingView,
         isDebridStreamingView,
@@ -78,7 +95,7 @@ export function AnimeEntryPage() {
 
     const vc_fullscreen = useAtomValue(vc_isFullscreen)
 
-    const { currentView, isLibraryView, setView } = useAnimeEntryPageView()
+    const { currentView, isLibraryView, setView, preferredMode } = useAnimeEntryPageView()
     const switchedView = React.useRef(false)
 
     React.useLayoutEffect(() => {
@@ -145,10 +162,18 @@ export function AnimeEntryPage() {
             !switchedView.current // View has not been switched yet
         ) {
             switchedView.current = true
-            if (serverStatus?.debridSettings?.enabled && serverStatus?.debridSettings?.includeDebridStreamInLibrary) {
+            // Use the user's last manually-selected streaming mode if it's still enabled
+            if (preferredMode === "torrentstream" && serverStatus?.torrentstreamSettings?.enabled && serverStatus?.torrentstreamSettings?.includeInLibrary) {
+                setView("torrentstream")
+            } else if (preferredMode === "debridstream" && serverStatus?.debridSettings?.enabled && serverStatus?.debridSettings?.includeDebridStreamInLibrary) {
                 setView("debridstream")
+            } else if (preferredMode === "onlinestream" && serverStatus?.settings?.library?.enableOnlinestream && serverStatus?.settings?.library?.includeOnlineStreamingInLibrary) {
+                setView("onlinestream")
+            // Otherwise fall back to first available
             } else if (serverStatus?.torrentstreamSettings?.enabled && serverStatus?.torrentstreamSettings?.includeInLibrary) {
                 setView("torrentstream")
+            } else if (serverStatus?.debridSettings?.enabled && serverStatus?.debridSettings?.includeDebridStreamInLibrary) {
+                setView("debridstream")
             } else if (serverStatus?.settings?.library?.enableOnlinestream && serverStatus?.settings?.library?.includeOnlineStreamingInLibrary) {
                 setView("onlinestream")
             }

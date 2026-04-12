@@ -128,17 +128,26 @@ func (a *App) RefreshAnimeCollection() (*anilist.AnimeCollection, error) {
 		return nil, err
 	}
 
-	// Save the collection to PlaybackManager
-	a.PlaybackManager.SetAnimeCollection(ret)
-
 	// Save the collection to AutoDownloader
 	a.AutoDownloader.SetAnimeCollection(ret)
 
 	// Save the collection to LocalManager
 	a.LocalManager.SetAnimeCollection(ret)
 
-	// Save the collection to DirectStreamManager
-	a.DirectStreamManager.SetAnimeCollection(ret)
+	// Atomically update the collection on the singleton streaming components and propagate
+	// to all active per-profile sessions, serializing against concurrent session creation.
+	a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+		a.PlaybackManager.SetAnimeCollection(ret)
+		a.DirectStreamManager.SetAnimeCollection(ret)
+		for _, session := range sessions {
+			if session.PlaybackManager != nil {
+				session.PlaybackManager.SetAnimeCollection(ret)
+			}
+			if session.DirectStreamManager != nil {
+				session.DirectStreamManager.SetAnimeCollection(ret)
+			}
+		}
+	})
 
 	// Save the collection to LibraryExplorer
 	a.LibraryExplorer.SetAnimeCollection(ret)

@@ -222,7 +222,7 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
                 <div className="space-y-4">
 
                     {/* Option Comparison */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Desktop Player Option */}
                         <div
                             className={cn(
@@ -243,6 +243,30 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
                                         <p className="font-medium">Desktop Media Player</p>
                                         <p className="text-xs text-gray-600 dark:text-gray-400">Opens streams in your system player with automatic
                                                                                                 tracking</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Native Player Option */}
+                        <div
+                            className={cn(
+                                "p-4 rounded-lg border cursor-pointer transition-all",
+                                torrentStreamingPlayback === PlaybackTorrentStreaming.NativePlayer
+                                    ? "border-[--brand] bg-brand-900/10"
+                                    : "border-gray-700 hover:border-gray-600",
+                            )}
+                            onClick={() => {
+                                setTorrentStreamingPlayback(PlaybackTorrentStreaming.NativePlayer)
+                                toast.success("Playback settings updated")
+                            }}
+                        >
+                            <div className="flex items-start gap-3">
+                                <MdOutlineBroadcastOnHome className="text-xl text-brand-600 dark:text-brand-400 mt-1" />
+                                <div className="flex-1 space-y-2">
+                                    <div>
+                                        <p className="font-medium">Built-in Player</p>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">Plays directly in the browser</p>
                                     </div>
                                 </div>
                             </div>

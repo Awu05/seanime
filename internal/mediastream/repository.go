@@ -26,8 +26,9 @@ type (
 		logger             *zerolog.Logger
 		wsEventManager     events.WSEventManagerInterface
 		fileCacher         *filecache.Cacher
-		reqMu              sync.Mutex
-		cacheDir           string // where attachments are stored
+		initMu        sync.Mutex // Protects transcoder initialization only
+		settingsDirty bool       // True when settings changed while sessions are active
+		cacheDir      string     // where attachments are stored
 		transcodeDir       string // where stream segments are stored
 	}
 
@@ -61,7 +62,7 @@ func (r *Repository) IsInitialized() bool {
 }
 
 func (r *Repository) OnCleanup() {
-
+	r.ShutdownAllTranscode()
 }
 
 func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cacheDir string, transcodeDir string) {
@@ -92,9 +93,16 @@ func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cac
 	// Set the optimizer settings
 	r.optimizer.SetLibraryDir(settings.PreTranscodeLibraryDir)
 
-	// Initialize the transcoder
-	if ok := r.initializeTranscoder(r.settings); ok {
+	// Initialize the transcoder only if not already running with active sessions
+	r.initMu.Lock()
+	if r.transcoder.IsPresent() && r.playbackManager.HasActiveSessions() {
+		// Transcoder is running with active sessions — don't destroy it, just mark settings dirty
+		r.settingsDirty = true
+		r.logger.Info().Msg("mediastream: Transcoder has active sessions, deferring reinitialization")
+	} else {
+		r.initializeTranscoder(r.settings)
 	}
+	r.initMu.Unlock()
 
 	r.logger.Info().Msg("mediastream: Module initialized")
 }
@@ -105,8 +113,8 @@ func (r *Repository) CacheWasCleared() {
 }
 
 func (r *Repository) ClearTranscodeDir() {
-	r.reqMu.Lock()
-	defer r.reqMu.Unlock()
+	r.initMu.Lock()
+	defer r.initMu.Unlock()
 
 	r.logger.Trace().Msg("mediastream: Clearing transcode directory")
 
@@ -129,6 +137,36 @@ func (r *Repository) ClearTranscodeDir() {
 	r.logger.Debug().Msg("mediastream: Transcode directory cleared")
 
 	r.playbackManager.mediaContainers.Clear()
+}
+
+// ShutdownAllTranscode destroys the transcoder and all sessions. Used on app shutdown or full reset.
+func (r *Repository) ShutdownAllTranscode() {
+	r.initMu.Lock()
+	defer r.initMu.Unlock()
+
+	if !r.IsInitialized() {
+		return
+	}
+
+	r.logger.Warn().Msg("mediastream: Shutting down all transcode sessions")
+
+	r.playbackManager.KillAllPlayback()
+
+	if r.transcoder.IsPresent() {
+		r.transcoder.MustGet().Destroy()
+		r.transcoder = mo.None[*transcoder.Transcoder]()
+	}
+
+	r.wsEventManager.SendEvent(events.MediastreamShutdownStream, nil)
+}
+
+// MarkSettingsDirty flags that settings have changed. The transcoder will be reinitialized
+// on the next new session when no active sessions exist.
+func (r *Repository) MarkSettingsDirty() {
+	r.initMu.Lock()
+	defer r.initMu.Unlock()
+	r.settingsDirty = true
+	r.logger.Info().Msg("mediastream: Settings marked dirty, will reinitialize transcoder when all sessions end")
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,7 +202,7 @@ func (r *Repository) RequestOptimizedStream(filepath string) (ret *MediaContaine
 		return nil, errors.New("module not initialized")
 	}
 
-	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeOptimized)
+	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeOptimized, "default")
 
 	return
 }
@@ -178,21 +216,24 @@ func (r *Repository) TranscoderIsInitialized() bool {
 }
 
 func (r *Repository) RequestTranscodeStream(filepath string, clientId string) (ret *MediaContainer, err error) {
-	r.reqMu.Lock()
-	defer r.reqMu.Unlock()
-
-	r.logger.Debug().Str("filepath", filepath).Msg("mediastream: Transcode stream requested")
+	r.logger.Debug().Str("filepath", filepath).Str("clientId", clientId).Msg("mediastream: Transcode stream requested")
 
 	if !r.IsInitialized() {
 		return nil, errors.New("module not initialized")
 	}
 
-	// Reinitialize the transcoder for each new transcode request
-	if ok := r.initializeTranscoder(r.settings); !ok {
-		return nil, errors.New("real-time transcoder not initialized, check your settings")
+	// Initialize or reinitialize the transcoder if needed
+	r.initMu.Lock()
+	if !r.transcoder.IsPresent() || (r.settingsDirty && !r.playbackManager.HasActiveSessions()) {
+		if ok := r.initializeTranscoder(r.settings); !ok {
+			r.initMu.Unlock()
+			return nil, errors.New("real-time transcoder not initialized, check your settings")
+		}
+		r.settingsDirty = false
 	}
+	r.initMu.Unlock()
 
-	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeTranscode)
+	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeTranscode, clientId)
 
 	return
 }
@@ -209,21 +250,55 @@ func (r *Repository) RequestPreloadTranscodeStream(filepath string) (err error) 
 	return
 }
 
+// PreloadFirstSegments triggers generation of the first video and audio segments
+// so they're ready by the time the player starts requesting them.
+func (r *Repository) PreloadFirstSegments(filepath string, clientId string) {
+	if !r.IsInitialized() || !r.transcoder.IsPresent() {
+		return
+	}
+
+	mc, ok := r.playbackManager.GetMediaContainer(clientId)
+	if !ok || mc.MediaInfo == nil {
+		return
+	}
+
+	tc := r.transcoder.MustGet()
+
+	// Trigger first video segment (original quality)
+	go func() {
+		_, err := tc.GetVideoSegment(filepath, mc.Hash, mc.MediaInfo, transcoder.Original, 0, clientId)
+		if err != nil {
+			r.logger.Warn().Err(err).Msg("mediastream: Failed to preload first video segment")
+		} else {
+			r.logger.Debug().Msg("mediastream: First video segment preloaded")
+		}
+	}()
+
+	// Trigger first audio segment (first audio track)
+	if len(mc.MediaInfo.Audios) > 0 {
+		go func() {
+			_, err := tc.GetAudioSegment(filepath, mc.Hash, mc.MediaInfo, int32(mc.MediaInfo.Audios[0].Index), 0, clientId)
+			if err != nil {
+				r.logger.Warn().Err(err).Msg("mediastream: Failed to preload first audio segment")
+			} else {
+				r.logger.Debug().Msg("mediastream: First audio segment preloaded")
+			}
+		}()
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Direct Play
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (r *Repository) RequestDirectPlay(filepath string, clientId string) (ret *MediaContainer, err error) {
-	r.reqMu.Lock()
-	defer r.reqMu.Unlock()
-
 	r.logger.Debug().Str("filepath", filepath).Msg("mediastream: Direct play requested")
 
 	if !r.IsInitialized() {
 		return nil, errors.New("module not initialized")
 	}
 
-	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeDirect)
+	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeDirect, clientId)
 
 	return
 }
@@ -238,6 +313,18 @@ func (r *Repository) RequestPreloadDirectPlay(filepath string) (err error) {
 	_, err = r.playbackManager.PreloadPlayback(filepath, StreamTypeDirect)
 
 	return
+}
+
+// NotifyDownloadComplete forwards download completion to the active transcoder.
+func (r *Repository) NotifyDownloadComplete(remotePath string, localPath string, expectedSize int64) {
+	if tc, ok := r.transcoder.Get(); ok {
+		tc.NotifyDownloadComplete(remotePath, localPath, expectedSize)
+	}
+}
+
+// GetTranscodeDir returns the transcode directory path.
+func (r *Repository) GetTranscodeDir() string {
+	return r.transcodeDir
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -279,6 +366,7 @@ func (r *Repository) initializeTranscoder(settings mo.Option[*models.Mediastream
 	}
 
 	r.playbackManager.mediaContainers.Clear()
+	r.playbackManager.KillAllPlayback()
 
 	r.logger.Info().Msg("mediastream: Transcoder module initialized")
 	r.transcoder = mo.Some[*transcoder.Transcoder](tc)

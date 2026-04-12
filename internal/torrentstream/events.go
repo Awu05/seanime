@@ -35,13 +35,22 @@ func (r *Repository) sendStateEvent(event string, data ...interface{}) {
 	if len(data) > 0 {
 		dataToSend = data[0]
 	}
-	r.wsEventManager.SendEvent(events.TorrentStreamState, struct {
+	payload := struct {
 		State string      `json:"state"`
 		Data  interface{} `json:"data"`
 	}{
 		State: event,
 		Data:  dataToSend,
-	})
+	}
+	// Send to the specific client if we have a client ID, otherwise broadcast
+	r.currentClientIdMu.RLock()
+	clientId := r.currentClientId
+	r.currentClientIdMu.RUnlock()
+	if clientId != "" {
+		r.wsEventManager.SendEventTo(clientId, events.TorrentStreamState, payload)
+	} else {
+		r.wsEventManager.SendEvent(events.TorrentStreamState, payload)
+	}
 }
 
 //func (r *Repository) sendTorrentLoadingStatus(event TorrentLoadingStatusState, checking string) {

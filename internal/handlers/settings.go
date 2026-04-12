@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"seanime/internal/api/anilist"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/util"
@@ -20,8 +22,8 @@ import (
 //	@route /api/v1/settings [GET]
 //	@returns models.Settings
 func (h *Handler) HandleGetSettings(c echo.Context) error {
+	settings, err := h.getSettings(c)
 
-	settings, err := h.App.Database.GetSettings()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -41,6 +43,8 @@ func (h *Handler) HandleGetSettings(c echo.Context) error {
 //	@returns handlers.Status
 func (h *Handler) HandleGettingStarted(c echo.Context) error {
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	type body struct {
 		Library                models.LibrarySettings      `json:"library"`
 		MediaPlayer            models.MediaPlayerSettings  `json:"mediaPlayer"`
@@ -54,6 +58,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 		EnableTorrentStreaming bool                        `json:"enableTorrentStreaming"`
 		DebridProvider         string                      `json:"debridProvider"`
 		DebridApiKey           string                      `json:"debridApiKey"`
+		DebridApiUrl           string                      `json:"debridApiUrl"`
 	}
 	var b body
 
@@ -126,13 +131,14 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 				prev.Enabled = true
 				prev.Provider = b.DebridProvider
 				prev.ApiKey = b.DebridApiKey
+				prev.ApiUrl = b.DebridApiUrl
 				prev.IncludeDebridStreamInLibrary = true
 				_, _ = h.App.Database.UpsertDebridSettings(prev)
 			}
 		}()
 	}
 
-	h.App.WSEventManager.SendEvent("settings", settings)
+	h.App.WSEventManager.SendToProfile(profileID, "settings", settings)
 
 	status := h.NewStatus(c)
 
@@ -150,6 +156,8 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 //	@route /api/v1/settings [PATCH]
 //	@returns handlers.Status
 func (h *Handler) HandleSaveSettings(c echo.Context) error {
+
+	profileID := core.GetProfileIDFromContext(c)
 
 	type body struct {
 		Library       models.LibrarySettings      `json:"library"`
@@ -203,7 +211,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	}
 
 	autoDownloaderSettings := models.AutoDownloaderSettings{}
-	prevSettings, err := h.App.Database.GetSettings()
+	prevSettings, err := h.getSettings(c)
 	if err == nil && prevSettings.AutoDownloader != nil {
 		autoDownloaderSettings = *prevSettings.AutoDownloader
 	}
@@ -213,11 +221,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		autoDownloaderSettings.Enabled = false
 	}
 
-	settings, err := h.App.Database.UpsertSettings(&models.Settings{
-		BaseModel: models.BaseModel{
-			ID:        1,
-			UpdatedAt: time.Now(),
-		},
+	newSettings := &models.Settings{
 		Library:        &b.Library,
 		MediaPlayer:    &b.MediaPlayer,
 		Torrent:        &b.Torrent,
@@ -227,13 +231,45 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		Notifications:  &b.Notifications,
 		Nakama:         &b.Nakama,
 		AutoDownloader: &autoDownloaderSettings,
-	})
+	}
+
+	var settings *models.Settings
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertSettingsForProfile(profileID, newSettings)
+	} else {
+		newSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		settings, err = h.App.Database.UpsertSettings(newSettings)
+	}
 
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.WSEventManager.SendEvent("settings", settings)
+	h.App.WSEventManager.SendToProfile(profileID, "settings", settings)
+
+	// Sync adult content setting to AniList if it changed
+	if prevSettings != nil && prevSettings.Anilist != nil && prevSettings.Anilist.EnableAdultContent != b.Anilist.EnableAdultContent {
+		go func() {
+			defer util.HandlePanicThen(func() {})
+			var account *models.Account
+			var accErr error
+			if h.App.MultiUserEnabled && profileID != "" {
+				account, accErr = h.App.Database.GetAccountByProfileID(profileID)
+			} else {
+				account, accErr = h.App.Database.GetAccount()
+			}
+			if accErr != nil || account == nil || account.Token == "" {
+				return
+			}
+			_, _ = anilist.CustomQuery(map[string]interface{}{
+				"query":     "mutation UpdateUser($displayAdultContent: Boolean) { UpdateUser(displayAdultContent: $displayAdultContent) { id } }",
+				"variables": map[string]interface{}{"displayAdultContent": b.Anilist.EnableAdultContent},
+			}, h.App.Logger, account.Token)
+		}()
+	}
 
 	status := h.NewStatus(c)
 
@@ -266,7 +302,7 @@ func (h *Handler) HandleSaveAutoDownloaderSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	currSettings, err := h.App.Database.GetSettings()
+	currSettings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -286,13 +322,22 @@ func (h *Handler) HandleSaveAutoDownloaderSettings(c echo.Context) error {
 		UseDebrid:             b.UseDebrid,
 	}
 
-	currSettings.AutoDownloader = autoDownloaderSettings
-	currSettings.BaseModel = models.BaseModel{
-		ID:        1,
-		UpdatedAt: time.Now(),
-	}
+	profileID := core.GetProfileIDFromContext(c)
 
-	_, err = h.App.Database.UpsertSettings(currSettings)
+	// Shallow-copy before mutating — currSettings may alias db.CurrSettings (the global cache)
+	// or another caller's view of the same row; direct mutation would race concurrent readers.
+	nextSettings := *currSettings
+	nextSettings.AutoDownloader = autoDownloaderSettings
+
+	if h.App.MultiUserEnabled && profileID != "" {
+		_, err = h.App.Database.UpsertSettingsForProfile(profileID, &nextSettings)
+	} else {
+		nextSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		_, err = h.App.Database.UpsertSettings(&nextSettings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -320,18 +365,27 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	currSettings, err := h.App.Database.GetSettings()
+	currSettings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	currSettings.MediaPlayer = b.MediaPlayer
-	currSettings.BaseModel = models.BaseModel{
-		ID:        1,
-		UpdatedAt: time.Now(),
-	}
+	profileID := core.GetProfileIDFromContext(c)
 
-	_, err = h.App.Database.UpsertSettings(currSettings)
+	// Shallow-copy before mutating — currSettings may alias db.CurrSettings (the global cache)
+	// or another caller's view of the same row; direct mutation would race concurrent readers.
+	nextSettings := *currSettings
+	nextSettings.MediaPlayer = b.MediaPlayer
+
+	if h.App.MultiUserEnabled && profileID != "" {
+		_, err = h.App.Database.UpsertSettingsForProfile(profileID, &nextSettings)
+	} else {
+		nextSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		_, err = h.App.Database.UpsertSettings(&nextSettings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

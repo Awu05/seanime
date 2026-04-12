@@ -14,6 +14,12 @@ type BaseModel struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+type UUIDBaseModel struct {
+	ID        string    `gorm:"primarykey;type:text" json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 type Token struct {
 	BaseModel
 	Value string `json:"value"`
@@ -21,9 +27,10 @@ type Token struct {
 
 type Account struct {
 	BaseModel
-	Username string `gorm:"column:username" json:"username"`
-	Token    string `gorm:"column:token" json:"token"`
-	Viewer   []byte `gorm:"column:viewer" json:"viewer"`
+	Username  string `gorm:"column:username" json:"username"`
+	Token     string `gorm:"column:token" json:"token"`
+	Viewer    []byte `gorm:"column:viewer" json:"viewer"`
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 }
 
 // +---------------------+
@@ -32,12 +39,14 @@ type Account struct {
 
 type LocalFiles struct {
 	BaseModel
-	Value []byte `gorm:"column:value" json:"value"`
+	Value     []byte `gorm:"column:value" json:"value"`
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 }
 
 type ShelvedLocalFiles struct {
 	BaseModel
-	Value []byte `gorm:"column:value" json:"value"`
+	Value     []byte `gorm:"column:value" json:"value"`
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 }
 
 // +---------------------+
@@ -46,6 +55,7 @@ type ShelvedLocalFiles struct {
 
 type Settings struct {
 	BaseModel
+	ProfileID      string                  `gorm:"column:profile_id;index" json:"profileId"`
 	Library        *LibrarySettings        `gorm:"embedded" json:"library"`
 	MediaPlayer    *MediaPlayerSettings    `gorm:"embedded" json:"mediaPlayer"`
 	Torrent        *TorrentSettings        `gorm:"embedded" json:"torrent"`
@@ -428,6 +438,7 @@ type ChapterDownloadQueueItem struct {
 
 type MediastreamSettings struct {
 	BaseModel
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 	// DEVNOTE: Should really be "Enabled"
 	TranscodeEnabled              bool   `gorm:"column:transcode_enabled" json:"transcodeEnabled"`
 	TranscodeHwAccel              string `gorm:"column:transcode_hw_accel" json:"transcodeHwAccel"`
@@ -451,6 +462,7 @@ type MediastreamSettings struct {
 
 type TorrentstreamSettings struct {
 	BaseModel
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 	Enabled             bool   `gorm:"column:enabled" json:"enabled"`
 	AutoSelect          bool   `gorm:"column:auto_select" json:"autoSelect"`
 	PreferredResolution string `gorm:"column:preferred_resolution" json:"preferredResolution"`
@@ -528,9 +540,13 @@ type OnlinestreamMapping struct {
 
 type DebridSettings struct {
 	BaseModel
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
 	Enabled  bool   `gorm:"column:enabled" json:"enabled"`
 	Provider string `gorm:"column:provider" json:"provider"`
 	ApiKey   string `gorm:"column:api_key" json:"apiKey"`
+	ApiUrl      string `gorm:"column:api_url" json:"apiUrl"`             // StremThru: base URL of the instance
+	StoreName   string `gorm:"column:store_name" json:"storeName"`       // StremThru: debrid store name (e.g. torbox, realdebrid, pikpak)
+	StoreApiKey string `gorm:"column:store_api_key" json:"storeApiKey"` // StremThru: debrid store API key (for public instances)
 	//FallbackToDebridStreamingView bool   `gorm:"column:fallback_to_debrid_streaming_view" json:"fallbackToDebridStreamingView"` // DEPRECATED
 	IncludeDebridStreamInLibrary bool   `gorm:"column:include_debrid_stream_in_library" json:"includeDebridStreamInLibrary"`
 	StreamAutoSelect             bool   `gorm:"column:stream_auto_select" json:"streamAutoSelect"`
@@ -543,6 +559,17 @@ type DebridTorrentItem struct {
 	Destination   string `gorm:"column:destination" json:"destination"`
 	Provider      string `gorm:"column:provider" json:"provider"`
 	MediaId       int    `gorm:"column:media_id" json:"mediaId"`
+}
+
+// DebridLocalDownload tracks debrid torrents that have been manually downloaded
+// to a local path. Populated after a successful download so the UI can show a
+// "downloaded" indicator and offer "play locally" as an alternative to streaming.
+type DebridLocalDownload struct {
+	BaseModel
+	TorrentItemID string `gorm:"column:torrent_item_id;index" json:"torrentItemId"`
+	TorrentName   string `gorm:"column:torrent_name" json:"torrentName"`
+	TorrentHash   string `gorm:"column:torrent_hash" json:"torrentHash"`
+	LocalPath     string `gorm:"column:local_path" json:"localPath"`
 }
 
 // +---------------------+

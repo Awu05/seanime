@@ -22,7 +22,9 @@ func (h *Handler) HandlePlaybackPlayVideo(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err := h.App.PlaybackManager.StartPlayingUsingMediaPlayer(&playbackmanager.StartPlayingOptions{
+	session := h.getStreamSession(c)
+
+	err := session.PlaybackManager.StartPlayingUsingMediaPlayer(&playbackmanager.StartPlayingOptions{
 		Payload:   b.Path,
 		UserAgent: c.Request().Header.Get("User-Agent"),
 		ClientId:  "",
@@ -43,8 +45,9 @@ func (h *Handler) HandlePlaybackPlayVideo(c echo.Context) error {
 //	@route /api/v1/playback-manager/play-random [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackPlayRandomVideo(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.PlaybackManager.StartRandomVideo(&playbackmanager.StartRandomVideoOptions{
+	err := session.PlaybackManager.StartRandomVideo(&playbackmanager.StartRandomVideoOptions{
 		UserAgent: c.Request().Header.Get("User-Agent"),
 		ClientId:  "",
 	})
@@ -63,13 +66,14 @@ func (h *Handler) HandlePlaybackPlayRandomVideo(c echo.Context) error {
 //	@route /api/v1/playback-manager/sync-current-progress [POST]
 //	@returns int
 func (h *Handler) HandlePlaybackSyncCurrentProgress(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.PlaybackManager.SyncCurrentProgress()
+	err := session.PlaybackManager.SyncCurrentProgress()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	mId, _ := h.App.PlaybackManager.GetCurrentMediaID()
+	mId, _ := session.PlaybackManager.GetCurrentMediaID()
 
 	return h.RespondWithData(c, mId)
 }
@@ -82,8 +86,9 @@ func (h *Handler) HandlePlaybackSyncCurrentProgress(c echo.Context) error {
 //	@route /api/v1/playback-manager/next-episode [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackPlayNextEpisode(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.PlaybackManager.PlayNextEpisode()
+	err := session.PlaybackManager.PlayNextEpisode()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -98,8 +103,9 @@ func (h *Handler) HandlePlaybackPlayNextEpisode(c echo.Context) error {
 //	@route /api/v1/playback-manager/next-episode [GET]
 //	@returns *anime.LocalFile
 func (h *Handler) HandlePlaybackGetNextEpisode(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	lf := h.App.PlaybackManager.GetNextEpisode()
+	lf := session.PlaybackManager.GetNextEpisode()
 	return h.RespondWithData(c, lf)
 }
 
@@ -110,8 +116,9 @@ func (h *Handler) HandlePlaybackGetNextEpisode(c echo.Context) error {
 //	@route /api/v1/playback-manager/autoplay-next-episode [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackAutoPlayNextEpisode(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	err := h.App.PlaybackManager.AutoPlayNextEpisode()
+	err := session.PlaybackManager.AutoPlayNextEpisode()
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -128,27 +135,7 @@ func (h *Handler) HandlePlaybackAutoPlayNextEpisode(c echo.Context) error {
 //	@route /api/v1/playback-manager/start-playlist [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackStartPlaylist(c echo.Context) error {
-
-	//type body struct {
-	//	DbId uint `json:"dbId"`
-	//}
-	//
-	//var b body
-	//if err := c.Bind(&b); err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-	//
-	//// Get playlist
-	//playlist, err := db_bridge.GetLegacyPlaylist(h.App.Database, b.DbId)
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-	//
-	//err = h.App.PlaybackManager.StartPlaylist(playlist)
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-
+	// Legacy playlist feature is disabled.
 	return h.RespondWithData(c, true)
 }
 
@@ -159,12 +146,7 @@ func (h *Handler) HandlePlaybackStartPlaylist(c echo.Context) error {
 //	@route /api/v1/playback-manager/cancel-playlist [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackCancelCurrentPlaylist(c echo.Context) error {
-
-	//err := h.App.PlaybackManager.CancelCurrentPlaylist()
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-
+	// Legacy playlist feature is disabled.
 	return h.RespondWithData(c, true)
 }
 
@@ -175,12 +157,7 @@ func (h *Handler) HandlePlaybackCancelCurrentPlaylist(c echo.Context) error {
 //	@route /api/v1/playback-manager/playlist-next [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackPlaylistNext(c echo.Context) error {
-
-	//err := h.App.PlaybackManager.RequestNextPlaylistFile()
-	//if err != nil {
-	//	return h.RespondWithError(c, err)
-	//}
-
+	// Legacy playlist feature is disabled.
 	return h.RespondWithData(c, true)
 }
 
@@ -205,7 +182,9 @@ func (h *Handler) HandlePlaybackStartManualTracking(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err := h.App.PlaybackManager.StartManualProgressTracking(&playbackmanager.StartManualProgressTrackingOptions{
+	session := h.getStreamSession(c)
+
+	err := session.PlaybackManager.StartManualProgressTracking(&playbackmanager.StartManualProgressTrackingOptions{
 		ClientId:      b.ClientId,
 		MediaId:       b.MediaId,
 		EpisodeNumber: b.EpisodeNumber,
@@ -224,8 +203,9 @@ func (h *Handler) HandlePlaybackStartManualTracking(c echo.Context) error {
 //	@route /api/v1/playback-manager/manual-tracking/cancel [POST]
 //	@returns bool
 func (h *Handler) HandlePlaybackCancelManualTracking(c echo.Context) error {
+	session := h.getStreamSession(c)
 
-	h.App.PlaybackManager.CancelManualProgressTracking()
+	session.PlaybackManager.CancelManualProgressTracking()
 
 	return h.RespondWithData(c, true)
 }
