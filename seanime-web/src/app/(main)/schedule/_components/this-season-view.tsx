@@ -112,13 +112,15 @@ export function ThisSeasonView() {
 
                 {/* Season switcher + sort */}
                 <div className="flex items-center justify-center gap-3">
-                    <div className="flex items-center rounded-lg overflow-hidden border border-[--border]">
-                        {SEASON_KINDS.map((opt) => (
+                    <div className="flex items-center rounded-lg border border-[--border]">
+                        {SEASON_KINDS.map((opt, i) => (
                             <button
                                 key={opt.value}
                                 type="button"
                                 className={cn(
                                     "px-5 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+                                    i === 0 && "rounded-l-lg",
+                                    i === SEASON_KINDS.length - 1 && "rounded-r-lg",
                                     seasonKind === opt.value
                                         ? "bg-brand-500 text-white"
                                         : "bg-transparent text-[--muted] hover:text-white hover:bg-white/5",
