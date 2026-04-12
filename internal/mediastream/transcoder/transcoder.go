@@ -94,9 +94,6 @@ func (t *Transcoder) Destroy() {
 		s.Destroy()
 	}
 	t.streams.Clear()
-	//close(t.clientChan)
-	t.streams = result.NewMap[string, *FileStream]()
-	t.clientChan = make(chan ClientInfo, 10)
 	t.logger.Debug().Msg("transcoder: Transcoder destroyed")
 }
 
