@@ -60,7 +60,6 @@ type (
 
 		parserCache        *result.Cache[string, *mkvparser.MetadataParser]
 		transcodeRequester TranscodeRequester
-		//playbackStatusSubscribers *result.Map[string, *PlaybackStatusSubscriber]
 	}
 
 	Settings struct {
@@ -108,6 +107,7 @@ func NewManager(options NewManagerOptions) *Manager {
 		streams:                    result.NewMap[string, Stream](),
 		nativePlayer:               options.NativePlayer,
 		parserCache:                result.NewCache[string, *mkvparser.MetadataParser](),
+		animeCache:                 result.NewCache[int, *anilist.BaseAnime](),
 		videoCore:                  options.VideoCore,
 		transcodeRequester:         options.TranscodeRequester,
 	}

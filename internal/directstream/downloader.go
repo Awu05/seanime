@@ -11,11 +11,25 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 )
 
 const DefaultMaxDownloadSize int64 = 10 * 1024 * 1024 * 1024 // 10GB
+
+// downloaderClient is used for background full-file downloads. It has no overall
+// request Timeout because downloads can take many minutes; stalls are detected via
+// ResponseHeaderTimeout on connect and the parent context's cancellation path.
+var downloaderClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:          10,
+		MaxIdleConnsPerHost:   2,
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ForceAttemptHTTP2:     false,
+	},
+}
 
 // DebridDownloader downloads a debrid stream URL to local temp storage in the background.
 // Files under the size cap are downloaded; larger files are skipped.
@@ -23,17 +37,19 @@ type DebridDownloader struct {
 	url           string
 	hash          string
 	downloadDir   string
-	localPath     string
-	contentLength int64
-	maxSize       int64
+	contentLength int64 // immutable after construction
+	maxSize       int64 // immutable after construction
 
 	mu         sync.RWMutex
+	localPath  string // guarded by mu
 	complete   bool
 	err        error
 	downloaded atomic.Int64
 
-	cancel context.CancelFunc
-	logger *zerolog.Logger
+	cancel      context.CancelFunc // guarded by mu
+	done        chan struct{}      // closed when the download goroutine exits
+	cleanupOnce sync.Once
+	logger      *zerolog.Logger
 }
 
 func NewDebridDownloader(url, hash, downloadDir string, contentLength int64, logger *zerolog.Logger) *DebridDownloader {
@@ -55,7 +71,6 @@ func (d *DebridDownloader) ShouldDownload() bool {
 // Start begins the background download. Call ShouldDownload() first.
 func (d *DebridDownloader) Start(parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
-	d.cancel = cancel
 
 	dir := filepath.Join(d.downloadDir, "downloads", d.hash)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -63,6 +78,7 @@ func (d *DebridDownloader) Start(parentCtx context.Context) {
 		d.err = err
 		d.mu.Unlock()
 		d.logger.Error().Err(err).Msg("downloader: Failed to create download directory")
+		cancel()
 		return
 	}
 
@@ -74,9 +90,19 @@ func (d *DebridDownloader) Start(parentCtx context.Context) {
 			filename = base
 		}
 	}
-	d.localPath = filepath.Join(dir, filename)
 
-	go d.download(ctx)
+	done := make(chan struct{})
+
+	d.mu.Lock()
+	d.cancel = cancel
+	d.localPath = filepath.Join(dir, filename)
+	d.done = done
+	d.mu.Unlock()
+
+	go func() {
+		defer close(done)
+		d.download(ctx)
+	}()
 }
 
 func (d *DebridDownloader) download(ctx context.Context) {
@@ -91,7 +117,7 @@ func (d *DebridDownloader) download(ctx context.Context) {
 		return
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := downloaderClient.Do(req)
 	if err != nil {
 		d.setError(err)
 		return
@@ -103,7 +129,11 @@ func (d *DebridDownloader) download(ctx context.Context) {
 		return
 	}
 
-	f, err := os.Create(d.localPath)
+	d.mu.RLock()
+	localPath := d.localPath
+	d.mu.RUnlock()
+
+	f, err := os.Create(localPath)
 	if err != nil {
 		d.setError(err)
 		return
@@ -140,7 +170,7 @@ func (d *DebridDownloader) download(ctx context.Context) {
 	d.complete = true
 	d.mu.Unlock()
 
-	d.logger.Info().Str("path", d.localPath).Msg("downloader: Background download complete")
+	d.logger.Info().Str("path", localPath).Msg("downloader: Background download complete")
 }
 
 func (d *DebridDownloader) setError(err error) {
@@ -159,15 +189,7 @@ func (d *DebridDownloader) IsComplete() bool {
 	return d.complete
 }
 
-// LocalPath returns the path to the downloaded file, or "" if not yet complete.
-func (d *DebridDownloader) LocalPath() string {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	if d.complete {
-		return d.localPath
-	}
-	return ""
-}
+
 
 // Progress returns download progress as a float64 between 0.0 and 1.0.
 func (d *DebridDownloader) Progress() float64 {
@@ -187,15 +209,30 @@ func (d *DebridDownloader) Error() error {
 // FilePath returns the download file path regardless of completion state.
 // Returns "" if Start() hasn't been called yet.
 func (d *DebridDownloader) FilePath() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.localPath
 }
 
-// Cleanup cancels the download and removes the downloaded file.
+// Cleanup cancels the download, waits for the download goroutine to exit, and
+// removes the downloaded file. Safe to call concurrently and multiple times.
 func (d *DebridDownloader) Cleanup() {
-	if d.cancel != nil {
-		d.cancel()
-	}
-	dir := filepath.Join(d.downloadDir, "downloads", d.hash)
-	_ = os.RemoveAll(dir)
-	d.logger.Debug().Str("dir", dir).Msg("downloader: Cleaned up download")
+	d.cleanupOnce.Do(func() {
+		d.mu.Lock()
+		cancel := d.cancel
+		done := d.done
+		d.mu.Unlock()
+
+		if cancel != nil {
+			cancel()
+		}
+		// Wait for the download goroutine to exit so os.RemoveAll doesn't race
+		// an in-flight f.Write (particularly important on Windows).
+		if done != nil {
+			<-done
+		}
+		dir := filepath.Join(d.downloadDir, "downloads", d.hash)
+		_ = os.RemoveAll(dir)
+		d.logger.Debug().Str("dir", dir).Msg("downloader: Cleaned up download")
+	})
 }

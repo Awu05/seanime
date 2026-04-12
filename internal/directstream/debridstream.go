@@ -32,14 +32,15 @@ var _ Stream = (*DebridStream)(nil)
 // DebridStream is a stream that is a torrent.
 type DebridStream struct {
 	BaseStream
-	streamUrl     string
-	contentLength int64
-	filepath      string
-	torrent       *hibiketorrent.AnimeTorrent
-	streamReadyCh chan struct{}        // Closed by the initiator when the stream is ready
-	httpStream    *httputil.FileStream // Shared file-backed cache for multiple readers
-	cacheMu       sync.RWMutex         // Protects httpStream access
-	downloader    *DebridDownloader
+	streamUrl         string
+	contentLength     int64
+	filepath          string
+	torrent           *hibiketorrent.AnimeTorrent
+	streamReadyCh     chan struct{}        // Closed by the initiator when the stream is ready
+	httpStream        *httputil.FileStream // Shared file-backed cache for multiple readers
+	cacheMu           sync.RWMutex         // Protects httpStream access
+	downloader        *DebridDownloader
+	terminateDebridOn sync.Once // guards DebridStream-specific terminate body
 }
 
 func (s *DebridStream) Type() nativeplayer.StreamType {
@@ -92,21 +93,25 @@ func (s *DebridStream) Close() error {
 	return nil
 }
 
-// Terminate overrides BaseStream.Terminate to also clean up the HTTP cache and transcode session
+// Terminate overrides BaseStream.Terminate to also clean up the HTTP cache and transcode session.
+// The DebridStream-specific cleanup is guarded by its own sync.Once so concurrent Terminate()
+// calls don't double-run ShutdownTranscodeStream or Close. BaseStream.Terminate is separately
+// guarded by its own terminateOnce.
 func (s *DebridStream) Terminate() {
-	// Clean up background downloader
-	if s.downloader != nil {
-		s.downloader.Cleanup()
-		s.downloader = nil
-	}
-	// Clean up transcode session for this client
-	if s.manager.transcodeRequester != nil {
-		s.manager.transcodeRequester.ShutdownTranscodeStream(s.clientId)
-	}
-	// Clean up HTTP cache
-	if err := s.Close(); err != nil {
-		s.logger.Error().Err(err).Msg("directstream(debrid): Failed to clean up HTTP cache during termination")
-	}
+	s.terminateDebridOn.Do(func() {
+		// Clean up background downloader (Cleanup is idempotent via its own sync.Once).
+		if s.downloader != nil {
+			s.downloader.Cleanup()
+		}
+		// Clean up transcode session for this client
+		if s.manager.transcodeRequester != nil {
+			s.manager.transcodeRequester.ShutdownTranscodeStream(s.clientId)
+		}
+		// Clean up HTTP cache
+		if err := s.Close(); err != nil {
+			s.logger.Error().Err(err).Msg("directstream(debrid): Failed to clean up HTTP cache during termination")
+		}
+	})
 
 	// Call the base implementation
 	s.BaseStream.Terminate()
@@ -150,7 +155,6 @@ func (s *DebridStream) LoadPlaybackInfo() (ret *nativeplayer.PlaybackInfo, err e
 		// Note: We'll assume everything that comes from debrid is an EBML file
 		if isEbmlContent(s.LoadContentType()) || s.LoadContentType() == "application/octet-stream" || s.LoadContentType() == "application/force-download" {
 			reader, err := httputil.NewHttpReadSeekerFromURL(s.streamUrl)
-			//reader, err := s.getPriorityReader()
 			if err != nil {
 				err = fmt.Errorf("failed to create reader for stream url: %w", err)
 				s.logger.Error().Err(err).Msg("directstream(debrid): Failed to create reader for stream url")
@@ -397,8 +401,16 @@ func (s *DebridStream) GetStreamHandler() http.Handler {
 		req.Header.Set("Accept", "*/*")
 		req.Header.Set("Range", rangeHeader)
 
-		// Copy original request headers to the proxied request
+		// Forward a curated subset of the client's headers to the debrid CDN.
+		// We deliberately skip:
+		//   - Range: already set above from our computed window
+		//   - Host / Connection / Keep-Alive / Transfer-Encoding / Upgrade: hop-by-hop or set by Go's http client
+		//   - Cookie / Authorization: debrid URLs are pre-signed, client cookies leak to the CDN
 		for key, values := range r.Header {
+			switch http.CanonicalHeaderKey(key) {
+			case "Range", "Host", "Connection", "Keep-Alive", "Transfer-Encoding", "Upgrade", "Cookie", "Authorization", "Proxy-Authorization":
+				continue
+			}
 			for _, value := range values {
 				req.Header.Add(key, value)
 			}
