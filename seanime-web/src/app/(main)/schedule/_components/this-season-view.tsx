@@ -142,7 +142,7 @@ export function ThisSeasonView() {
                 </div>
 
                 {/* Filters row */}
-                <div className="flex items-center justify-center gap-3 pb-2">
+                <div className="flex items-center justify-center gap-2 pb-2">
                     <NativeSelect
                         value={formatFilter}
                         options={FORMAT_OPTIONS}
