@@ -142,30 +142,29 @@ export function ThisSeasonView() {
                 </div>
 
                 {/* Filters row */}
-                <div className="flex items-center justify-center gap-2 pb-2">
-                    <NativeSelect
-                        value={formatFilter}
-                        options={FORMAT_OPTIONS}
-                        onChange={(e) => setFormatFilter(e.target.value as AL_MediaFormat | "ALL")}
-                        className="w-36"
-                        size="sm"
-                    />
+                <div className="flex items-center justify-center pb-2">
+                    <div className="flex items-center gap-3">
+                        <NativeSelect
+                            value={formatFilter}
+                            options={FORMAT_OPTIONS}
+                            onChange={(e) => setFormatFilter(e.target.value as AL_MediaFormat | "ALL")}
+                            size="sm"
+                        />
 
-                    <NativeSelect
-                        value={statusFilter}
-                        options={STATUS_OPTIONS}
-                        onChange={(e) => setStatusFilter(e.target.value as AL_MediaStatus | "ALL")}
-                        className="w-44"
-                        size="sm"
-                    />
+                        <NativeSelect
+                            value={statusFilter}
+                            options={STATUS_OPTIONS}
+                            onChange={(e) => setStatusFilter(e.target.value as AL_MediaStatus | "ALL")}
+                            size="sm"
+                        />
 
-                    <NativeSelect
-                        value={genreFilter}
-                        options={GENRE_OPTIONS}
-                        onChange={(e) => setGenreFilter(e.target.value)}
-                        className="w-40"
-                        size="sm"
-                    />
+                        <NativeSelect
+                            value={genreFilter}
+                            options={GENRE_OPTIONS}
+                            onChange={(e) => setGenreFilter(e.target.value)}
+                            size="sm"
+                        />
+                    </div>
                 </div>
             </div>
 
