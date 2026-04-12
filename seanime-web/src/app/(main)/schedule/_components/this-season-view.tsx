@@ -46,7 +46,7 @@ export function ThisSeasonView() {
     return (
         <div className="space-y-4" data-this-season-view>
             {/* Season label */}
-            <h2 className="text-center text-2xl font-bold">
+            <h2 className="text-center text-2xl font-bold pt-4">
                 {formatSeasonLabel(season, seasonYear)}
             </h2>
 
