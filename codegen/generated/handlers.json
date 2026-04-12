@@ -1,5 +1,45 @@
 [
   {
+    "name": "HandleUpdateProfileName",
+    "trimmedName": "UpdateProfileName",
+    "comments": [
+      "HandleUpdateProfileName",
+      "",
+      "\t@summary updates a profile's display name.",
+      "\t@desc Profile owner or admin can update.",
+      "\t@route /api/v1/profiles/:id/name [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/admin_profiles.go",
+    "filename": "admin_profiles.go",
+    "api": {
+      "summary": "updates a profile's display name.",
+      "descriptions": [
+        "Profile owner or admin can update."
+      ],
+      "endpoint": "/api/v1/profiles/:id/name",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Name",
+          "jsonName": "name",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
     "name": "HandleGetAnimeCollection",
     "trimmedName": "GetAnimeCollection",
     "comments": [
@@ -656,6 +696,52 @@
     }
   },
   {
+    "name": "getAnilistPlatform",
+    "trimmedName": "getAnilistPlatform",
+    "comments": [
+      "getAnilistPlatform returns the AniList platform for the current profile.",
+      "In multi-user mode, returns a per-profile platform from the pool.",
+      "In single-user mode, returns the global platform.",
+      ""
+    ],
+    "filepath": "internal/handlers/anilist_helper.go",
+    "filename": "anilist_helper.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "getSettings",
+    "trimmedName": "getSettings",
+    "comments": [
+      "getSettings returns the settings for the current profile.",
+      "In multi-user mode, returns per-profile settings.",
+      "In single-user mode, returns global settings (ID=1).",
+      ""
+    ],
+    "filepath": "internal/handlers/anilist_helper.go",
+    "filename": "anilist_helper.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleGetAnimeEpisodeCollection",
     "trimmedName": "GetAnimeEpisodeCollection",
     "comments": [
@@ -807,6 +893,28 @@
       "returns": "anilist.AnimeCollection",
       "returnGoType": "anilist.AnimeCollection",
       "returnTypescriptType": "AL_AnimeCollection"
+    }
+  },
+  {
+    "name": "fetchAllAiringScheduleItems",
+    "trimmedName": "fetchAllAiringScheduleItems",
+    "comments": [
+      "fetchAllAiringScheduleItems fetches all currently airing anime from the public AniList API,",
+      "paginating to get complete coverage for the past 7 days and next 7 days.",
+      ""
+    ],
+    "filepath": "internal/handlers/anime_collection.go",
+    "filename": "anime_collection.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {
@@ -1382,6 +1490,28 @@
       "returns": "handlers.Status",
       "returnGoType": "handlers.Status",
       "returnTypescriptType": "Status"
+    }
+  },
+  {
+    "name": "tryExtractProfile",
+    "trimmedName": "tryExtractProfile",
+    "comments": [
+      "tryExtractProfile attempts to read the JWT from the request and set profile context.",
+      "Used on public paths so endpoints like /status can return per-profile data when authenticated.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_middleware.go",
+    "filename": "auth_middleware.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {
@@ -2480,6 +2610,182 @@
       "returns": "[]debrid.TorrentItem",
       "returnGoType": "debrid.TorrentItem",
       "returnTypescriptType": "Array\u003cDebrid_TorrentItem\u003e"
+    }
+  },
+  {
+    "name": "HandleDebridPlayTorrent",
+    "trimmedName": "DebridPlayTorrent",
+    "comments": [
+      "HandleDebridPlayTorrent",
+      "",
+      "\t@summary play a torrent file from debrid via native player.",
+      "\t@desc When playLocally is true, streams from the downloaded local file instead",
+      "\t@desc of re-fetching the debrid URL. The local file is resolved from the",
+      "\t@desc DebridLocalDownload record for the given torrent id.",
+      "\t@returns bool",
+      "\t@route /api/v1/debrid/torrents/play [POST]",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "play a torrent file from debrid via native player.",
+      "descriptions": [
+        "When playLocally is true, streams from the downloaded local file instead",
+        "of re-fetching the debrid URL. The local file is resolved from the",
+        "DebridLocalDownload record for the given torrent id."
+      ],
+      "endpoint": "/api/v1/debrid/torrents/play",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "TorrentId",
+          "jsonName": "torrentId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "FileId",
+          "jsonName": "fileId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Title",
+          "jsonName": "title",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "ClientId",
+          "jsonName": "clientId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "PlayLocally",
+          "jsonName": "playLocally",
+          "goType": "bool",
+          "usedStructType": "",
+          "typescriptType": "boolean",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "findDebridLocalVideoFile",
+    "trimmedName": "findDebridLocalVideoFile",
+    "comments": [
+      "findDebridLocalVideoFile looks up the DebridLocalDownload record for a torrent id",
+      "and returns the path of the largest video file inside the download directory.",
+      "Returns an error if the record doesn't exist, the directory is missing, or no",
+      "video files are found.",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "HandleDebridGetLocalDownloads",
+    "trimmedName": "DebridGetLocalDownloads",
+    "comments": [
+      "HandleDebridGetLocalDownloads",
+      "",
+      "\t@summary list debrid torrents that have been downloaded locally.",
+      "\t@desc Used by the debrid page to show a \"downloaded\" indicator on torrents.",
+      "\t@returns []models.DebridLocalDownload",
+      "\t@route /api/v1/debrid/torrents/local-downloads [GET]",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "list debrid torrents that have been downloaded locally.",
+      "descriptions": [
+        "Used by the debrid page to show a \"downloaded\" indicator on torrents."
+      ],
+      "endpoint": "/api/v1/debrid/torrents/local-downloads",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "[]models.DebridLocalDownload",
+      "returnGoType": "models.DebridLocalDownload",
+      "returnTypescriptType": "Array\u003cModels_DebridLocalDownload\u003e"
+    }
+  },
+  {
+    "name": "HandleDebridDeleteLocalDownload",
+    "trimmedName": "DebridDeleteLocalDownload",
+    "comments": [
+      "HandleDebridDeleteLocalDownload",
+      "",
+      "\t@summary delete a debrid torrent's local download from disk and from the tracking DB.",
+      "\t@desc Removes the downloaded files from the local path and clears the DB record.",
+      "\t@desc The remote debrid torrent is NOT removed — use HandleDebridDeleteTorrent for that.",
+      "\t@returns bool",
+      "\t@route /api/v1/debrid/torrents/local-download [DELETE]",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "delete a debrid torrent's local download from disk and from the tracking DB.",
+      "descriptions": [
+        "Removes the downloaded files from the local path and clears the DB record.",
+        "The remote debrid torrent is NOT removed — use HandleDebridDeleteTorrent for that."
+      ],
+      "endpoint": "/api/v1/debrid/torrents/local-download",
+      "methods": [
+        "DELETE"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "TorrentId",
+          "jsonName": "torrentId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {
@@ -6892,7 +7198,17 @@
         "POST"
       ],
       "params": [],
-      "bodyFields": [],
+      "bodyFields": [
+        {
+          "name": "ClientId",
+          "jsonName": "clientId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
       "returns": "bool",
       "returnGoType": "bool",
       "returnTypescriptType": "boolean"
@@ -9481,6 +9797,15 @@
           "typescriptType": "string",
           "required": true,
           "descriptions": []
+        },
+        {
+          "name": "DebridApiUrl",
+          "jsonName": "debridApiUrl",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
         }
       ],
       "returns": "handlers.Status",
@@ -11086,6 +11411,43 @@
       "returns": "bool",
       "returnGoType": "bool",
       "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "HandleSelfCreateProfile",
+    "trimmedName": "SelfCreateProfile",
+    "comments": [
+      "HandleSelfCreateProfile",
+      "",
+      "\t@summary allows a household member (access code scope) to create their own profile.",
+      "\t@route /api/v1/auth/create-profile [POST]",
+      "\t@returns *models.Profile",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "allows a household member (access code scope) to create their own profile.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/create-profile",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Name",
+          "jsonName": "name",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "*models.Profile",
+      "returnGoType": "models.Profile",
+      "returnTypescriptType": "Models_Profile"
     }
   },
   {

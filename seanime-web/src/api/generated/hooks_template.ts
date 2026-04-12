@@ -1,4 +1,19 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// admin_profiles
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// export function useUpdateProfileName() {
+//     return useServerMutation<Record<string, interface{}>, UpdateProfileName_Variables>({
+//         endpoint: API_ENDPOINTS.ADMIN_PROFILES.UpdateProfileName.endpoint,
+//         method: API_ENDPOINTS.ADMIN_PROFILES.UpdateProfileName.methods[0],
+//         mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.UpdateProfileName.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // anilist
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -632,6 +647,37 @@
 //         method: API_ENDPOINTS.DEBRID.DebridGetTorrents.methods[0],
 //         queryKey: [API_ENDPOINTS.DEBRID.DebridGetTorrents.key],
 //         enabled: true,
+//     })
+// }
+
+// export function useDebridPlayTorrent() {
+//     return useServerMutation<boolean, DebridPlayTorrent_Variables>({
+//         endpoint: API_ENDPOINTS.DEBRID.DebridPlayTorrent.endpoint,
+//         method: API_ENDPOINTS.DEBRID.DebridPlayTorrent.methods[0],
+//         mutationKey: [API_ENDPOINTS.DEBRID.DebridPlayTorrent.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useDebridGetLocalDownloads() {
+//     return useServerQuery<Array<Models_DebridLocalDownload>>({
+//         endpoint: API_ENDPOINTS.DEBRID.DebridGetLocalDownloads.endpoint,
+//         method: API_ENDPOINTS.DEBRID.DebridGetLocalDownloads.methods[0],
+//         queryKey: [API_ENDPOINTS.DEBRID.DebridGetLocalDownloads.key],
+//         enabled: true,
+//     })
+// }
+
+// export function useDebridDeleteLocalDownload() {
+//     return useServerMutation<boolean, DebridDeleteLocalDownload_Variables>({
+//         endpoint: API_ENDPOINTS.DEBRID.DebridDeleteLocalDownload.endpoint,
+//         method: API_ENDPOINTS.DEBRID.DebridDeleteLocalDownload.methods[0],
+//         mutationKey: [API_ENDPOINTS.DEBRID.DebridDeleteLocalDownload.key],
+//         onSuccess: async () => {
+// 
+//         },
 //     })
 // }
 
@@ -1784,7 +1830,7 @@
 // }
 
 // export function useMediastreamShutdownTranscodeStream() {
-//     return useServerMutation<boolean>({
+//     return useServerMutation<boolean, MediastreamShutdownTranscodeStream_Variables>({
 //         endpoint: API_ENDPOINTS.MEDIASTREAM.MediastreamShutdownTranscodeStream.endpoint,
 //         method: API_ENDPOINTS.MEDIASTREAM.MediastreamShutdownTranscodeStream.methods[0],
 //         mutationKey: [API_ENDPOINTS.MEDIASTREAM.MediastreamShutdownTranscodeStream.key],
@@ -2766,6 +2812,21 @@
 //         endpoint: API_ENDPOINTS.TORRENTSTREAM.GetTorrentstreamBatchHistory.endpoint,
 //         method: API_ENDPOINTS.TORRENTSTREAM.GetTorrentstreamBatchHistory.methods[0],
 //         mutationKey: [API_ENDPOINTS.TORRENTSTREAM.GetTorrentstreamBatchHistory.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// user_auth
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// export function useSelfCreateProfile() {
+//     return useServerMutation<Models_Profile, SelfCreateProfile_Variables>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.SelfCreateProfile.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.SelfCreateProfile.methods[0],
+//         mutationKey: [API_ENDPOINTS.USER_AUTH.SelfCreateProfile.key],
 //         onSuccess: async () => {
 // 
 //         },

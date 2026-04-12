@@ -3378,6 +3378,7 @@ declare namespace $app {
         episodeNumber: number;
         isMovie: boolean;
         isSeasonFinale: boolean;
+        isAdult: boolean;
     }
 
     /**
@@ -3522,7 +3523,7 @@ declare namespace $app {
     }
 
     /**
-     * - Filepath: internal/continuity/history.go
+     * - Filepath: ..\internal\continuity\history.go
      */
     export type Continuity_WatchHistory = Record<number, Continuity_WatchHistoryItem>;
 
@@ -3704,12 +3705,12 @@ declare namespace $app {
     }
 
     /**
-     * - Filepath: internal/manga/download.go
+     * - Filepath: ..\internal\manga\download.go
      */
     export type Manga_MediaMap = Record<number, Manga_ProviderDownloadMap>;
 
     /**
-     * - Filepath: internal/manga/download.go
+     * - Filepath: ..\internal\manga\download.go
      */
     export type Manga_ProviderDownloadMap = Record<string, Array<Manga_ProviderDownloadMapChapterInfo>>;
 

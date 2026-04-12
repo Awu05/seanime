@@ -1932,7 +1932,7 @@ export type Continuity_UpdateWatchHistoryItemOptions = {
 }
 
 /**
- * - Filepath: internal/continuity/history.go
+ * - Filepath: ..\internal\continuity\history.go
  * - Filename: history.go
  * - Package: continuity
  */
@@ -3331,7 +3331,7 @@ export type Manga_PageDimension = {
 }
 
 /**
- * - Filepath: internal/manga/download.go
+ * - Filepath: ..\internal\manga\download.go
  * - Filename: download.go
  * - Package: manga
  */
@@ -3742,17 +3742,16 @@ export type Models_ChapterDownloadQueueItem = {
  * - Filepath: internal/database/models/models.go
  * - Filename: models.go
  * - Package: models
+ * @description
+ *  DebridLocalDownload tracks debrid torrents that have been manually downloaded
+ *  to a local path. Populated after a successful download so the UI can show a
+ *  "downloaded" indicator and offer "play locally" as an alternative to streaming.
  */
-export type Models_DebridSettings = {
-    enabled: boolean
-    provider: string
-    apiKey: string
-    apiUrl: string
-    storeName: string
-    storeApiKey: string
-    includeDebridStreamInLibrary: boolean
-    streamAutoSelect: boolean
-    streamPreferredResolution: string
+export type Models_DebridLocalDownload = {
+    torrentItemId: string
+    torrentName: string
+    torrentHash: string
+    localPath: string
     id: number
     createdAt?: string
     updatedAt?: string
@@ -3763,11 +3762,25 @@ export type Models_DebridSettings = {
  * - Filename: models.go
  * - Package: models
  */
-export type Models_DebridLocalDownload = {
-    torrentItemId: string
-    torrentName: string
-    torrentHash: string
-    localPath: string
+export type Models_DebridSettings = {
+    enabled: boolean
+    provider: string
+    apiKey: string
+    /**
+     * StremThru: base URL of the instance
+     */
+    apiUrl: string
+    /**
+     * StremThru: debrid store name (e.g. torbox, realdebrid, pikpak)
+     */
+    storeName: string
+    /**
+     * StremThru: debrid store API key (for public instances)
+     */
+    storeApiKey: string
+    includeDebridStreamInLibrary: boolean
+    streamAutoSelect: boolean
+    streamPreferredResolution: string
     id: number
     createdAt?: string
     updatedAt?: string
@@ -3807,14 +3820,14 @@ export type Models_HomeItem = {
 }
 
 /**
- * - Filepath: internal/database/models/models.go
+ * - Filepath: ..\internal\database\models\models.go
  * - Filename: models.go
  * - Package: models
  */
 export type Models_IntSlice = Array<number>
 
 /**
- * - Filepath: internal/database/models/models.go
+ * - Filepath: ..\internal\database\models\models.go
  * - Filename: models.go
  * - Package: models
  */
@@ -3973,11 +3986,27 @@ export type Models_NotificationSettings = {
 }
 
 /**
+ * - Filepath: internal/database/models/profile.go
+ * - Filename: profile.go
+ * - Package: models
+ */
+export type Models_Profile = {
+    name: string
+    hasPin: boolean
+    isAdmin: boolean
+    avatar: string
+    id: string
+    createdAt?: string
+    updatedAt?: string
+}
+
+/**
  * - Filepath: internal/database/models/models.go
  * - Filename: models.go
  * - Package: models
  */
 export type Models_Settings = {
+    profileId: string
     library?: Models_LibrarySettings
     mediaPlayer?: Models_MediaPlayerSettings
     torrent?: Models_TorrentSettings
@@ -4005,7 +4034,7 @@ export type Models_SilencedMediaEntry = {
 }
 
 /**
- * - Filepath: internal/database/models/models.go
+ * - Filepath: ..\internal\database\models\models.go
  * - Filename: models.go
  * - Package: models
  */
@@ -4167,7 +4196,7 @@ export type Nakama_NakamaAnimeLibrary = {
 }
 
 /**
- * - Filepath: internal/nakama/share.go
+ * - Filepath: ..\internal\nakama\share.go
  * - Filename: share.go
  * - Package: nakama
  */

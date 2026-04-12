@@ -26685,7 +26685,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/continuity/history.go",
+    "filepath": "..\\internal\\continuity\\history.go",
     "filename": "history.go",
     "name": "WatchHistory",
     "formattedName": "Continuity_WatchHistory",
@@ -27232,6 +27232,67 @@
     "comments": []
   },
   {
+    "filepath": "../internal/core/anilist_pool.go",
+    "filename": "anilist_pool.go",
+    "name": "AnilistClientPool",
+    "formattedName": "INTERNAL_AnilistClientPool",
+    "package": "core",
+    "fields": [
+      {
+        "name": "clients",
+        "jsonName": "clients",
+        "goType": "map[string]anilist.AnilistClient",
+        "typescriptType": "Record\u003cstring, AL_AnilistClient\u003e",
+        "usedTypescriptType": "AL_AnilistClient",
+        "usedStructName": "anilist.AnilistClient",
+        "required": false,
+        "public": false,
+        "comments": [
+          " keyed by profileID"
+        ]
+      },
+      {
+        "name": "platforms",
+        "jsonName": "platforms",
+        "goType": "map[string]platform.Platform",
+        "typescriptType": "Record\u003cstring, Platform\u003e",
+        "usedTypescriptType": "Platform",
+        "usedStructName": "platform.Platform",
+        "required": false,
+        "public": false,
+        "comments": [
+          " keyed by profileID"
+        ]
+      },
+      {
+        "name": "mu",
+        "jsonName": "mu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "app",
+        "jsonName": "app",
+        "goType": "App",
+        "typescriptType": "INTERNAL_App",
+        "usedTypescriptType": "INTERNAL_App",
+        "usedStructName": "core.App",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " AnilistClientPool manages per-profile AniList clients and platforms.",
+      " Each profile gets its own client (with its own token) to avoid cross-profile data leaking."
+    ]
+  },
+  {
     "filepath": "../internal/core/app.go",
     "filename": "app.go",
     "name": "App",
@@ -27482,6 +27543,28 @@
         "comments": []
       },
       {
+        "name": "StreamSessionManager",
+        "jsonName": "StreamSessionManager",
+        "goType": "StreamSessionManager",
+        "typescriptType": "INTERNAL_StreamSessionManager",
+        "usedTypescriptType": "INTERNAL_StreamSessionManager",
+        "usedStructName": "core.StreamSessionManager",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AnilistPool",
+        "jsonName": "AnilistPool",
+        "goType": "AnilistClientPool",
+        "typescriptType": "INTERNAL_AnilistClientPool",
+        "usedTypescriptType": "INTERNAL_AnilistClientPool",
+        "usedStructName": "core.AnilistClientPool",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
         "name": "NativePlayer",
         "jsonName": "NativePlayer",
         "goType": "nativeplayer.NativePlayer",
@@ -27682,6 +27765,24 @@
         "usedTypescriptType": "Models_Settings",
         "usedStructName": "models.Settings",
         "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "JWTSecret",
+        "jsonName": "JWTSecret",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "MultiUserEnabled",
+        "jsonName": "MultiUserEnabled",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
         "public": true,
         "comments": []
       },
@@ -27974,6 +28075,46 @@
       }
     ],
     "comments": []
+  },
+  {
+    "filepath": "../internal/core/auth.go",
+    "filename": "auth.go",
+    "name": "AuthClaims",
+    "formattedName": "INTERNAL_AuthClaims",
+    "package": "core",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "IsAdmin",
+        "jsonName": "isAdmin",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Scope",
+        "jsonName": "scope",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [],
+    "embeddedStructNames": [
+      "jwt.RegisteredClaims"
+    ]
   },
   {
     "filepath": "../internal/core/config.go",
@@ -28696,6 +28837,283 @@
     "comments": []
   },
   {
+    "filepath": "../internal/core/profile_context.go",
+    "filename": "profile_context.go",
+    "name": "ProfileContext",
+    "formattedName": "INTERNAL_ProfileContext",
+    "package": "core",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "ProfileID",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Account",
+        "jsonName": "Account",
+        "goType": "models.Account",
+        "typescriptType": "Models_Account",
+        "usedTypescriptType": "Models_Account",
+        "usedStructName": "models.Account",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "User",
+        "jsonName": "User",
+        "goType": "user.User",
+        "typescriptType": "User",
+        "usedTypescriptType": "User",
+        "usedStructName": "user.User",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Token",
+        "jsonName": "Token",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/core/profile_context.go",
+    "filename": "profile_context.go",
+    "name": "OverridableSettings",
+    "formattedName": "INTERNAL_OverridableSettings",
+    "package": "core",
+    "fields": [
+      {
+        "name": "TorrentProvider",
+        "jsonName": "torrentProvider",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "HideAudienceScore",
+        "jsonName": "hideAudienceScore",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EnableAdultContent",
+        "jsonName": "enableAdultContent",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "BlurAdultContent",
+        "jsonName": "blurAdultContent",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AutoUpdateProgress",
+        "jsonName": "autoUpdateProgress",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AutoPlayNextEpisode",
+        "jsonName": "autoPlayNextEpisode",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EnableWatchContinuity",
+        "jsonName": "enableWatchContinuity",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "DisableAnimeCardTrailers",
+        "jsonName": "disableAnimeCardTrailers",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EnableOnlinestream",
+        "jsonName": "enableOnlinestream",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EnableManga",
+        "jsonName": "enableManga",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/core/stream_session.go",
+    "filename": "stream_session.go",
+    "name": "ProfileStreamSession",
+    "formattedName": "INTERNAL_ProfileStreamSession",
+    "package": "core",
+    "fields": [
+      {
+        "name": "LastActive",
+        "jsonName": "LastActive",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "VideoCore",
+        "jsonName": "VideoCore",
+        "goType": "videocore.VideoCore",
+        "typescriptType": "VideoCore_VideoCore",
+        "usedTypescriptType": "VideoCore_VideoCore",
+        "usedStructName": "videocore.VideoCore",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "PlaybackManager",
+        "jsonName": "PlaybackManager",
+        "goType": "playbackmanager.PlaybackManager",
+        "typescriptType": "PlaybackManager_PlaybackManager",
+        "usedTypescriptType": "PlaybackManager_PlaybackManager",
+        "usedStructName": "playbackmanager.PlaybackManager",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "DirectStreamManager",
+        "jsonName": "DirectStreamManager",
+        "goType": "directstream.Manager",
+        "typescriptType": "Directstream_Manager",
+        "usedTypescriptType": "Directstream_Manager",
+        "usedStructName": "directstream.Manager",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TorrentStream",
+        "jsonName": "TorrentStream",
+        "goType": "torrentstream.Repository",
+        "typescriptType": "Torrentstream_Repository",
+        "usedTypescriptType": "Torrentstream_Repository",
+        "usedStructName": "torrentstream.Repository",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/core/stream_session.go",
+    "filename": "stream_session.go",
+    "name": "StreamSessionManager",
+    "formattedName": "INTERNAL_StreamSessionManager",
+    "package": "core",
+    "fields": [
+      {
+        "name": "sessions",
+        "jsonName": "sessions",
+        "goType": "map[string]ProfileStreamSession",
+        "typescriptType": "Record\u003cstring, INTERNAL_ProfileStreamSession\u003e",
+        "usedTypescriptType": "INTERNAL_ProfileStreamSession",
+        "usedStructName": "core.ProfileStreamSession",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "mu",
+        "jsonName": "mu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "cleanupTicker",
+        "jsonName": "cleanupTicker",
+        "goType": "time.Ticker",
+        "typescriptType": "Ticker",
+        "usedTypescriptType": "Ticker",
+        "usedStructName": "time.Ticker",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "cleanupDone",
+        "jsonName": "cleanupDone",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "inactivityTimeout",
+        "jsonName": "inactivityTimeout",
+        "goType": "time.Duration",
+        "typescriptType": "Duration",
+        "usedTypescriptType": "Duration",
+        "usedStructName": "time.Duration",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
     "filepath": "../internal/cron/cron.go",
     "filename": "cron.go",
     "name": "JobCtx",
@@ -28962,6 +29380,134 @@
     "comments": []
   },
   {
+    "filepath": "../internal/database/models/admin.go",
+    "filename": "admin.go",
+    "name": "Admin",
+    "formattedName": "Models_Admin",
+    "package": "models",
+    "fields": [
+      {
+        "name": "Username",
+        "jsonName": "username",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "PasswordHash",
+        "jsonName": "",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Profile",
+        "jsonName": "profile",
+        "goType": "Profile",
+        "typescriptType": "Models_Profile",
+        "usedTypescriptType": "Models_Profile",
+        "usedStructName": "models.Profile",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [],
+    "embeddedStructNames": [
+      "models.UUIDBaseModel"
+    ]
+  },
+  {
+    "filepath": "../internal/database/models/instance_config.go",
+    "filename": "instance_config.go",
+    "name": "InstanceConfig",
+    "formattedName": "Models_InstanceConfig",
+    "package": "models",
+    "fields": [
+      {
+        "name": "ID",
+        "jsonName": "id",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AccessCodeHash",
+        "jsonName": "",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "JWTSecret",
+        "jsonName": "",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/database/models/library_path.go",
+    "filename": "library_path.go",
+    "name": "LibraryPath",
+    "formattedName": "Models_LibraryPath",
+    "package": "models",
+    "fields": [
+      {
+        "name": "Path",
+        "jsonName": "path",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "OwnerID",
+        "jsonName": "ownerId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Shared",
+        "jsonName": "shared",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [],
+    "embeddedStructNames": [
+      "models.UUIDBaseModel"
+    ]
+  },
+  {
     "filepath": "../internal/database/models/models.go",
     "filename": "models.go",
     "name": "BaseModel",
@@ -28973,6 +29519,45 @@
         "jsonName": "id",
         "goType": "uint",
         "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "CreatedAt",
+        "jsonName": "createdAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "UpdatedAt",
+        "jsonName": "updatedAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/database/models/models.go",
+    "filename": "models.go",
+    "name": "UUIDBaseModel",
+    "formattedName": "Models_UUIDBaseModel",
+    "package": "models",
+    "fields": [
+      {
+        "name": "ID",
+        "jsonName": "id",
+        "goType": "string",
+        "typescriptType": "string",
         "required": true,
         "public": true,
         "comments": []
@@ -29055,6 +29640,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": [],
@@ -29075,6 +29669,15 @@
         "goType": "string",
         "typescriptType": "Array\u003cstring\u003e",
         "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
         "public": true,
         "comments": []
       }
@@ -29099,6 +29702,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": [],
@@ -29113,6 +29725,15 @@
     "formattedName": "Models_Settings",
     "package": "models",
     "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
       {
         "name": "Library",
         "jsonName": "library",
@@ -29524,7 +30145,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/database/models/models.go",
+    "filepath": "..\\internal\\database\\models\\models.go",
     "filename": "models.go",
     "name": "LibraryPaths",
     "formattedName": "Models_LibraryPaths",
@@ -29640,7 +30261,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/database/models/models.go",
+    "filepath": "..\\internal\\database\\models\\models.go",
     "filename": "models.go",
     "name": "IntSlice",
     "formattedName": "Models_IntSlice",
@@ -31552,6 +32173,39 @@
         "comments": []
       },
       {
+        "name": "ApiUrl",
+        "jsonName": "apiUrl",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": [
+          " StremThru: base URL of the instance"
+        ]
+      },
+      {
+        "name": "StoreName",
+        "jsonName": "storeName",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": [
+          " StremThru: debrid store name (e.g. torbox, realdebrid, pikpak)"
+        ]
+      },
+      {
+        "name": "StoreApiKey",
+        "jsonName": "storeApiKey",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": [
+          " StremThru: debrid store API key (for public instances)"
+        ]
+      },
+      {
         "name": "IncludeDebridStreamInLibrary",
         "jsonName": "includeDebridStreamInLibrary",
         "goType": "bool",
@@ -31629,6 +32283,59 @@
       }
     ],
     "comments": [],
+    "embeddedStructNames": [
+      "models.BaseModel"
+    ]
+  },
+  {
+    "filepath": "../internal/database/models/models.go",
+    "filename": "models.go",
+    "name": "DebridLocalDownload",
+    "formattedName": "Models_DebridLocalDownload",
+    "package": "models",
+    "fields": [
+      {
+        "name": "TorrentItemID",
+        "jsonName": "torrentItemId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TorrentName",
+        "jsonName": "torrentName",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TorrentHash",
+        "jsonName": "torrentHash",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "LocalPath",
+        "jsonName": "localPath",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " DebridLocalDownload tracks debrid torrents that have been manually downloaded",
+      " to a local path. Populated after a successful download so the UI can show a",
+      " \"downloaded\" indicator and offer \"play locally\" as an alternative to streaming."
+    ],
     "embeddedStructNames": [
       "models.BaseModel"
     ]
@@ -31782,7 +32489,7 @@
     ]
   },
   {
-    "filepath": "../internal/database/models/models.go",
+    "filepath": "..\\internal\\database\\models\\models.go",
     "filename": "models.go",
     "name": "StringSlice",
     "formattedName": "Models_StringSlice",
@@ -31794,6 +32501,95 @@
       "declaredValues": null
     },
     "comments": null
+  },
+  {
+    "filepath": "../internal/database/models/profile.go",
+    "filename": "profile.go",
+    "name": "Profile",
+    "formattedName": "Models_Profile",
+    "package": "models",
+    "fields": [
+      {
+        "name": "Name",
+        "jsonName": "name",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "PinHash",
+        "jsonName": "",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "HasPin",
+        "jsonName": "hasPin",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "IsAdmin",
+        "jsonName": "isAdmin",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Avatar",
+        "jsonName": "avatar",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [],
+    "embeddedStructNames": [
+      "models.UUIDBaseModel"
+    ]
+  },
+  {
+    "filepath": "../internal/database/models/profile_settings.go",
+    "filename": "profile_settings.go",
+    "name": "ProfileSettings",
+    "formattedName": "Models_ProfileSettings",
+    "package": "models",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Overrides",
+        "jsonName": "overrides",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [],
+    "embeddedStructNames": [
+      "models.UUIDBaseModel"
+    ]
   },
   {
     "filepath": "../internal/debrid/alldebrid/alldebrid.go",
@@ -34100,6 +34896,528 @@
     "comments": []
   },
   {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "StremThru",
+    "formattedName": "StremThru",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "baseUrl",
+        "jsonName": "baseUrl",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "storeName",
+        "jsonName": "storeName",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "storeApiKey",
+        "jsonName": "storeApiKey",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "apiKey",
+        "jsonName": "apiKey",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "client",
+        "jsonName": "client",
+        "goType": "http.Client",
+        "typescriptType": "Client",
+        "usedTypescriptType": "Client",
+        "usedStructName": "http.Client",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "logger",
+        "jsonName": "logger",
+        "goType": "zerolog.Logger",
+        "typescriptType": "Logger",
+        "usedTypescriptType": "Logger",
+        "usedStructName": "zerolog.Logger",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "Response",
+    "formattedName": "Response",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Data",
+        "jsonName": "data",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "ErrorResponse",
+    "formattedName": "ErrorResponse",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Error",
+        "jsonName": "error",
+        "goType": "ErrorResponse_Error",
+        "inlineStructType": "struct{\nCode string `json:\"code\"`\nMessage string `json:\"message\"`}",
+        "typescriptType": "ErrorResponse_Error",
+        "usedTypescriptType": "{ code: string; message: string; }",
+        "usedStructName": "stremthru.ErrorResponse_Error",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "ErrorResponse_Error",
+    "formattedName": "ErrorResponse_Error",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Code",
+        "jsonName": "code",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Message",
+        "jsonName": "message",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "MagnetFile",
+    "formattedName": "MagnetFile",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Index",
+        "jsonName": "index",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Link",
+        "jsonName": "link",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Name",
+        "jsonName": "name",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Path",
+        "jsonName": "path",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Size",
+        "jsonName": "size",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "VideoHash",
+        "jsonName": "video_hash",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "Magnet",
+    "formattedName": "Magnet",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "ID",
+        "jsonName": "id",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Hash",
+        "jsonName": "hash",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Magnet",
+        "jsonName": "magnet",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Name",
+        "jsonName": "name",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Size",
+        "jsonName": "size",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Status",
+        "jsonName": "status",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Private",
+        "jsonName": "private",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Files",
+        "jsonName": "files",
+        "goType": "[]MagnetFile",
+        "typescriptType": "Array\u003cMagnetFile\u003e",
+        "usedTypescriptType": "MagnetFile",
+        "usedStructName": "stremthru.MagnetFile",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AddedAt",
+        "jsonName": "added_at",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "MagnetListItem",
+    "formattedName": "MagnetListItem",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "ID",
+        "jsonName": "id",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Hash",
+        "jsonName": "hash",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Name",
+        "jsonName": "name",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Size",
+        "jsonName": "size",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Status",
+        "jsonName": "status",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Private",
+        "jsonName": "private",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AddedAt",
+        "jsonName": "added_at",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "MagnetListResponse",
+    "formattedName": "MagnetListResponse",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Items",
+        "jsonName": "items",
+        "goType": "[]MagnetListItem",
+        "typescriptType": "Array\u003cMagnetListItem\u003e",
+        "usedTypescriptType": "MagnetListItem",
+        "usedStructName": "stremthru.MagnetListItem",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TotalItems",
+        "jsonName": "total_items",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "MagnetCheckItem",
+    "formattedName": "MagnetCheckItem",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Hash",
+        "jsonName": "hash",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Magnet",
+        "jsonName": "magnet",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Status",
+        "jsonName": "status",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Files",
+        "jsonName": "files",
+        "goType": "[]MagnetFile",
+        "typescriptType": "Array\u003cMagnetFile\u003e",
+        "usedTypescriptType": "MagnetFile",
+        "usedStructName": "stremthru.MagnetFile",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "MagnetCheckResponse",
+    "formattedName": "MagnetCheckResponse",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Items",
+        "jsonName": "items",
+        "goType": "[]MagnetCheckItem",
+        "typescriptType": "Array\u003cMagnetCheckItem\u003e",
+        "usedTypescriptType": "MagnetCheckItem",
+        "usedStructName": "stremthru.MagnetCheckItem",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "LinkResponse",
+    "formattedName": "LinkResponse",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "Link",
+        "jsonName": "link",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/debrid/stremthru/stremthru.go",
+    "filename": "stremthru.go",
+    "name": "UserResponse",
+    "formattedName": "UserResponse",
+    "package": "stremthru",
+    "fields": [
+      {
+        "name": "ID",
+        "jsonName": "id",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Email",
+        "jsonName": "email",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "SubscriptionStatus",
+        "jsonName": "subscription_status",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
     "filepath": "../internal/debrid/torbox/torbox.go",
     "filename": "torbox.go",
     "name": "TorBox",
@@ -34703,6 +36021,30 @@
         "comments": [
           " Protects httpStream access"
         ]
+      },
+      {
+        "name": "downloader",
+        "jsonName": "downloader",
+        "goType": "DebridDownloader",
+        "typescriptType": "Directstream_DebridDownloader",
+        "usedTypescriptType": "Directstream_DebridDownloader",
+        "usedStructName": "directstream.DebridDownloader",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "terminateDebridOn",
+        "jsonName": "terminateDebridOn",
+        "goType": "sync.Once",
+        "typescriptType": "Once",
+        "usedTypescriptType": "Once",
+        "usedStructName": "sync.Once",
+        "required": false,
+        "public": false,
+        "comments": [
+          " guards DebridStream-specific terminate body"
+        ]
       }
     ],
     "comments": [
@@ -34812,6 +36154,167 @@
       }
     ],
     "comments": []
+  },
+  {
+    "filepath": "../internal/directstream/downloader.go",
+    "filename": "downloader.go",
+    "name": "DebridDownloader",
+    "formattedName": "Directstream_DebridDownloader",
+    "package": "directstream",
+    "fields": [
+      {
+        "name": "url",
+        "jsonName": "url",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "hash",
+        "jsonName": "hash",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "downloadDir",
+        "jsonName": "downloadDir",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "contentLength",
+        "jsonName": "contentLength",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": false,
+        "comments": [
+          " immutable after construction"
+        ]
+      },
+      {
+        "name": "maxSize",
+        "jsonName": "maxSize",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": false,
+        "comments": [
+          " immutable after construction"
+        ]
+      },
+      {
+        "name": "mu",
+        "jsonName": "mu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "localPath",
+        "jsonName": "localPath",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": [
+          " guarded by mu"
+        ]
+      },
+      {
+        "name": "complete",
+        "jsonName": "complete",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "err",
+        "jsonName": "err",
+        "goType": "error",
+        "typescriptType": "Directstream_error",
+        "usedTypescriptType": "Directstream_error",
+        "usedStructName": "directstream.error",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "downloaded",
+        "jsonName": "downloaded",
+        "goType": "atomic.Int64",
+        "typescriptType": "Int64",
+        "usedTypescriptType": "Int64",
+        "usedStructName": "atomic.Int64",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "cancel",
+        "jsonName": "cancel",
+        "goType": "context.CancelFunc",
+        "typescriptType": "CancelFunc",
+        "usedTypescriptType": "CancelFunc",
+        "usedStructName": "context.CancelFunc",
+        "required": false,
+        "public": false,
+        "comments": [
+          " guarded by mu"
+        ]
+      },
+      {
+        "name": "done",
+        "jsonName": "done",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": [
+          " closed when the download goroutine exits"
+        ]
+      },
+      {
+        "name": "cleanupOnce",
+        "jsonName": "cleanupOnce",
+        "goType": "sync.Once",
+        "typescriptType": "Once",
+        "usedTypescriptType": "Once",
+        "usedStructName": "sync.Once",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "logger",
+        "jsonName": "logger",
+        "goType": "zerolog.Logger",
+        "typescriptType": "Logger",
+        "usedTypescriptType": "Logger",
+        "usedStructName": "zerolog.Logger",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " DebridDownloader downloads a debrid stream URL to local temp storage in the background.",
+      " Files under the size cap are downloaded; larger files are skipped."
+    ]
   },
   {
     "filepath": "../internal/directstream/localfile.go",
@@ -35014,55 +36517,22 @@
         "comments": []
       },
       {
-        "name": "playbackCtx",
-        "jsonName": "playbackCtx",
-        "goType": "context.Context",
-        "typescriptType": "Context",
-        "usedTypescriptType": "Context",
-        "usedStructName": "context.Context",
-        "required": false,
-        "public": false,
-        "comments": []
-      },
-      {
-        "name": "playbackCtxCancelFunc",
-        "jsonName": "playbackCtxCancelFunc",
-        "goType": "context.CancelFunc",
-        "typescriptType": "CancelFunc",
-        "usedTypescriptType": "CancelFunc",
-        "usedStructName": "context.CancelFunc",
-        "required": false,
-        "public": false,
-        "comments": []
-      },
-      {
-        "name": "currentStream",
-        "jsonName": "currentStream",
+        "name": "streams",
+        "jsonName": "streams",
         "goType": "",
         "typescriptType": "any",
-        "required": true,
+        "required": false,
         "public": false,
         "comments": [
-          " The current stream being played"
+          " Active streams keyed by clientId"
         ]
-      },
-      {
-        "name": "currentStreamEpisodeCollection",
-        "jsonName": "currentStreamEpisodeCollection",
-        "goType": "",
-        "typescriptType": "any",
-        "required": true,
-        "public": false,
-        "comments": []
       },
       {
         "name": "settings",
         "jsonName": "settings",
-        "goType": "Settings",
-        "typescriptType": "Directstream_Settings",
-        "usedTypescriptType": "Directstream_Settings",
-        "usedStructName": "directstream.Settings",
-        "required": false,
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
         "public": false,
         "comments": []
       },
@@ -35099,6 +36569,17 @@
         "goType": "",
         "typescriptType": "any",
         "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "transcodeRequester",
+        "jsonName": "transcodeRequester",
+        "goType": "TranscodeRequester",
+        "typescriptType": "Directstream_TranscodeRequester",
+        "usedTypescriptType": "Directstream_TranscodeRequester",
+        "usedStructName": "directstream.TranscodeRequester",
+        "required": true,
         "public": false,
         "comments": []
       }
@@ -35256,6 +36737,19 @@
         "required": true,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "TranscodeRequester",
+        "jsonName": "TranscodeRequester",
+        "goType": "TranscodeRequester",
+        "typescriptType": "Directstream_TranscodeRequester",
+        "usedTypescriptType": "Directstream_TranscodeRequester",
+        "usedStructName": "directstream.TranscodeRequester",
+        "required": true,
+        "public": true,
+        "comments": [
+          " Optional: used for debrid stream audio transcoding"
+        ]
       }
     ],
     "comments": [
@@ -35586,6 +37080,28 @@
         "comments": [
           " Name of the file being streamed, if applicable"
         ]
+      },
+      {
+        "name": "streamCtx",
+        "jsonName": "streamCtx",
+        "goType": "context.Context",
+        "typescriptType": "Context",
+        "usedTypescriptType": "Context",
+        "usedStructName": "context.Context",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "streamCancelFunc",
+        "jsonName": "streamCancelFunc",
+        "goType": "context.CancelFunc",
+        "typescriptType": "CancelFunc",
+        "usedTypescriptType": "CancelFunc",
+        "usedStructName": "context.CancelFunc",
+        "required": false,
+        "public": false,
+        "comments": []
       },
       {
         "name": "activeSubtitleStreams",
@@ -37483,6 +38999,15 @@
       {
         "name": "ID",
         "jsonName": "ID",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ProfileID",
+        "jsonName": "ProfileID",
         "goType": "string",
         "typescriptType": "string",
         "required": true,
@@ -42936,6 +44461,15 @@
       {
         "name": "ServerHasPassword",
         "jsonName": "serverHasPassword",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "MultiUserEnabled",
+        "jsonName": "multiUserEnabled",
         "goType": "bool",
         "typescriptType": "boolean",
         "required": true,
@@ -48660,6 +50194,15 @@
         "required": true,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "IsAdult",
+        "jsonName": "isAdult",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
@@ -50558,11 +52101,9 @@
       {
         "name": "settings",
         "jsonName": "settings",
-        "goType": "Settings",
-        "typescriptType": "PlaybackManager_Settings",
-        "usedTypescriptType": "PlaybackManager_Settings",
-        "usedStructName": "playbackmanager.Settings",
-        "required": false,
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
         "public": false,
         "comments": []
       },
@@ -54819,7 +56360,7 @@
     ]
   },
   {
-    "filepath": "../internal/local/database_models.go",
+    "filepath": "..\\internal\\local\\database_models.go",
     "filename": "database_models.go",
     "name": "StringMap",
     "formattedName": "Local_StringMap",
@@ -54833,7 +56374,7 @@
     "comments": null
   },
   {
-    "filepath": "../internal/local/database_models.go",
+    "filepath": "..\\internal\\local\\database_models.go",
     "filename": "database_models.go",
     "name": "LocalMangaChapterContainers",
     "formattedName": "Local_LocalMangaChapterContainers",
@@ -56305,7 +57846,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/manga/download.go",
+    "filepath": "..\\internal\\manga\\download.go",
     "filename": "download.go",
     "name": "MediaMap",
     "formattedName": "Manga_MediaMap",
@@ -56320,7 +57861,7 @@
     "comments": null
   },
   {
-    "filepath": "../internal/manga/download.go",
+    "filepath": "..\\internal\\manga\\download.go",
     "filename": "download.go",
     "name": "ProviderDownloadMap",
     "formattedName": "Manga_ProviderDownloadMap",
@@ -56748,7 +58289,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/manga/downloader/chapter_downloader.go",
+    "filepath": "..\\internal\\manga\\downloader\\chapter_downloader.go",
     "filename": "chapter_downloader.go",
     "name": "Registry",
     "formattedName": "ChapterDownloader_Registry",
@@ -62369,14 +63910,14 @@
         "comments": []
       },
       {
-        "name": "currentMediaContainer",
-        "jsonName": "currentMediaContainer",
+        "name": "clientContainers",
+        "jsonName": "clientContainers",
         "goType": "",
         "typescriptType": "any",
-        "required": true,
+        "required": false,
         "public": false,
         "comments": [
-          " The current media being played."
+          " Per-client active media containers, keyed by clientId."
         ]
       },
       {
@@ -62398,7 +63939,7 @@
         "required": false,
         "public": false,
         "comments": [
-          " Temporary cache for the media containers."
+          " Cache for media containers, keyed by hash."
         ]
       }
     ],
@@ -62580,15 +64121,28 @@
         "comments": []
       },
       {
-        "name": "reqMu",
-        "jsonName": "reqMu",
+        "name": "initMu",
+        "jsonName": "initMu",
         "goType": "sync.Mutex",
         "typescriptType": "Mutex",
         "usedTypescriptType": "Mutex",
         "usedStructName": "sync.Mutex",
         "required": false,
         "public": false,
-        "comments": []
+        "comments": [
+          " Protects transcoder initialization only"
+        ]
+      },
+      {
+        "name": "settingsDirty",
+        "jsonName": "settingsDirty",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": false,
+        "comments": [
+          " True when settings changed while sessions are active"
+        ]
       },
       {
         "name": "cacheDir",
@@ -62865,6 +64419,37 @@
         "required": false,
         "public": false,
         "comments": []
+      },
+      {
+        "name": "localPathMu",
+        "jsonName": "localPathMu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "localPath",
+        "jsonName": "localPath",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "expectedSize",
+        "jsonName": "expectedSize",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": false,
+        "comments": [
+          " total file size, used to check partial download coverage"
+        ]
       }
     ],
     "comments": [
@@ -62942,6 +64527,17 @@
         "required": true,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "IsEstimated",
+        "jsonName": "IsEstimated",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": [
+          " true when using evenly-spaced estimated keyframes (not from ffprobe)"
+        ]
       },
       {
         "name": "info",
@@ -67004,7 +68600,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/nakama/share.go",
+    "filepath": "..\\internal\\nakama\\share.go",
     "filename": "share.go",
     "name": "NakamaCustomSourceMap",
     "formattedName": "Nakama_NakamaCustomSourceMap",
@@ -78680,6 +80276,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "Records",
+        "jsonName": "records",
+        "goType": "map[string]",
+        "typescriptType": "Record\u003cstring, any\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
@@ -84872,6 +86477,30 @@
         "comments": []
       },
       {
+        "name": "activeStreams",
+        "jsonName": "activeStreams",
+        "goType": "map[string]ActiveStream",
+        "typescriptType": "Record\u003cstring, Torrentstream_ActiveStream\u003e",
+        "usedTypescriptType": "Torrentstream_ActiveStream",
+        "usedStructName": "torrentstream.ActiveStream",
+        "required": false,
+        "public": false,
+        "comments": [
+          " keyed by session/profile ID"
+        ]
+      },
+      {
+        "name": "streamsMu",
+        "jsonName": "streamsMu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
         "name": "mu",
         "jsonName": "mu",
         "goType": "sync.Mutex",
@@ -84913,40 +86542,6 @@
         "required": false,
         "public": false,
         "comments": []
-      },
-      {
-        "name": "lastSpeedCheck",
-        "jsonName": "lastSpeedCheck",
-        "goType": "time.Time",
-        "typescriptType": "string",
-        "usedStructName": "time.Time",
-        "required": false,
-        "public": false,
-        "comments": [
-          " Track the last time we checked speeds"
-        ]
-      },
-      {
-        "name": "lastBytesCompleted",
-        "jsonName": "lastBytesCompleted",
-        "goType": "int64",
-        "typescriptType": "number",
-        "required": true,
-        "public": false,
-        "comments": [
-          " Track the last bytes completed"
-        ]
-      },
-      {
-        "name": "lastBytesWrittenData",
-        "jsonName": "lastBytesWrittenData",
-        "goType": "int64",
-        "typescriptType": "number",
-        "required": true,
-        "public": false,
-        "comments": [
-          " Track the last bytes written data"
-        ]
       }
     ],
     "comments": []
@@ -85018,6 +86613,77 @@
         "goType": "int",
         "typescriptType": "number",
         "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/torrentstream/client.go",
+    "filename": "client.go",
+    "name": "ActiveStream",
+    "formattedName": "Torrentstream_ActiveStream",
+    "package": "torrentstream",
+    "fields": [
+      {
+        "name": "Torrent",
+        "jsonName": "Torrent",
+        "goType": "torrent.Torrent",
+        "typescriptType": "Torrent_Torrent",
+        "usedTypescriptType": "Torrent_Torrent",
+        "usedStructName": "torrent.Torrent",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "File",
+        "jsonName": "File",
+        "goType": "torrent.File",
+        "typescriptType": "Torrent_File",
+        "usedTypescriptType": "Torrent_File",
+        "usedStructName": "torrent.File",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Status",
+        "jsonName": "Status",
+        "goType": "TorrentStatus",
+        "typescriptType": "Torrentstream_TorrentStatus",
+        "usedTypescriptType": "Torrentstream_TorrentStatus",
+        "usedStructName": "torrentstream.TorrentStatus",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "LastBytesCompleted",
+        "jsonName": "LastBytesCompleted",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "LastBytesWrittenData",
+        "jsonName": "LastBytesWrittenData",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "LastSpeedCheck",
+        "jsonName": "LastSpeedCheck",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
         "public": true,
         "comments": []
       }
@@ -85686,6 +87352,28 @@
         "public": false,
         "comments": [
           " Flag on whether the client should prepare a stream"
+        ]
+      },
+      {
+        "name": "currentClientIdMu",
+        "jsonName": "currentClientIdMu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "currentClientId",
+        "jsonName": "currentClientId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": [
+          " Track the client ID of the current stream for session cleanup"
         ]
       }
     ],
