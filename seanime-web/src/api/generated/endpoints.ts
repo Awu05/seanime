@@ -8,6 +8,21 @@ export type ApiEndpoints = Record<string, Record<string, {
 
 export const API_ENDPOINTS = {
     ADMIN_PROFILES: {
+        CreateProfile: {
+            key: "ADMIN-PROFILES-create-profile",
+            methods: ["POST"],
+            endpoint: "/api/v1/admin/profiles",
+        },
+        DeleteProfile: {
+            key: "ADMIN-PROFILES-delete-profile",
+            methods: ["DELETE"],
+            endpoint: "/api/v1/admin/profiles/:id",
+        },
+        SetAccessCode: {
+            key: "ADMIN-PROFILES-set-access-code",
+            methods: ["POST"],
+            endpoint: "/api/v1/admin/access-code",
+        },
         /**
          *  @description
          *  Route updates a profile's display name.
@@ -1917,6 +1932,18 @@ export const API_ENDPOINTS = {
             endpoint: "/api/v1/playlist/episodes/{id}",
         },
     },
+    PROFILE_SETTINGS: {
+        GetProfileSettings: {
+            key: "PROFILE-SETTINGS-get-profile-settings",
+            methods: ["GET"],
+            endpoint: "/api/v1/profile-settings",
+        },
+        SaveProfileSettings: {
+            key: "PROFILE-SETTINGS-save-profile-settings",
+            methods: ["POST"],
+            endpoint: "/api/v1/profile-settings",
+        },
+    },
     RELEASES: {
         /**
          *  @description
@@ -2335,10 +2362,50 @@ export const API_ENDPOINTS = {
         },
     },
     USER_AUTH: {
+        SetupCheck: {
+            key: "USER-AUTH-setup-check",
+            methods: ["GET"],
+            endpoint: "/api/v1/auth/setup-check",
+        },
+        AdminSetup: {
+            key: "USER-AUTH-admin-setup",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/setup",
+        },
+        AdminLogin: {
+            key: "USER-AUTH-admin-login",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/admin-login",
+        },
+        AccessCode: {
+            key: "USER-AUTH-access-code",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/access-code",
+        },
+        GetProfiles: {
+            key: "USER-AUTH-get-profiles",
+            methods: ["GET"],
+            endpoint: "/api/v1/auth/profiles",
+        },
+        SelectProfile: {
+            key: "USER-AUTH-select-profile",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/select-profile",
+        },
+        GetMe: {
+            key: "USER-AUTH-get-me",
+            methods: ["GET"],
+            endpoint: "/api/v1/auth/me",
+        },
         SelfCreateProfile: {
             key: "USER-AUTH-self-create-profile",
             methods: ["POST"],
             endpoint: "/api/v1/auth/create-profile",
+        },
+        LogoutAuth: {
+            key: "USER-AUTH-logout-auth",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/logout-session",
         },
     },
     VIDEOCORE: {

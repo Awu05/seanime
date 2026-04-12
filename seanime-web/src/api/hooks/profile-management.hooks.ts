@@ -6,9 +6,9 @@ export function useCreateProfile() {
         any,
         { name: string; avatar?: string; pin?: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.CreateProfile.endpoint,
-        method: API_ENDPOINTS.AUTH.CreateProfile.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.CreateProfile.key],
+        endpoint: API_ENDPOINTS.ADMIN_PROFILES.CreateProfile.endpoint,
+        method: API_ENDPOINTS.ADMIN_PROFILES.CreateProfile.methods[0],
+        mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.CreateProfile.key],
     })
 }
 
@@ -17,9 +17,9 @@ export function useDeleteProfile() {
         { success: boolean },
         { id: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.DeleteProfile.endpoint,
+        endpoint: API_ENDPOINTS.ADMIN_PROFILES.DeleteProfile.endpoint,
         method: "POST",
-        mutationKey: [API_ENDPOINTS.AUTH.DeleteProfile.key],
+        mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.DeleteProfile.key],
     })
 }
 
@@ -28,8 +28,8 @@ export function useSetInstanceAccessCode() {
         { success: boolean },
         { accessCode: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.SetAccessCode.endpoint,
-        method: API_ENDPOINTS.AUTH.SetAccessCode.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.SetAccessCode.key],
+        endpoint: API_ENDPOINTS.ADMIN_PROFILES.SetAccessCode.endpoint,
+        method: API_ENDPOINTS.ADMIN_PROFILES.SetAccessCode.methods[0],
+        mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.SetAccessCode.key],
     })
 }

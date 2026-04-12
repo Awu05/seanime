@@ -6,6 +6,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// HandleGetProfileSettings
+//
+//	@summary returns the profile-specific settings overrides and merged settings.
+//	@route /api/v1/profile-settings [GET]
+//	@returns map[string]interface{}
 func (h *Handler) HandleGetProfileSettings(c echo.Context) error {
 	profileID := core.GetProfileIDFromContext(c)
 	if profileID == "" {
@@ -29,6 +34,11 @@ func (h *Handler) HandleGetProfileSettings(c echo.Context) error {
 	})
 }
 
+// HandleSaveProfileSettings
+//
+//	@summary saves profile-specific settings overrides.
+//	@route /api/v1/profile-settings [POST]
+//	@returns map[string]interface{}
 func (h *Handler) HandleSaveProfileSettings(c echo.Context) error {
 	profileID := core.GetProfileIDFromContext(c)
 	if profileID == "" {

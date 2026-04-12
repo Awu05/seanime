@@ -21,7 +21,7 @@ export function ProfileManagementSettings() {
         createProfile({ name: newName.trim() }, {
             onSuccess: () => {
                 setNewName("")
-                qc.invalidateQueries({ queryKey: [API_ENDPOINTS.AUTH.GetProfiles.key] })
+                qc.invalidateQueries({ queryKey: [API_ENDPOINTS.USER_AUTH.GetProfiles.key] })
                 toast.success("Profile created")
             },
             onError: () => toast.error("Failed to create profile"),
@@ -32,7 +32,7 @@ export function ProfileManagementSettings() {
         if (!confirm(`Delete profile "${name}"?`)) return
         deleteProfile({ id }, {
             onSuccess: () => {
-                qc.invalidateQueries({ queryKey: [API_ENDPOINTS.AUTH.GetProfiles.key] })
+                qc.invalidateQueries({ queryKey: [API_ENDPOINTS.USER_AUTH.GetProfiles.key] })
                 toast.success("Profile deleted")
             },
             onError: () => toast.error("Failed to delete profile"),

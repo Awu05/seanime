@@ -2,6 +2,39 @@
 // admin_profiles
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// export function useCreateProfile() {
+//     return useServerMutation<Models_Profile, CreateProfile_Variables>({
+//         endpoint: API_ENDPOINTS.ADMIN_PROFILES.CreateProfile.endpoint,
+//         method: API_ENDPOINTS.ADMIN_PROFILES.CreateProfile.methods[0],
+//         mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.CreateProfile.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useDeleteProfile() {
+//     return useServerMutation<Record<string, interface{}>>({
+//         endpoint: API_ENDPOINTS.ADMIN_PROFILES.DeleteProfile.endpoint,
+//         method: API_ENDPOINTS.ADMIN_PROFILES.DeleteProfile.methods[0],
+//         mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.DeleteProfile.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useSetAccessCode() {
+//     return useServerMutation<Record<string, interface{}>, SetAccessCode_Variables>({
+//         endpoint: API_ENDPOINTS.ADMIN_PROFILES.SetAccessCode.endpoint,
+//         method: API_ENDPOINTS.ADMIN_PROFILES.SetAccessCode.methods[0],
+//         mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.SetAccessCode.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
 // export function useUpdateProfileName() {
 //     return useServerMutation<Record<string, interface{}>, UpdateProfileName_Variables>({
 //         endpoint: API_ENDPOINTS.ADMIN_PROFILES.UpdateProfileName.endpoint,
@@ -2340,6 +2373,30 @@
 // }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// profile_settings
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// export function useGetProfileSettings() {
+//     return useServerQuery<Record<string, interface{}>>({
+//         endpoint: API_ENDPOINTS.PROFILE_SETTINGS.GetProfileSettings.endpoint,
+//         method: API_ENDPOINTS.PROFILE_SETTINGS.GetProfileSettings.methods[0],
+//         queryKey: [API_ENDPOINTS.PROFILE_SETTINGS.GetProfileSettings.key],
+//         enabled: true,
+//     })
+// }
+
+// export function useSaveProfileSettings() {
+//     return useServerMutation<Record<string, interface{}>, SaveProfileSettings_Variables>({
+//         endpoint: API_ENDPOINTS.PROFILE_SETTINGS.SaveProfileSettings.endpoint,
+//         method: API_ENDPOINTS.PROFILE_SETTINGS.SaveProfileSettings.methods[0],
+//         mutationKey: [API_ENDPOINTS.PROFILE_SETTINGS.SaveProfileSettings.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // releases
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2833,11 +2890,93 @@
 // user_auth
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// export function useSetupCheck() {
+//     return useServerQuery<Record<string, interface{}>>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.SetupCheck.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.SetupCheck.methods[0],
+//         queryKey: [API_ENDPOINTS.USER_AUTH.SetupCheck.key],
+//         enabled: true,
+//     })
+// }
+
+// export function useAdminSetup() {
+//     return useServerMutation<Record<string, interface{}>, AdminSetup_Variables>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.AdminSetup.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.AdminSetup.methods[0],
+//         mutationKey: [API_ENDPOINTS.USER_AUTH.AdminSetup.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useAdminLogin() {
+//     return useServerMutation<Record<string, interface{}>, AdminLogin_Variables>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.AdminLogin.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.AdminLogin.methods[0],
+//         mutationKey: [API_ENDPOINTS.USER_AUTH.AdminLogin.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useAccessCode() {
+//     return useServerMutation<Record<string, interface{}>, AccessCode_Variables>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.AccessCode.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.AccessCode.methods[0],
+//         mutationKey: [API_ENDPOINTS.USER_AUTH.AccessCode.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useGetProfiles() {
+//     return useServerQuery<Array<Models_Profile>>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.GetProfiles.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.GetProfiles.methods[0],
+//         queryKey: [API_ENDPOINTS.USER_AUTH.GetProfiles.key],
+//         enabled: true,
+//     })
+// }
+
+// export function useSelectProfile() {
+//     return useServerMutation<Record<string, interface{}>, SelectProfile_Variables>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.SelectProfile.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.SelectProfile.methods[0],
+//         mutationKey: [API_ENDPOINTS.USER_AUTH.SelectProfile.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useGetMe() {
+//     return useServerQuery<Record<string, interface{}>>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.GetMe.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.GetMe.methods[0],
+//         queryKey: [API_ENDPOINTS.USER_AUTH.GetMe.key],
+//         enabled: true,
+//     })
+// }
+
 // export function useSelfCreateProfile() {
 //     return useServerMutation<Models_Profile, SelfCreateProfile_Variables>({
 //         endpoint: API_ENDPOINTS.USER_AUTH.SelfCreateProfile.endpoint,
 //         method: API_ENDPOINTS.USER_AUTH.SelfCreateProfile.methods[0],
 //         mutationKey: [API_ENDPOINTS.USER_AUTH.SelfCreateProfile.key],
+//         onSuccess: async () => {
+// 
+//         },
+//     })
+// }
+
+// export function useLogoutAuth() {
+//     return useServerMutation<Record<string, interface{}>>({
+//         endpoint: API_ENDPOINTS.USER_AUTH.LogoutAuth.endpoint,
+//         method: API_ENDPOINTS.USER_AUTH.LogoutAuth.methods[0],
+//         mutationKey: [API_ENDPOINTS.USER_AUTH.LogoutAuth.key],
 //         onSuccess: async () => {
 // 
 //         },

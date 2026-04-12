@@ -1,5 +1,124 @@
 [
   {
+    "name": "HandleCreateProfile",
+    "trimmedName": "CreateProfile",
+    "comments": [
+      "HandleCreateProfile",
+      "",
+      "\t@summary creates a new profile (admin only).",
+      "\t@route /api/v1/admin/profiles [POST]",
+      "\t@returns models.Profile",
+      ""
+    ],
+    "filepath": "internal/handlers/admin_profiles.go",
+    "filename": "admin_profiles.go",
+    "api": {
+      "summary": "creates a new profile (admin only).",
+      "descriptions": [],
+      "endpoint": "/api/v1/admin/profiles",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Name",
+          "jsonName": "name",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Avatar",
+          "jsonName": "avatar",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Pin",
+          "jsonName": "pin",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "models.Profile",
+      "returnGoType": "models.Profile",
+      "returnTypescriptType": "Models_Profile"
+    }
+  },
+  {
+    "name": "HandleDeleteProfile",
+    "trimmedName": "DeleteProfile",
+    "comments": [
+      "HandleDeleteProfile",
+      "",
+      "\t@summary deletes a profile by ID (admin only).",
+      "\t@route /api/v1/admin/profiles/:id [DELETE]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/admin_profiles.go",
+    "filename": "admin_profiles.go",
+    "api": {
+      "summary": "deletes a profile by ID (admin only).",
+      "descriptions": [],
+      "endpoint": "/api/v1/admin/profiles/:id",
+      "methods": [
+        "DELETE"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleSetAccessCode",
+    "trimmedName": "SetAccessCode",
+    "comments": [
+      "HandleSetAccessCode",
+      "",
+      "\t@summary sets or updates the instance access code (admin only).",
+      "\t@route /api/v1/admin/access-code [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/admin_profiles.go",
+    "filename": "admin_profiles.go",
+    "api": {
+      "summary": "sets or updates the instance access code (admin only).",
+      "descriptions": [],
+      "endpoint": "/api/v1/admin/access-code",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "AccessCode",
+          "jsonName": "accessCode",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
     "name": "HandleUpdateProfileName",
     "trimmedName": "UpdateProfileName",
     "comments": [
@@ -9255,6 +9374,70 @@
     }
   },
   {
+    "name": "HandleGetProfileSettings",
+    "trimmedName": "GetProfileSettings",
+    "comments": [
+      "HandleGetProfileSettings",
+      "",
+      "\t@summary returns the profile-specific settings overrides and merged settings.",
+      "\t@route /api/v1/profile-settings [GET]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/profile_settings.go",
+    "filename": "profile_settings.go",
+    "api": {
+      "summary": "returns the profile-specific settings overrides and merged settings.",
+      "descriptions": [],
+      "endpoint": "/api/v1/profile-settings",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleSaveProfileSettings",
+    "trimmedName": "SaveProfileSettings",
+    "comments": [
+      "HandleSaveProfileSettings",
+      "",
+      "\t@summary saves profile-specific settings overrides.",
+      "\t@route /api/v1/profile-settings [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/profile_settings.go",
+    "filename": "profile_settings.go",
+    "api": {
+      "summary": "saves profile-specific settings overrides.",
+      "descriptions": [],
+      "endpoint": "/api/v1/profile-settings",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Overrides",
+          "jsonName": "overrides",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
     "name": "rewriteURI",
     "trimmedName": "rewriteURI",
     "comments": [
@@ -11480,6 +11663,271 @@
     }
   },
   {
+    "name": "HandleSetupCheck",
+    "trimmedName": "SetupCheck",
+    "comments": [
+      "HandleSetupCheck",
+      "",
+      "\t@summary checks if initial admin setup is needed.",
+      "\t@route /api/v1/auth/setup-check [GET]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "checks if initial admin setup is needed.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/setup-check",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleAdminSetup",
+    "trimmedName": "AdminSetup",
+    "comments": [
+      "HandleAdminSetup",
+      "",
+      "\t@summary creates the initial admin account.",
+      "\t@route /api/v1/auth/setup [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "creates the initial admin account.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/setup",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Username",
+          "jsonName": "username",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Password",
+          "jsonName": "password",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "AccessCode",
+          "jsonName": "accessCode",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleAdminLogin",
+    "trimmedName": "AdminLogin",
+    "comments": [
+      "HandleAdminLogin",
+      "",
+      "\t@summary authenticates an admin user.",
+      "\t@route /api/v1/auth/admin-login [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "authenticates an admin user.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/admin-login",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Username",
+          "jsonName": "username",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Password",
+          "jsonName": "password",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleAccessCode",
+    "trimmedName": "AccessCode",
+    "comments": [
+      "HandleAccessCode",
+      "",
+      "\t@summary authenticates using an access code.",
+      "\t@route /api/v1/auth/access-code [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "authenticates using an access code.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/access-code",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "AccessCode",
+          "jsonName": "accessCode",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleGetProfiles",
+    "trimmedName": "GetProfiles",
+    "comments": [
+      "HandleGetProfiles",
+      "",
+      "\t@summary returns all profiles.",
+      "\t@route /api/v1/auth/profiles [GET]",
+      "\t@returns []models.Profile",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "returns all profiles.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/profiles",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "[]models.Profile",
+      "returnGoType": "models.Profile",
+      "returnTypescriptType": "Array\u003cModels_Profile\u003e"
+    }
+  },
+  {
+    "name": "HandleSelectProfile",
+    "trimmedName": "SelectProfile",
+    "comments": [
+      "HandleSelectProfile",
+      "",
+      "\t@summary selects a profile and sets the auth cookie.",
+      "\t@route /api/v1/auth/select-profile [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "selects a profile and sets the auth cookie.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/select-profile",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "ProfileID",
+          "jsonName": "profileId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Pin",
+          "jsonName": "pin",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleGetMe",
+    "trimmedName": "GetMe",
+    "comments": [
+      "HandleGetMe",
+      "",
+      "\t@summary returns the current authenticated user info.",
+      "\t@route /api/v1/auth/me [GET]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "returns the current authenticated user info.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/me",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
     "name": "HandleSelfCreateProfile",
     "trimmedName": "SelfCreateProfile",
     "comments": [
@@ -11514,6 +11962,33 @@
       "returns": "*models.Profile",
       "returnGoType": "models.Profile",
       "returnTypescriptType": "Models_Profile"
+    }
+  },
+  {
+    "name": "HandleLogoutAuth",
+    "trimmedName": "LogoutAuth",
+    "comments": [
+      "HandleLogoutAuth",
+      "",
+      "\t@summary logs out the current session by clearing the auth cookie.",
+      "\t@route /api/v1/auth/logout-session [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "logs out the current session by clearing the auth cookie.",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/logout-session",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
     }
   },
   {

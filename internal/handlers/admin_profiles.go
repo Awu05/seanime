@@ -10,6 +10,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// HandleCreateProfile
+//
+//	@summary creates a new profile (admin only).
+//	@route /api/v1/admin/profiles [POST]
+//	@returns models.Profile
 func (h *Handler) HandleCreateProfile(c echo.Context) error {
 	if !core.GetIsAdminFromContext(c) {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})
@@ -51,6 +56,11 @@ func (h *Handler) HandleCreateProfile(c echo.Context) error {
 	return h.RespondWithData(c, created)
 }
 
+// HandleDeleteProfile
+//
+//	@summary deletes a profile by ID (admin only).
+//	@route /api/v1/admin/profiles/:id [DELETE]
+//	@returns map[string]interface{}
 func (h *Handler) HandleDeleteProfile(c echo.Context) error {
 	if !core.GetIsAdminFromContext(c) {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})
@@ -83,6 +93,11 @@ func (h *Handler) HandleDeleteProfile(c echo.Context) error {
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
 }
 
+// HandleSetAccessCode
+//
+//	@summary sets or updates the instance access code (admin only).
+//	@route /api/v1/admin/access-code [POST]
+//	@returns map[string]interface{}
 func (h *Handler) HandleSetAccessCode(c echo.Context) error {
 	if !core.GetIsAdminFromContext(c) {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})

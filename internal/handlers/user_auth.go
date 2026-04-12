@@ -11,6 +11,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// HandleSetupCheck
+//
+//	@summary checks if initial admin setup is needed.
+//	@route /api/v1/auth/setup-check [GET]
+//	@returns map[string]interface{}
 func (h *Handler) HandleSetupCheck(c echo.Context) error {
 	adminExists, _ := h.App.Database.AdminExists()
 	hasAccessCode, _ := h.App.Database.HasAccessCode()
@@ -22,6 +27,11 @@ func (h *Handler) HandleSetupCheck(c echo.Context) error {
 	})
 }
 
+// HandleAdminSetup
+//
+//	@summary creates the initial admin account.
+//	@route /api/v1/auth/setup [POST]
+//	@returns map[string]interface{}
 func (h *Handler) HandleAdminSetup(c echo.Context) error {
 	type body struct {
 		Username   string `json:"username"`
@@ -100,6 +110,11 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
 }
 
+// HandleAdminLogin
+//
+//	@summary authenticates an admin user.
+//	@route /api/v1/auth/admin-login [POST]
+//	@returns map[string]interface{}
 func (h *Handler) HandleAdminLogin(c echo.Context) error {
 	type body struct {
 		Username string `json:"username"`
@@ -140,6 +155,11 @@ func (h *Handler) HandleAdminLogin(c echo.Context) error {
 	})
 }
 
+// HandleAccessCode
+//
+//	@summary authenticates using an access code.
+//	@route /api/v1/auth/access-code [POST]
+//	@returns map[string]interface{}
 func (h *Handler) HandleAccessCode(c echo.Context) error {
 	type body struct {
 		AccessCode string `json:"accessCode"`
@@ -176,6 +196,11 @@ func (h *Handler) HandleAccessCode(c echo.Context) error {
 	return h.RespondWithData(c, map[string]interface{}{"token": token})
 }
 
+// HandleGetProfiles
+//
+//	@summary returns all profiles.
+//	@route /api/v1/auth/profiles [GET]
+//	@returns []models.Profile
 func (h *Handler) HandleGetProfiles(c echo.Context) error {
 	profiles, err := h.App.Database.GetAllProfiles()
 	if err != nil {
@@ -184,6 +209,11 @@ func (h *Handler) HandleGetProfiles(c echo.Context) error {
 	return h.RespondWithData(c, profiles)
 }
 
+// HandleSelectProfile
+//
+//	@summary selects a profile and sets the auth cookie.
+//	@route /api/v1/auth/select-profile [POST]
+//	@returns map[string]interface{}
 func (h *Handler) HandleSelectProfile(c echo.Context) error {
 	type body struct {
 		ProfileID string `json:"profileId"`
@@ -232,6 +262,11 @@ func (h *Handler) HandleSelectProfile(c echo.Context) error {
 	})
 }
 
+// HandleGetMe
+//
+//	@summary returns the current authenticated user info.
+//	@route /api/v1/auth/me [GET]
+//	@returns map[string]interface{}
 func (h *Handler) HandleGetMe(c echo.Context) error {
 	profileID := core.GetProfileIDFromContext(c)
 	isAdmin := core.GetIsAdminFromContext(c)
@@ -285,6 +320,11 @@ func (h *Handler) HandleSelfCreateProfile(c echo.Context) error {
 	return h.RespondWithData(c, profile)
 }
 
+// HandleLogoutAuth
+//
+//	@summary logs out the current session by clearing the auth cookie.
+//	@route /api/v1/auth/logout-session [POST]
+//	@returns map[string]interface{}
 func (h *Handler) HandleLogoutAuth(c echo.Context) error {
 	c.SetCookie(&http.Cookie{
 		Name:     "seanime-auth",

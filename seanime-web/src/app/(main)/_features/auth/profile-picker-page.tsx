@@ -65,7 +65,7 @@ export function ProfilePickerPage() {
             .then(() => {
                 setNewName("")
                 setShowCreate(false)
-                qc.invalidateQueries({ queryKey: [API_ENDPOINTS.AUTH.GetProfiles.key] })
+                qc.invalidateQueries({ queryKey: [API_ENDPOINTS.USER_AUTH.GetProfiles.key] })
                 toast.success("Profile created")
             })
             .catch(() => {

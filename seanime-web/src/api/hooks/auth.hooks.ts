@@ -69,9 +69,9 @@ export function useAuthSetupCheck() {
         multiUser: boolean
         sidecar: boolean
     }>({
-        endpoint: API_ENDPOINTS.AUTH.SetupCheck.endpoint,
-        method: API_ENDPOINTS.AUTH.SetupCheck.methods[0],
-        queryKey: [API_ENDPOINTS.AUTH.SetupCheck.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.SetupCheck.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.SetupCheck.methods[0],
+        queryKey: [API_ENDPOINTS.USER_AUTH.SetupCheck.key],
         enabled: true,
     })
 }
@@ -81,9 +81,9 @@ export function useAuthSetup() {
         { success: boolean },
         { username: string; password: string; accessCode?: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.Setup.endpoint,
-        method: API_ENDPOINTS.AUTH.Setup.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.Setup.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.AdminSetup.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.AdminSetup.methods[0],
+        mutationKey: [API_ENDPOINTS.USER_AUTH.AdminSetup.key],
     })
 }
 
@@ -92,9 +92,9 @@ export function useAuthAdminLogin() {
         { token: string; profile: any },
         { username: string; password: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.AdminLogin.endpoint,
-        method: API_ENDPOINTS.AUTH.AdminLogin.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.AdminLogin.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.AdminLogin.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.AdminLogin.methods[0],
+        mutationKey: [API_ENDPOINTS.USER_AUTH.AdminLogin.key],
     })
 }
 
@@ -103,17 +103,17 @@ export function useAuthAccessCode() {
         { token: string },
         { accessCode: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.AccessCode.endpoint,
-        method: API_ENDPOINTS.AUTH.AccessCode.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.AccessCode.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.AccessCode.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.AccessCode.methods[0],
+        mutationKey: [API_ENDPOINTS.USER_AUTH.AccessCode.key],
     })
 }
 
 export function useAuthGetProfiles() {
     return useServerQuery<any[]>({
-        endpoint: API_ENDPOINTS.AUTH.GetProfiles.endpoint,
-        method: API_ENDPOINTS.AUTH.GetProfiles.methods[0],
-        queryKey: [API_ENDPOINTS.AUTH.GetProfiles.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.GetProfiles.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.GetProfiles.methods[0],
+        queryKey: [API_ENDPOINTS.USER_AUTH.GetProfiles.key],
         enabled: true,
     })
 }
@@ -123,9 +123,9 @@ export function useAuthSelectProfile() {
         { token: string; profile: any },
         { profileId: string; pin?: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.SelectProfile.endpoint,
-        method: API_ENDPOINTS.AUTH.SelectProfile.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.SelectProfile.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.SelectProfile.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.SelectProfile.methods[0],
+        mutationKey: [API_ENDPOINTS.USER_AUTH.SelectProfile.key],
     })
 }
 
@@ -135,18 +135,18 @@ export function useAuthMe() {
         isAdmin: boolean
         scope: string
     }>({
-        endpoint: API_ENDPOINTS.AUTH.Me.endpoint,
-        method: API_ENDPOINTS.AUTH.Me.methods[0],
-        queryKey: [API_ENDPOINTS.AUTH.Me.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.GetMe.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.GetMe.methods[0],
+        queryKey: [API_ENDPOINTS.USER_AUTH.GetMe.key],
         enabled: true,
     })
 }
 
 export function useAuthLogout() {
     return useServerMutation<{ success: boolean }, void>({
-        endpoint: API_ENDPOINTS.AUTH.LogoutSession.endpoint,
-        method: API_ENDPOINTS.AUTH.LogoutSession.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.LogoutSession.key],
+        endpoint: API_ENDPOINTS.USER_AUTH.LogoutAuth.endpoint,
+        method: API_ENDPOINTS.USER_AUTH.LogoutAuth.methods[0],
+        mutationKey: [API_ENDPOINTS.USER_AUTH.LogoutAuth.key],
     })
 }
 
@@ -157,9 +157,9 @@ export function useGetProfileSettings() {
         overrides: string
         merged: any
     }>({
-        endpoint: API_ENDPOINTS.AUTH.GetProfileSettings.endpoint,
-        method: API_ENDPOINTS.AUTH.GetProfileSettings.methods[0],
-        queryKey: [API_ENDPOINTS.AUTH.GetProfileSettings.key],
+        endpoint: API_ENDPOINTS.PROFILE_SETTINGS.GetProfileSettings.endpoint,
+        method: API_ENDPOINTS.PROFILE_SETTINGS.GetProfileSettings.methods[0],
+        queryKey: [API_ENDPOINTS.PROFILE_SETTINGS.GetProfileSettings.key],
         enabled: true,
     })
 }
@@ -169,8 +169,8 @@ export function useSaveProfileSettings() {
         { success: boolean },
         { overrides: string }
     >({
-        endpoint: API_ENDPOINTS.AUTH.SaveProfileSettings.endpoint,
-        method: API_ENDPOINTS.AUTH.SaveProfileSettings.methods[0],
-        mutationKey: [API_ENDPOINTS.AUTH.SaveProfileSettings.key],
+        endpoint: API_ENDPOINTS.PROFILE_SETTINGS.SaveProfileSettings.endpoint,
+        method: API_ENDPOINTS.PROFILE_SETTINGS.SaveProfileSettings.methods[0],
+        mutationKey: [API_ENDPOINTS.PROFILE_SETTINGS.SaveProfileSettings.key],
     })
 }

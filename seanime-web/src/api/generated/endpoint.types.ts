@@ -54,6 +54,30 @@ import type {
 /**
  * - Filepath: internal/handlers/admin_profiles.go
  * - Filename: admin_profiles.go
+ * - Endpoint: /api/v1/admin/profiles
+ * @description
+ * Route creates a new profile (admin only).
+ */
+export type CreateProfile_Variables = {
+    name: string
+    avatar: string
+    pin: string
+}
+
+/**
+ * - Filepath: internal/handlers/admin_profiles.go
+ * - Filename: admin_profiles.go
+ * - Endpoint: /api/v1/admin/access-code
+ * @description
+ * Route sets or updates the instance access code (admin only).
+ */
+export type SetAccessCode_Variables = {
+    accessCode: string
+}
+
+/**
+ * - Filepath: internal/handlers/admin_profiles.go
+ * - Filename: admin_profiles.go
  * - Endpoint: /api/v1/profiles/:id/name
  * @description
  * Route updates a profile's display name.
@@ -1784,6 +1808,21 @@ export type GetPlaylistEpisodes_Variables = {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// profile_settings
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * - Filepath: internal/handlers/profile_settings.go
+ * - Filename: profile_settings.go
+ * - Endpoint: /api/v1/profile-settings
+ * @description
+ * Route saves profile-specific settings overrides.
+ */
+export type SaveProfileSettings_Variables = {
+    overrides: string
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // proxy
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2140,6 +2179,54 @@ export type GetTorrentstreamBatchHistory_Variables = {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // user_auth
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/setup
+ * @description
+ * Route creates the initial admin account.
+ */
+export type AdminSetup_Variables = {
+    username: string
+    password: string
+    accessCode: string
+}
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/admin-login
+ * @description
+ * Route authenticates an admin user.
+ */
+export type AdminLogin_Variables = {
+    username: string
+    password: string
+}
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/access-code
+ * @description
+ * Route authenticates using an access code.
+ */
+export type AccessCode_Variables = {
+    accessCode: string
+}
+
+/**
+ * - Filepath: internal/handlers/user_auth.go
+ * - Filename: user_auth.go
+ * - Endpoint: /api/v1/auth/select-profile
+ * @description
+ * Route selects a profile and sets the auth cookie.
+ */
+export type SelectProfile_Variables = {
+    profileId: string
+    pin: string
+}
 
 /**
  * - Filepath: internal/handlers/user_auth.go
