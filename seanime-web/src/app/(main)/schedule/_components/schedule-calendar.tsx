@@ -645,7 +645,10 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
                                             <FaFlag className="size-3 text-[--blue] flex-none group-hover:scale-[1.15] transition-transform duration-300" />}
                                         {event.isWatched && calendarParams.indicateWatchedEpisodes &&
                                             <FaCheck className="size-3 text-[--muted] flex-none group-hover:scale-[1.15] transition-transform duration-300" />}
-                                        {event.name}
+                                        <span className="inline-flex items-center gap-1">
+                                            {event.name}
+                                            {event.isAdult && <AdultContentBadge />}
+                                        </span>
                                     </p>
                                     <p className="flex-none" data-schedule-calendar-event-list-item-more-episode>
                                         Ep. {event.episode}
@@ -711,11 +714,14 @@ function CalendarDay({ day, index, showAll }: { day: any, index: number, showAll
                         >
                             <p className="text-xs font-medium text-gray-100 line-clamp-2 leading-tight" data-schedule-calendar-day-hovered-event-text>
                                 <span
-                                    className="text-[--muted] font-normal"
+                                    className="inline-flex items-center gap-1 text-[--muted] font-normal"
                                     data-schedule-calendar-day-hovered-event-text-name
-                                >{hoveredEvent.name.slice(0, 28) + (hoveredEvent.name.length > 28
-                                    ? "..."
-                                    : "")}</span>
+                                >
+                                    {hoveredEvent.name.slice(0, 28) + (hoveredEvent.name.length > 28
+                                        ? "..."
+                                        : "")}
+                                    {hoveredEvent.isAdult && <AdultContentBadge />}
+                                </span>
                                 {hoveredEvent.isSeasonFinale &&
                                     <span className="text-[--blue] ml-1" data-schedule-calendar-day-hovered-event-text-finale>Finale</span>}
                                 <span className="ml-1" data-schedule-calendar-day-hovered-event-text-episode> Ep. {hoveredEvent.episode}</span>
