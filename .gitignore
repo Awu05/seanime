@@ -17,6 +17,7 @@ dev.dockerfile
 go.work
 
 .github/*.md
+docs/superpowers/
 
 _docker-compose.yml
 
