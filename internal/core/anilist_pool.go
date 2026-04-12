@@ -122,10 +122,13 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 // InvalidateProfile removes cached client/platform for a profile (e.g. on login/logout).
 func (p *AnilistClientPool) InvalidateProfile(profileID string) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if plat, ok := p.platforms[profileID]; ok {
-		plat.Close()
-	}
+	plat := p.platforms[profileID]
 	delete(p.clients, profileID)
 	delete(p.platforms, profileID)
+	p.mu.Unlock()
+
+	// Close the platform outside the lock — Close may block on I/O or acquire other locks.
+	if plat != nil {
+		plat.Close()
+	}
 }
