@@ -6,7 +6,6 @@ import { MediaCardLazyGrid } from "@/app/(main)/_features/media/_components/medi
 import { MediaEntryCard } from "@/app/(main)/_features/media/_components/media-entry-card"
 import { computeSeasonParams, formatSeasonLabel, SeasonKind } from "@/app/(main)/schedule/_lib/season"
 import { LuffyError } from "@/components/shared/luffy-error"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/components/ui/core/styling"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { NativeSelect } from "@/components/ui/native-select"
