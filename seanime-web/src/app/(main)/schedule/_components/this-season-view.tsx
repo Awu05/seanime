@@ -1,6 +1,6 @@
 "use client"
 
-import { AL_MediaSort } from "@/api/generated/types"
+import { AL_BaseAnime, AL_MediaFormat, AL_MediaSort, AL_MediaStatus } from "@/api/generated/types"
 import { useAnilistListSeasonAnime } from "@/api/hooks/anilist.hooks"
 import { MediaCardLazyGrid } from "@/app/(main)/_features/media/_components/media-card-grid"
 import { MediaEntryCard } from "@/app/(main)/_features/media/_components/media-entry-card"
@@ -27,9 +27,62 @@ const SORT_OPTIONS: SortOption[] = [
     { value: "START_DATE_DESC", label: "Start date" },
 ]
 
+const FORMAT_OPTIONS: { value: AL_MediaFormat | "ALL"; label: string }[] = [
+    { value: "ALL", label: "All formats" },
+    { value: "TV", label: "TV" },
+    { value: "TV_SHORT", label: "TV Short" },
+    { value: "MOVIE", label: "Movie" },
+    { value: "OVA", label: "OVA" },
+    { value: "ONA", label: "ONA" },
+    { value: "SPECIAL", label: "Special" },
+    { value: "MUSIC", label: "Music" },
+]
+
+const STATUS_OPTIONS: { value: AL_MediaStatus | "ALL"; label: string }[] = [
+    { value: "ALL", label: "All statuses" },
+    { value: "RELEASING", label: "Releasing" },
+    { value: "NOT_YET_RELEASED", label: "Not yet released" },
+    { value: "FINISHED", label: "Finished" },
+    { value: "CANCELLED", label: "Cancelled" },
+    { value: "HIATUS", label: "Hiatus" },
+]
+
+const GENRE_LIST = [
+    "Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy",
+    "Horror", "Mahou Shoujo", "Mecha", "Music", "Mystery", "Psychological",
+    "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller",
+]
+
+const GENRE_OPTIONS: { value: string; label: string }[] = [
+    { value: "ALL", label: "All genres" },
+    ...GENRE_LIST.map((g) => ({ value: g, label: g })),
+]
+
+function applyFilters(
+    data: AL_BaseAnime[],
+    format: AL_MediaFormat | "ALL",
+    status: AL_MediaStatus | "ALL",
+    genre: string,
+): AL_BaseAnime[] {
+    let result = data
+    if (format !== "ALL") {
+        result = result.filter((m) => m.format === format)
+    }
+    if (status !== "ALL") {
+        result = result.filter((m) => m.status === status)
+    }
+    if (genre !== "ALL") {
+        result = result.filter((m) => m.genres?.includes(genre))
+    }
+    return result
+}
+
 export function ThisSeasonView() {
     const [seasonKind, setSeasonKind] = React.useState<SeasonKind>("current")
     const [sort, setSort] = React.useState<AL_MediaSort>("POPULARITY_DESC")
+    const [formatFilter, setFormatFilter] = React.useState<AL_MediaFormat | "ALL">("ALL")
+    const [statusFilter, setStatusFilter] = React.useState<AL_MediaStatus | "ALL">("ALL")
+    const [genreFilter, setGenreFilter] = React.useState<string>("ALL")
 
     const { season, seasonYear } = React.useMemo(
         () => computeSeasonParams(seasonKind),
@@ -39,6 +92,11 @@ export function ThisSeasonView() {
     const { data, isLoading, isError, refetch } = useAnilistListSeasonAnime(
         { season, seasonYear, sort: [sort] },
         true,
+    )
+
+    const filteredData = React.useMemo(
+        () => data ? applyFilters(data, formatFilter, statusFilter, genreFilter) : [],
+        [data, formatFilter, statusFilter, genreFilter],
     )
 
     const { setPreviewModalMediaId } = useMediaPreviewModal()
@@ -81,6 +139,33 @@ export function ThisSeasonView() {
                         className="w-36"
                         size="sm"
                     />
+
+                    {/* Format filter */}
+                    <NativeSelect
+                        value={formatFilter}
+                        options={FORMAT_OPTIONS}
+                        onChange={(e) => setFormatFilter(e.target.value as AL_MediaFormat | "ALL")}
+                        className="w-36"
+                        size="sm"
+                    />
+
+                    {/* Status filter */}
+                    <NativeSelect
+                        value={statusFilter}
+                        options={STATUS_OPTIONS}
+                        onChange={(e) => setStatusFilter(e.target.value as AL_MediaStatus | "ALL")}
+                        className="w-44"
+                        size="sm"
+                    />
+
+                    {/* Genre filter */}
+                    <NativeSelect
+                        value={genreFilter}
+                        options={GENRE_OPTIONS}
+                        onChange={(e) => setGenreFilter(e.target.value)}
+                        className="w-40"
+                        size="sm"
+                    />
                 </div>
             </div>
 
@@ -104,9 +189,15 @@ export function ThisSeasonView() {
                     </LuffyError>
                 )}
 
-                {!isLoading && !isError && (data?.length ?? 0) > 0 && (
-                    <MediaCardLazyGrid itemCount={data?.length ?? 0}>
-                        {data?.map((media) => (
+                {!isLoading && !isError && (data?.length ?? 0) > 0 && filteredData.length === 0 && (
+                    <div className="flex items-center justify-center py-16">
+                        <p className="text-sm text-[--muted]">No anime match the selected filters.</p>
+                    </div>
+                )}
+
+                {!isLoading && !isError && filteredData.length > 0 && (
+                    <MediaCardLazyGrid itemCount={filteredData.length}>
+                        {filteredData.map((media) => (
                             <MediaEntryCard
                                 key={media.id}
                                 media={media}
