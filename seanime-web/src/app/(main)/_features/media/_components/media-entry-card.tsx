@@ -212,7 +212,6 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
     const { setPreviewModalMediaId } = useMediaPreviewModal()
     const { openDirInLibraryExplorer } = useLibraryExplorer()
 
-    const [hoveringTitle, setHoveringTitle] = useState(false)
     const [isHoveringCard, setIsHoveringCard] = useState(false)
     const [shouldRenderPopup, setShouldRenderPopup] = useState(false)
 
@@ -395,16 +394,6 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                                     {/*    : capitalize(listData?.status ?? "")}*/}
                                 </p>}
 
-
-                            {/*{hoveringTitle && <div>*/}
-                            {/*    <p*/}
-                            {/*        data-media-entry-card-hover-popup-title-section-year-season*/}
-                            {/*        className="justify-center text-center text-xs text-[--muted] flex w-full gap-1 items-center px-4 leading-0 line-clamp-2"*/}
-                            {/*    >*/}
-                            {/*        {(media.title?.english && media.title?.userPreferred !== media.title?.english) ? `${startCase(media.title?.english)}` : null}*/}
-                            {/*        {(media.title?.romaji && media.title?.userPreferred !== media.title?.romaji) ? `${startCase(media.title?.romaji)}` : null}*/}
-                            {/*    </p>*/}
-                            {/*</div>}*/}
 
                         </MediaEntryCardHoverPopupBody>
 
