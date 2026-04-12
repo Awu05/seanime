@@ -18,7 +18,22 @@ var publicPaths = []string{
 
 func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		// In Electron sidecar mode without multi-user, still allow public paths
+		// (setup-check, setup) so first-time registration works.
+		// Only auto-grant admin for non-public paths after admin exists.
 		if h.App.IsDesktopSidecar && !h.App.MultiUserEnabled {
+			path := c.Request().URL.Path
+			isPublic := false
+			for _, p := range publicPaths {
+				if path == p || strings.HasPrefix(path, p) {
+					isPublic = true
+					break
+				}
+			}
+			if isPublic {
+				h.tryExtractProfile(c)
+				return next(c)
+			}
 			c.Set("profileId", "")
 			c.Set("isAdmin", true)
 			c.Set("authScope", "admin")

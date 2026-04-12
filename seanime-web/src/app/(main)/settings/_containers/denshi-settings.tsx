@@ -85,7 +85,7 @@ function DenshiMultiUserSetup() {
 
     const [username, setUsername] = React.useState("")
     const [password, setPassword] = React.useState("")
-    const [accessCode, setAccessCode] = React.useState("")
+    const [confirmPassword, setConfirmPassword] = React.useState("")
     const [error, setError] = React.useState("")
     const [showForm, setShowForm] = React.useState(false)
 
@@ -118,13 +118,17 @@ function DenshiMultiUserSetup() {
             setError("Username and password are required")
             return
         }
-        setup({ username: username.trim(), password: password.trim(), accessCode: accessCode.trim() || undefined }, {
+        if (password !== confirmPassword) {
+            setError("Passwords do not match")
+            return
+        }
+        setup({ username: username.trim(), password: password.trim(), confirmPassword: confirmPassword.trim() }, {
             onSuccess: () => {
                 toast.success("Multi-user profiles enabled. The app will reload.")
                 setTimeout(() => window.location.reload(), 1000)
             },
-            onError: () => {
-                setError("Failed to set up profiles")
+            onError: (err: any) => {
+                setError(err?.response?.data?.error || "Failed to set up profiles")
             },
         })
     }
@@ -157,7 +161,7 @@ function DenshiMultiUserSetup() {
                             Create an admin account. You'll use these credentials to log in and manage profiles.
                         </p>
                         <div>
-                            <label className="block text-sm text-gray-300 mb-1">Admin Username</label>
+                            <label className="block text-sm text-gray-300 mb-1">Username</label>
                             <input
                                 type="text"
                                 value={username}
@@ -167,7 +171,7 @@ function DenshiMultiUserSetup() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-gray-300 mb-1">Admin Password</label>
+                            <label className="block text-sm text-gray-300 mb-1">Password</label>
                             <input
                                 type="password"
                                 value={password}
@@ -177,13 +181,13 @@ function DenshiMultiUserSetup() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-gray-300 mb-1">Household Access Code (optional)</label>
-                            <p className="text-xs text-gray-500 mb-1">Other household members enter this to access the profile picker</p>
+                            <label className="block text-sm text-gray-300 mb-1">Confirm Password</label>
                             <input
-                                type="text"
-                                value={accessCode}
-                                onChange={e => setAccessCode(e.target.value)}
+                                type="password"
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
                                 className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                                required
                             />
                         </div>
                         {error && <p className="text-red-400 text-sm">{error}</p>}

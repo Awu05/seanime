@@ -56,6 +56,20 @@ export function ServerDataWrapper(props: ServerDataWrapperProps) {
 
     const [authenticated, setAuthenticated] = React.useState(false)
 
+    // Check if first-time setup is needed and redirect to /setup
+    React.useEffect(() => {
+        if (serverStatus && !pathname.startsWith("/setup")) {
+            fetch("/api/v1/auth/setup-check", { credentials: "include" })
+                .then(res => res.json())
+                .then((body: any) => {
+                    if (body?.data?.needsSetup) {
+                        window.location.href = "/setup"
+                    }
+                })
+                .catch(() => {})
+        }
+    }, [serverStatus, pathname])
+
     React.useEffect(() => {
         if (serverStatus) {
             // Multi-user mode: redirect to login if no auth cookie
