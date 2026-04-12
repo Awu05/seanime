@@ -45,8 +45,13 @@ export function ThisSeasonView() {
 
     return (
         <div className="space-y-4" data-this-season-view>
-            {/* Top control row */}
-            <div className="flex flex-wrap items-center gap-3">
+            {/* Season label */}
+            <h2 className="text-center text-2xl font-bold">
+                {formatSeasonLabel(season, seasonYear)}
+            </h2>
+
+            {/* Controls row */}
+            <div className="flex flex-wrap items-center justify-center gap-3">
                 {/* Season segmented control */}
                 <div className="flex items-center rounded-lg overflow-hidden border border-[--border]">
                     {SEASON_KINDS.map((opt) => (
@@ -74,11 +79,6 @@ export function ThisSeasonView() {
                     className="w-36"
                     size="sm"
                 />
-
-                {/* Resolved season label */}
-                <span className="ml-auto text-sm font-medium text-[--muted]">
-                    {formatSeasonLabel(season, seasonYear)}
-                </span>
             </div>
 
             {/* Body */}
