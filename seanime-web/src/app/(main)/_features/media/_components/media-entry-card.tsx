@@ -14,6 +14,7 @@ import { SeaContextMenu } from "@/app/(main)/_features/context-menu/sea-context-
 import { useLibraryExplorer } from "@/app/(main)/_features/library-explorer/library-explorer.atoms"
 import {
     __mediaEntryCard_hoveredPopupId,
+    AdultContentBadge,
     AnimeEntryCardNextAiring,
     MediaEntryCardBody,
     MediaEntryCardContainer,
@@ -39,6 +40,7 @@ import { SeaLink } from "@/components/shared/sea-link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { stripHtml } from "@/lib/helpers/string"
 import { useRouter } from "@/lib/navigation"
 import { useAtom } from "jotai"
 import { useSetAtom } from "jotai/react"
@@ -64,6 +66,7 @@ type MediaEntryCardProps<T extends "anime" | "manga"> = {
     listData?: T extends "anime" ? Anime_EntryListData : T extends "manga" ? Manga_EntryListData : never
     showLibraryBadge?: T extends "anime" ? boolean : never
     showTrailer?: T extends "anime" ? boolean : never
+    showExpandedHoverContent?: T extends "anime" ? boolean : never
     libraryData?: T extends "anime" ? Anime_EntryLibraryData : never
     nakamaLibraryData?: T extends "anime" ? Anime_NakamaEntryLibraryData : never
     hideUnseenCountBadge?: boolean
@@ -71,6 +74,27 @@ type MediaEntryCardProps<T extends "anime" | "manga"> = {
     onClick?: () => void
     hideReleasingBadge?: boolean
 } & MediaEntryCardBaseProps
+
+function formatAiringDateRange(
+    startDate?: { year?: number; month?: number; day?: number },
+    endDate?: { year?: number; month?: number; day?: number },
+): string | null {
+    const fmt = (d?: { year?: number; month?: number; day?: number }) => {
+        if (!d?.year) return null
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        const parts: string[] = []
+        if (d.month) parts.push(months[d.month - 1])
+        if (d.day) parts.push(String(d.day))
+        if (parts.length === 0) return String(d.year)
+        return `${parts.join(" ")}, ${d.year}`
+    }
+    const start = fmt(startDate)
+    const end = fmt(endDate)
+    if (start && end) return `${start} – ${end}`
+    if (start) return `Starts ${start}`
+    if (end) return `Ended ${end}`
+    return null
+}
 
 export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCardProps<T>) {
 
@@ -82,6 +106,7 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
         overlay,
         showListDataButton,
         showTrailer: _showTrailer,
+        showExpandedHoverContent = false,
         type,
         withAudienceScore = true,
         hideUnseenCountBadge = false,
@@ -340,6 +365,27 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                                 <AnimeEntryCardNextAiring nextAiring={(media as AL_BaseAnime).nextAiringEpisode} />
                             )}
 
+                            {showExpandedHoverContent && type === "anime" && (
+                                <>
+                                    {(() => {
+                                        const range = formatAiringDateRange(
+                                            (media as AL_BaseAnime).startDate,
+                                            (media as AL_BaseAnime).endDate,
+                                        )
+                                        return range ? (
+                                            <p className="text-center text-xs text-[--muted] w-full px-2">
+                                                {range}
+                                            </p>
+                                        ) : null
+                                    })()}
+                                    {media.description && (
+                                        <p className="text-xs text-[--muted] px-2 leading-snug line-clamp-4">
+                                            {stripHtml(media.description)}
+                                        </p>
+                                    )}
+                                </>
+                            )}
+
                             {(listData?.status && listData?.status !== "CURRENT") &&
                                 <p className="text-center text-xs text-[--muted] w-full">
                                     {capitalize(listData?.status ?? "")}
@@ -396,6 +442,11 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                 onClick={onClick}
                 hideReleasingBadge={hideReleasingBadge}
             >
+                {mediaIsAdult && (
+                    <div data-media-entry-card-body-adult-badge-container className="absolute z-[11] right-1 top-1">
+                        <AdultContentBadge />
+                    </div>
+                )}
                 <div data-media-entry-card-body-progress-badge-container className="absolute z-[10] left-0 bottom-0 flex items-end">
                     <MediaEntryProgressBadge
                         progress={listData?.progress}
