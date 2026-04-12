@@ -257,6 +257,7 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 var (
 	anilistListAnimeCache       = result.NewCache[string, *anilist.ListAnime]()
 	anilistListRecentAnimeCache = result.NewCache[string, *anilist.ListRecentAnime]() // holds 1 value
+	anilistListSeasonAnimeCache = result.NewCache[string, []*anilist.BaseAnime]()
 )
 
 // HandleAnilistListAnime
@@ -388,6 +389,11 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 		isAdultPtr = &falseVal
 	}
 
+	cacheKey := fmt.Sprintf("%s-%d-%v-%v", *p.Season, *p.SeasonYear, p.Sort, isAdultPtr != nil)
+	if cached, ok := anilistListSeasonAnimeCache.Get(cacheKey); ok {
+		return h.RespondWithData(c, cached)
+	}
+
 	perPage := 50
 	results := make([]*anilist.BaseAnime, 0, 100)
 	page := 1
@@ -434,6 +440,8 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 			break
 		}
 	}
+
+	anilistListSeasonAnimeCache.SetT(cacheKey, results, time.Minute*10)
 
 	return h.RespondWithData(c, results)
 }
