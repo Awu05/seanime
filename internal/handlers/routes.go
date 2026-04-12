@@ -232,6 +232,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1Anilist.DELETE("/list-entry", h.HandleDeleteAnilistListEntry)
 
 	v1Anilist.POST("/list-anime", h.HandleAnilistListAnime)
+	v1Anilist.POST("/season-anime", h.HandleAnilistListSeasonAnime)
 
 	v1Anilist.POST("/list-recent-anime", h.HandleAnilistListRecentAiringAnime)
 

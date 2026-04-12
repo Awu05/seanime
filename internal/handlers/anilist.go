@@ -349,6 +349,95 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 	return h.RespondWithData(c, ret)
 }
 
+// HandleAnilistListSeasonAnime
+//
+//	@summary returns all anime in a given AniList season, aggregated across pages.
+//	@desc Used by the schedule page's "This Season" tab. Loops AniList's ListAnime query
+//	@desc server-side until the season is exhausted and returns a flat array of anime.
+//	@desc Per-profile adult content filtering is applied: if the profile has
+//	@desc EnableAdultContent=false, adult entries are excluded; if true, both adult and
+//	@desc non-adult entries are returned (isAdult filter is omitted from the AniList query).
+//	@route /api/v1/anilist/season-anime [POST]
+//	@returns []anilist.BaseAnime
+func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
+
+	type body struct {
+		Season     *anilist.MediaSeason `json:"season"`
+		SeasonYear *int                 `json:"seasonYear"`
+		Sort       []*anilist.MediaSort `json:"sort"`
+	}
+
+	p := new(body)
+	if err := c.Bind(p); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	if p.Season == nil || p.SeasonYear == nil {
+		return h.RespondWithError(c, errors.New("season and seasonYear are required"))
+	}
+
+	// Per-profile adult content handling: if disabled, force isAdult=false so the AniList
+	// query excludes adult entries. If enabled, pass nil so AniList returns both.
+	enableAdult := false
+	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil && currentSettings.GetAnilist() != nil {
+		enableAdult = currentSettings.GetAnilist().EnableAdultContent
+	}
+	var isAdultPtr *bool
+	if !enableAdult {
+		falseVal := false
+		isAdultPtr = &falseVal
+	}
+
+	perPage := 50
+	results := make([]*anilist.BaseAnime, 0, 100)
+	page := 1
+	cacheLayer := shared_platform.NewCacheLayer(h.App.AnilistClientRef)
+	for {
+		ret, err := anilist.ListAnimeM(
+			cacheLayer,
+			&page,
+			nil, // search
+			&perPage,
+			p.Sort,
+			nil, // status
+			nil, // genres
+			nil, // averageScoreGreater
+			p.Season,
+			p.SeasonYear,
+			nil, // format
+			isAdultPtr,
+			nil, // countryOfOrigin
+			h.App.Logger,
+			h.App.GetUserAnilistToken(),
+		)
+		if err != nil {
+			return h.RespondWithError(c, err)
+		}
+		if ret == nil || ret.GetPage() == nil {
+			break
+		}
+
+		media := ret.GetPage().GetMedia()
+		if len(media) == 0 {
+			break
+		}
+		results = append(results, media...)
+
+		pageInfo := ret.GetPage().GetPageInfo()
+		if pageInfo == nil || pageInfo.GetHasNextPage() == nil || !*pageInfo.GetHasNextPage() {
+			break
+		}
+
+		page++
+		// Safety cap: 20 * 50 = 1000 entries. No real AniList season exceeds this.
+		if page > 20 {
+			break
+		}
+	}
+
+	return h.RespondWithData(c, results)
+}
+
 // HandleAnilistListRecentAiringAnime
 //
 //	@summary returns a list of recently aired anime.
