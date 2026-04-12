@@ -4,6 +4,7 @@ import { AL_MediaSort } from "@/api/generated/types"
 import { useAnilistListSeasonAnime } from "@/api/hooks/anilist.hooks"
 import { MediaCardLazyGrid } from "@/app/(main)/_features/media/_components/media-card-grid"
 import { MediaEntryCard } from "@/app/(main)/_features/media/_components/media-entry-card"
+import { useMediaPreviewModal } from "@/app/(main)/_features/media/_containers/media-preview-modal"
 import { computeSeasonParams, formatSeasonLabel, SeasonKind } from "@/app/(main)/schedule/_lib/season"
 import { LuffyError } from "@/components/shared/luffy-error"
 import { cn } from "@/components/ui/core/styling"
@@ -39,6 +40,8 @@ export function ThisSeasonView() {
         { season, seasonYear, sort: [sort] },
         true,
     )
+
+    const { setPreviewModalMediaId } = useMediaPreviewModal()
 
     return (
         <div className="space-y-4" data-this-season-view>
@@ -104,6 +107,7 @@ export function ThisSeasonView() {
                             type="anime"
                             showLibraryBadge={true}
                             showExpandedHoverContent={true}
+                            onClick={() => setPreviewModalMediaId(media.id, "anime")}
                         />
                     ))}
                 </MediaCardLazyGrid>
