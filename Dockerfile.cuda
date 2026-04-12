@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1.4
 
+# Global ARG — must be before all FROM instructions to be usable in FROM lines
+ARG CUDA_VERSION=13.0.2-base-ubuntu24.04
+
 # Stage 1: Node.js Builder
 FROM --platform=$BUILDPLATFORM node:latest AS node-builder
 
@@ -47,7 +50,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o seanime -trimpath -ldflags="-s -w"
 
 # Stage 3: CUDA Base
-ARG CUDA_VERSION=13.0.2-base-ubuntu24.04
 FROM nvidia/cuda:${CUDA_VERSION}
 
 # Install dependencies
