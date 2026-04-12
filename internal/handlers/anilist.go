@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
+	"strings"
 	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/util/result"
 	"strconv"
@@ -389,7 +390,11 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 		isAdultPtr = &falseVal
 	}
 
-	cacheKey := fmt.Sprintf("%s-%d-%v-%v", *p.Season, *p.SeasonYear, p.Sort, isAdultPtr != nil)
+	sortParts := make([]string, len(p.Sort))
+	for i, s := range p.Sort {
+		sortParts[i] = string(*s)
+	}
+	cacheKey := fmt.Sprintf("%s-%d-%s-%v", *p.Season, *p.SeasonYear, strings.Join(sortParts, ","), isAdultPtr != nil)
 	if cached, ok := anilistListSeasonAnimeCache.Get(cacheKey); ok {
 		return h.RespondWithData(c, cached)
 	}
