@@ -227,7 +227,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Determine version from tag name 🔎
+      - name: Determine version and registry owner 🔎
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION=${GITHUB_REF/refs\/tags\/v/}
@@ -237,6 +237,7 @@ jobs:
             VERSION="dev"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "REPO_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -256,8 +257,8 @@ jobs:
           target: base
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/seanime:latest
-            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:latest
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:${{ env.VERSION }}
 
       - name: Build and push Docker image (rootless) 🐳
         uses: docker/build-push-action@v6
@@ -267,8 +268,8 @@ jobs:
           target: rootless
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/seanime:rootless
-            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}-rootless
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:rootless
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:${{ env.VERSION }}-rootless
 
       - name: Build and push Docker image (hwaccel) 🐳
         uses: docker/build-push-action@v6
@@ -278,8 +279,8 @@ jobs:
           target: hwaccel
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/seanime:hwaccel
-            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}-hwaccel
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:hwaccel
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:${{ env.VERSION }}-hwaccel
 
       - name: Build and push Docker image (CUDA) 🐳
         uses: docker/build-push-action@v6
@@ -288,8 +289,8 @@ jobs:
           file: ./Dockerfile.cuda
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/seanime:cuda
-            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}-cuda
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:cuda
+            ghcr.io/${{ env.REPO_OWNER }}/seanime:${{ env.VERSION }}-cuda
 
   release:
     runs-on: ubuntu-latest
