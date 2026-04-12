@@ -219,48 +219,77 @@ jobs:
 
   build-docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Determine version from tag name 🔎
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF/refs\/tags\/v/}
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF/refs\/tags\//}
+          else
+            VERSION="dev"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (default) 🐳
+      - name: Log in to GitHub Container Registry 🔑
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image (default) 🐳
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           target: base
-          push: false
-          tags: seanime:default
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/seanime:latest
+            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}
 
-      - name: Build Docker image (rootless) 🐳
+      - name: Build and push Docker image (rootless) 🐳
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           target: rootless
-          push: false
-          tags: seanime:rootless
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/seanime:rootless
+            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}-rootless
 
-      - name: Build Docker image (hwaccel) 🐳
+      - name: Build and push Docker image (hwaccel) 🐳
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           target: hwaccel
-          push: false
-          tags: seanime:hwaccel
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/seanime:hwaccel
+            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}-hwaccel
 
-      - name: Build Docker image (CUDA) 🐳
+      - name: Build and push Docker image (CUDA) 🐳
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile.cuda
-          push: false
-          tags: seanime:cuda
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/seanime:cuda
+            ghcr.io/${{ github.repository_owner }}/seanime:${{ env.VERSION }}-cuda
 
   release:
     runs-on: ubuntu-latest
