@@ -1,6 +1,13 @@
 #!/bin/sh
 set -e
 
+# If running as root in a rootless image, fix volume permissions and re-exec as seanime
+if [ "$(id -u)" = "0" ] && id seanime >/dev/null 2>&1; then
+    HOME_DIR="$(eval echo ~seanime)"
+    chown -R 1000:1000 "$HOME_DIR" /var/log/supervisor 2>/dev/null || true
+    exec su-exec seanime "$0" "$@"
+fi
+
 QBIT_WEBUI_PORT="${QBIT_WEBUI_PORT:-8081}"
 QBIT_USERNAME="${QBIT_USERNAME:-admin}"
 QBIT_PASSWORD="${QBIT_PASSWORD:-adminadmin}"

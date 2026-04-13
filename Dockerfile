@@ -85,8 +85,8 @@ FROM common-base AS rootless
 RUN addgroup -S seanime -g 1000 && \
     adduser -S seanime -G seanime -u 1000 -s /sbin/nologin
 
-# Install standard ffmpeg
-RUN apk add --no-cache ffmpeg
+# Install standard ffmpeg and su-exec for privilege dropping
+RUN apk add --no-cache ffmpeg su-exec
 
 # Copy binary and entrypoint with ownership
 COPY --from=go-builder --chown=1000:1000 /tmp/build/seanime /app/
@@ -94,9 +94,9 @@ COPY --chown=1000:1000 docker/config/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Ensure directories are writable by seanime user
-RUN chown -R 1000:1000 /var/log/supervisor
+RUN mkdir -p /home/seanime/.config && \
+    chown -R 1000:1000 /home/seanime /var/log/supervisor
 
-USER 1000
 WORKDIR /app
 EXPOSE 43211 8081
 
@@ -120,9 +120,9 @@ ARG TARGETARCH
 RUN addgroup -S seanime -g 1000 && \
     adduser -S seanime -G seanime -u 1000
 
-# Install Jellyfin FFmpeg and Intel drivers (amd64 only)
+# Install Jellyfin FFmpeg, Intel drivers (amd64 only), and su-exec for privilege dropping
 RUN apk update && \
-    PACKAGES="jellyfin-ffmpeg mesa-va-gallium opencl-icd-loader" && \
+    PACKAGES="jellyfin-ffmpeg mesa-va-gallium opencl-icd-loader su-exec" && \
     if [ "$TARGETARCH" = "amd64" ]; then \
     PACKAGES="$PACKAGES libva-intel-driver intel-media-driver libvpl"; \
     apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing onevpl-intel-gpu; \
@@ -138,9 +138,9 @@ COPY --chown=1000:1000 docker/config/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Ensure directories are writable by seanime user
-RUN chown -R 1000:1000 /var/log/supervisor
+RUN mkdir -p /home/seanime/.config && \
+    chown -R 1000:1000 /home/seanime /var/log/supervisor
 
-USER 1000
 WORKDIR /app
 EXPOSE 43211 8081
 

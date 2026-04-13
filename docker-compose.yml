@@ -39,7 +39,7 @@ services:
       - STREMTHRU_AUTH=${STREMTHRU_USER}:${STREMTHRU_PASSWORD}
       # Link a debrid store (username:store_name:store_token)
       # store_name options: alldebrid, debridlink, easydebrid, offcloud, pikpak, premiumize, realdebrid, torbox
-      - STREMTHRU_STORE_AUTH=${STREMTHRU_STORE_AUTH_USERNAME}:${STREMTHRU_STORE_AUTH_STORE}:${STREMTHRU_STORE_AUTH_API_KEY}
+      - STREMTHRU_STORE_AUTH=${STREMTHRU_USER}:${STREMTHRU_STORE_AUTH_STORE}:${STREMTHRU_STORE_AUTH_API_KEY}
     ports:
       - "8080:8080" # StremThru API
     volumes:
