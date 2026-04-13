@@ -85,8 +85,8 @@ FROM common-base AS rootless
 RUN addgroup -S seanime -g 1000 && \
     adduser -S seanime -G seanime -u 1000 -s /sbin/nologin
 
-# Install standard ffmpeg and su-exec for privilege dropping
-RUN apk add --no-cache ffmpeg su-exec
+# Install standard ffmpeg
+RUN apk add --no-cache ffmpeg
 
 # Copy binary and entrypoint with ownership
 COPY --from=go-builder --chown=1000:1000 /tmp/build/seanime /app/
@@ -120,9 +120,9 @@ ARG TARGETARCH
 RUN addgroup -S seanime -g 1000 && \
     adduser -S seanime -G seanime -u 1000
 
-# Install Jellyfin FFmpeg, Intel drivers (amd64 only), and su-exec for privilege dropping
+# Install Jellyfin FFmpeg and Intel drivers (amd64 only)
 RUN apk update && \
-    PACKAGES="jellyfin-ffmpeg mesa-va-gallium opencl-icd-loader su-exec" && \
+    PACKAGES="jellyfin-ffmpeg mesa-va-gallium opencl-icd-loader" && \
     if [ "$TARGETARCH" = "amd64" ]; then \
     PACKAGES="$PACKAGES libva-intel-driver intel-media-driver libvpl"; \
     apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing onevpl-intel-gpu; \

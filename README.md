@@ -113,7 +113,6 @@ services:
     ports:
       - "3211:43211" # Seanime Web UI
       - "8081:8081"  # qBittorrent Web UI
-    user: "1000:1000" # omit for :latest (root) variant
     volumes:
       - ./seanime-data/config:/home/seanime/.config # use /root/.config for :latest
       - ./seanime-data/anime:/anime

@@ -1,11 +1,12 @@
 #!/bin/sh
 set -e
 
-# If running as root in a rootless image, fix volume permissions and re-exec as seanime
+# Determine if we have a seanime user (rootless/hwaccel images)
+RUN_USER=""
 if [ "$(id -u)" = "0" ] && id seanime >/dev/null 2>&1; then
+    RUN_USER="seanime"
     HOME_DIR="$(eval echo ~seanime)"
     chown -R 1000:1000 "$HOME_DIR" /var/log/supervisor 2>/dev/null || true
-    exec su-exec seanime "$0" "$@"
 fi
 
 QBIT_WEBUI_PORT="${QBIT_WEBUI_PORT:-8081}"
@@ -13,7 +14,9 @@ QBIT_USERNAME="${QBIT_USERNAME:-admin}"
 QBIT_PASSWORD="${QBIT_PASSWORD:-adminadmin}"
 
 # Determine qBittorrent config directory based on user
-if [ "$(id -u)" = "0" ]; then
+if [ -n "$RUN_USER" ]; then
+    QBIT_CONF_DIR="$(eval echo ~seanime)/.config/qBittorrent"
+elif [ "$(id -u)" = "0" ]; then
     QBIT_CONF_DIR="/root/.config/qBittorrent"
 else
     QBIT_CONF_DIR="$(eval echo ~$(whoami))/.config/qBittorrent"
@@ -82,6 +85,12 @@ else
     update_setting "WebUI\\\\BanDuration" "0"
 fi
 
+# Build user directive for supervisord (empty for root, "user=seanime" for rootless)
+USER_DIRECTIVE=""
+if [ -n "$RUN_USER" ]; then
+    USER_DIRECTIVE="user=${RUN_USER}"
+fi
+
 # Generate supervisord config with the configured port
 cat > /tmp/supervisord.conf <<EOF
 [supervisord]
@@ -91,6 +100,7 @@ pidfile=/tmp/supervisord.pid
 
 [program:qbittorrent]
 command=qbittorrent-nox --webui-port=${QBIT_WEBUI_PORT}
+${USER_DIRECTIVE}
 autostart=true
 autorestart=true
 priority=1
@@ -102,6 +112,7 @@ stderr_logfile_maxbytes=0
 [program:seanime]
 command=/app/seanime --host 0.0.0.0
 directory=/app
+${USER_DIRECTIVE}
 autostart=true
 autorestart=true
 priority=10
