@@ -146,6 +146,41 @@ Navigate to `http://localhost:3211`. On first launch you will be prompted to cre
 | `QBIT_USERNAME` | qBittorrent username |
 | `QBIT_PASSWORD` | qBittorrent password |
 
+### Self-hosting StremThru
+
+[StremThru](https://github.com/MunifTanjim/stremthru) is a proxy that provides a unified API across multiple debrid services. You can self-host it alongside Seanime to use any supported debrid provider (Real-Debrid, AllDebrid, TorBox, Premiumize, etc.) through a single interface.
+
+Add a `stremthru` service to your `docker-compose.yml`:
+
+```yaml
+services:
+  seanime:
+    # ... your existing seanime service config ...
+
+  stremthru:
+    image: muniftanjim/stremthru
+    container_name: stremthru
+    environment:
+      - STREMTHRU_BASE_URL=http://stremthru:8080
+      # StremThru credentials (username:password)
+      - STREMTHRU_AUTH=myuser:mypassword
+      # Link a debrid store (username:store_name:store_token)
+      # store_name: alldebrid, debridlink, easydebrid, offcloud, pikpak, premiumize, realdebrid, torbox
+      - STREMTHRU_STORE_AUTH=myuser:realdebrid:YOUR_DEBRID_API_KEY
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./seanime-data/stremthru-data:/app/data
+    restart: unless-stopped
+```
+
+Then in Seanime's settings, select **StremThru** as your debrid provider and configure:
+- **API URL**: `http://stremthru:8080` (use the container name since both services share the same Docker network)
+- **Username / Password**: The credentials you set in `STREMTHRU_AUTH`
+- **Store Name**: The debrid store you linked (e.g. `realdebrid`)
+
+> **Note:** The `STREMTHRU_AUTH` username must match the username in `STREMTHRU_STORE_AUTH`.
+
 <br>
 
 ## Goal
