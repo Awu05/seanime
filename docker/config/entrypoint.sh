@@ -85,10 +85,12 @@ else
     update_setting "WebUI\\\\BanDuration" "0"
 fi
 
-# Build user directive for supervisord (empty for root, "user=seanime" for rootless)
+# Build user/environment directives for supervisord (empty for root, set for rootless)
 USER_DIRECTIVE=""
+ENV_DIRECTIVE=""
 if [ -n "$RUN_USER" ]; then
     USER_DIRECTIVE="user=${RUN_USER}"
+    ENV_DIRECTIVE="environment=HOME=\"${HOME_DIR}\""
 fi
 
 # Generate supervisord config with the configured port
@@ -101,6 +103,7 @@ pidfile=/tmp/supervisord.pid
 [program:qbittorrent]
 command=qbittorrent-nox --webui-port=${QBIT_WEBUI_PORT}
 ${USER_DIRECTIVE}
+${ENV_DIRECTIVE}
 autostart=true
 autorestart=true
 priority=1
@@ -113,6 +116,7 @@ stderr_logfile_maxbytes=0
 command=/app/seanime --host 0.0.0.0
 directory=/app
 ${USER_DIRECTIVE}
+${ENV_DIRECTIVE}
 autostart=true
 autorestart=true
 priority=10
