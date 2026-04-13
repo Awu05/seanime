@@ -119,26 +119,7 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 	h.App.MultiUserEnabled = true
 	h.App.Logger.Info().Msg("app: Admin account created")
 
-	// Auto-login the new admin
-	token, err := core.GenerateToken(h.App.JWTSecret, profile.ID, true, "admin", 24*time.Hour)
-	if err != nil {
-		return h.RespondWithError(c, err)
-	}
-
-	c.SetCookie(&http.Cookie{
-		Name:     "seanime-auth",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
-	})
-
-	return h.RespondWithData(c, map[string]interface{}{
-		"success": true,
-		"token":   token,
-		"profile": profile,
-	})
+	return h.RespondWithData(c, map[string]interface{}{"success": true})
 }
 
 // HandleAdminLogin

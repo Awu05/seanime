@@ -26,7 +26,7 @@ export function SetupPage() {
 
         setup({ username: username.trim(), password, confirmPassword, accessCode: enableAccessCode ? accessCode.trim() : undefined }, {
             onSuccess: () => {
-                window.location.href = "/"
+                window.location.href = "/login"
             },
             onError: (err: any) => {
                 setError(err?.response?.data?.error || "Failed to create admin account")
