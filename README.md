@@ -46,6 +46,12 @@ Seanime is a **media server** with a **web interface** and **desktop app** for m
 >Seanime does not provide, host, or distribute any media content. Users are responsible for obtaining media through legal means and complying with their local laws. Extensions listed on the app are unaffiliated with Seanime and may be removed if they violated copyright laws. </strong>
 
 
+## What's New
+
+- **Multi-User Profiles**: Netflix-style profile picker with per-user AniList accounts, independent settings (library, torrent, debrid, mediastream), and concurrent streaming sessions. Admin registration on first launch with an optional household access code.
+- **Debrid Integration**: Stream via Real-Debrid, AllDebrid, TorBox, or StremThru with background downloading, estimated keyframes for fast HLS start, and automatic local file switchover for smooth playback.
+- **Docker Support**: Official Docker images (default, rootless, VA-API hardware-accelerated, CUDA) published to GitHub Container Registry with built-in qBittorrent.
+
 ## Features
 
 - **Cross-platform**: Web interface and desktop app for Windows, Linux, and macOS
@@ -67,9 +73,6 @@ Seanime is a **media server** with a **web interface** and **desktop app** for m
 - **Discord Rich Presence**: Display your watching activity automatically
 - **Offline Mode**: Access your anime and manga library without an internet connection
 - **Schedule & Season Browser**: Track upcoming releases and missed episodes, browse current/previous/next season anime with filters and sorting
-- **Multi-User Profiles**: Netflix-style profiles with per-user AniList accounts, independent settings (library, torrent, debrid, mediastream), and concurrent streaming sessions
-- **Debrid Integration**: Stream via Real-Debrid, AllDebrid, TorBox, or StremThru with background downloading, estimated keyframes for fast HLS start, and local file switchover
-- **Docker Support**: Official Docker images (default, rootless, hardware-accelerated, CUDA) published to GitHub Container Registry
 
 ## Get started
 
@@ -103,6 +106,10 @@ services:
       - QBIT_WEBUI_PORT=8081
       - QBIT_USERNAME=admin
       - QBIT_PASSWORD=adminadmin
+      # Bootstrap admin account (optional — skip to use the web setup page)
+      - SEANIME_ADMIN_USERNAME=admin
+      - SEANIME_ADMIN_PASSWORD=changeme
+      - SEANIME_INSTANCE_ACCESS_CODE=1234
     ports:
       - "3211:43211" # Seanime Web UI
       - "8081:8081"  # qBittorrent Web UI
@@ -132,6 +139,9 @@ Navigate to `http://localhost:3211`. On first launch you will be prompted to cre
 
 | Variable | Description |
 |----------|-------------|
+| `SEANIME_ADMIN_USERNAME` | Admin username created on first start |
+| `SEANIME_ADMIN_PASSWORD` | Admin password created on first start |
+| `SEANIME_INSTANCE_ACCESS_CODE` | Access code for household members to create profiles |
 | `QBIT_WEBUI_PORT` | qBittorrent WebUI port (default `8081`) |
 | `QBIT_USERNAME` | qBittorrent username |
 | `QBIT_PASSWORD` | qBittorrent password |
@@ -149,16 +159,6 @@ This is a one-person project and may not meet every use case. If it doesn’t fu
 - Built-in support for other media players
 - Built-in localization (translations)
 
-
-Consider sponsoring or sharing the project if you want to see more features implemented.
-
-## Sponsors
-
-The maintenance of this project is made possible by the sponsors.
-
-<p align="center">
-<!-- real-sponsors --><a href="https://github.com/TorBox-App"><img src="https:&#x2F;&#x2F;github.com&#x2F;TorBox-App.png" width="60px" alt="User avatar: TorBox-App" /></a><!-- real-sponsors -->
-</p>
 
 ## Tech stack
 
