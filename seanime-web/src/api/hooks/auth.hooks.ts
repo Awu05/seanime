@@ -79,7 +79,7 @@ export function useAuthSetupCheck() {
 export function useAuthSetup() {
     return useServerMutation<
         { success: boolean },
-        { username: string; password: string; accessCode?: string }
+        { username: string; password: string; confirmPassword: string; accessCode?: string }
     >({
         endpoint: API_ENDPOINTS.USER_AUTH.AdminSetup.endpoint,
         method: API_ENDPOINTS.USER_AUTH.AdminSetup.methods[0],

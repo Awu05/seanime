@@ -34,14 +34,23 @@ func (h *Handler) HandleSetupCheck(c echo.Context) error {
 //	@returns map[string]interface{}
 func (h *Handler) HandleAdminSetup(c echo.Context) error {
 	type body struct {
-		Username   string `json:"username"`
-		Password   string `json:"password"`
-		AccessCode string `json:"accessCode"`
+		Username        string `json:"username"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirmPassword"`
+		AccessCode      string `json:"accessCode"`
 	}
 
 	var b body
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	if b.Username == "" || b.Password == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username and password are required"})
+	}
+
+	if b.Password != b.ConfirmPassword {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Passwords do not match"})
 	}
 
 	exists, _ := h.App.Database.AdminExists()
