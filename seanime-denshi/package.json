@@ -70,6 +70,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "seanime-denshi-${version}_Windows_${arch}.${ext}",

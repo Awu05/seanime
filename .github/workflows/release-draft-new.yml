@@ -433,6 +433,9 @@ jobs:
           if [ -f ./artifacts/seanime-denshi-${{ env.VERSION }}_Windows_x64.exe.blockmap ]; then
               mv ./artifacts/seanime-denshi-${{ env.VERSION }}_Windows_x64.exe.blockmap ./seanime-denshi-${{ env.VERSION }}_Windows_x64.exe.blockmap
           fi
+          if [ -f ./artifacts/seanime-denshi-${{ env.VERSION }}_Windows_x64.zip ]; then
+              mv ./artifacts/seanime-denshi-${{ env.VERSION }}_Windows_x64.zip ./seanime-denshi-${{ env.VERSION }}_Windows_x64.zip
+          fi
 
           # Copy electron-builder YML files if they exist
           find ./artifacts -name "*.yml" -exec cp {} ./ \;
@@ -488,6 +491,7 @@ jobs:
             seanime-denshi-${{ env.VERSION }}_Linux_x86_64.AppImage
             seanime-denshi-${{ env.VERSION }}_Windows_x64.exe
             seanime-denshi-${{ env.VERSION }}_Windows_x64.exe.blockmap
+            seanime-denshi-${{ env.VERSION }}_Windows_x64.zip
             # Server builds
             seanime-${{ env.VERSION }}_MacOS_x86_64.tar.gz
             seanime-${{ env.VERSION }}_MacOS_arm64.tar.gz
