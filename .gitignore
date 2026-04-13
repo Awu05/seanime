@@ -9,7 +9,7 @@ testdata/
 .DS_Store
 */.DS_Store
 .env
-./seanime-data/
+seanime-data/
 
 Dockerfile.dev
 dev.dockerfile
