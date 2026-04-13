@@ -74,11 +74,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 
 	b.Library.IncludeOnlineStreamingInLibrary = b.Library.EnableOnlinestream
 
-	settings, err := h.App.Database.UpsertSettings(&models.Settings{
-		BaseModel: models.BaseModel{
-			ID:        1,
-			UpdatedAt: time.Now(),
-		},
+	newSettings := &models.Settings{
 		Library:       &b.Library,
 		MediaPlayer:   &b.MediaPlayer,
 		Torrent:       &b.Torrent,
@@ -94,7 +90,19 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 			DownloadAutomatically: true,
 			EnableEnhancedQueries: true,
 		},
-	})
+	}
+
+	var settings *models.Settings
+	var err error
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertSettingsForProfile(profileID, newSettings)
+	} else {
+		newSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		settings, err = h.App.Database.UpsertSettings(newSettings)
+	}
 
 	if err != nil {
 		return h.RespondWithError(c, err)
