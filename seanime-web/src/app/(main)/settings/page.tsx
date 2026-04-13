@@ -736,9 +736,6 @@ export default function Page() {
                                             )}
                                         </SettingsCard>
 
-                                        <SettingsCard title="MyAnimeList" description="Coming soon">
-                                            <p className="text-sm text-gray-500">MyAnimeList integration is planned for a future update.</p>
-                                        </SettingsCard>
 
                                     </TabsContent>
 

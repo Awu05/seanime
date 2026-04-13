@@ -81,6 +81,61 @@ How to install Seanime
 </a>
 </p>
 
+### Docker Compose
+
+Seanime publishes Docker images to GitHub Container Registry. Four variants are available:
+
+| Tag | Description |
+|-----|-------------|
+| `latest` | Default image (runs as root) |
+| `rootless` | Runs as non-root user (UID/GID 1000) |
+| `hwaccel` | Rootless + VA-API hardware-accelerated transcoding |
+| `cuda` | NVIDIA CUDA hardware-accelerated transcoding |
+
+**1. Create a `docker-compose.yml`**
+
+```yaml
+services:
+  seanime:
+    image: ghcr.io/awu05/seanime:rootless # or :latest, :hwaccel, :cuda
+    container_name: seanime
+    environment:
+      - QBIT_WEBUI_PORT=8081
+      - QBIT_USERNAME=admin
+      - QBIT_PASSWORD=adminadmin
+    ports:
+      - "3211:43211" # Seanime Web UI
+      - "8081:8081"  # qBittorrent Web UI
+    user: "1000:1000" # omit for :latest (root) variant
+    volumes:
+      - ./seanime-data/config:/home/seanime/.config # use /root/.config for :latest
+      - ./seanime-data/anime:/anime
+      - ./seanime-data/downloads:/downloads
+    restart: unless-stopped
+```
+
+> For hardware acceleration, add `devices: [/dev/dri:/dev/dri]` and `group_add: [video, render]` for VA-API,
+> or `runtime: nvidia` and the `NVIDIA_VISIBLE_DEVICES`/`NVIDIA_DRIVER_CAPABILITIES` environment variables for CUDA.
+> See the examples in [`docker/examples/`](docker/examples/) for full configurations.
+
+**2. Start the container**
+
+```bash
+docker compose up -d
+```
+
+**3. Open the Web UI**
+
+Navigate to `http://localhost:3211`. On first launch you will be prompted to create an admin account.
+
+**Environment variables**
+
+| Variable | Description |
+|----------|-------------|
+| `QBIT_WEBUI_PORT` | qBittorrent WebUI port (default `8081`) |
+| `QBIT_USERNAME` | qBittorrent username |
+| `QBIT_PASSWORD` | qBittorrent password |
+
 <br>
 
 ## Goal
