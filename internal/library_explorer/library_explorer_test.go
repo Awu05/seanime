@@ -46,7 +46,7 @@ func TestLibraryExplorer_LogFileTreeStructure(t *testing.T) {
 	explorer.LoadDirectoryChildren("/Users/rahim/Documents/collection/Sousou no Frieren")
 
 	// Build file tree
-	fileTreeJSON, err := explorer.GetFileTree()
+	fileTreeJSON, err := explorer.GetFileTree("")
 	if err != nil {
 		t.Fatalf("Failed to build file tree: %v", err)
 	}

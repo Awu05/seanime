@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"seanime/internal/core"
+	"seanime/internal/database/db_bridge"
 	"seanime/internal/database/models"
 
 	"github.com/google/uuid"
@@ -92,6 +93,9 @@ func (h *Handler) HandleDeleteProfile(c echo.Context) error {
 	if err := h.App.Database.DeleteProfile(id); err != nil {
 		return h.RespondWithError(c, err)
 	}
+
+	// Clear cached local files for the deleted profile
+	db_bridge.ClearAllLocalFilesCache()
 
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
 }
