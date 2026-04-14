@@ -84,18 +84,21 @@ func (db *Database) UpsertSettingsForProfile(profileID string, settings *models.
 	return settings, nil
 }
 
-// CloneSettingsForProfile copies the global settings (ID=1) as a new row for the given profile.
-// Called when a profile is created so each profile starts with the current global defaults.
+// CloneSettingsForProfile creates a new settings row for the given profile with blank torrent/library/media player fields.
+// Non-sensitive defaults (UI preferences, notification settings, etc.) are copied from the global settings.
 func (db *Database) CloneSettingsForProfile(profileID string) (*models.Settings, error) {
 	global, err := db.GetSettings()
 	if err != nil || global == nil {
 		return nil, err
 	}
 
-	// Copy the settings
+	// Copy the settings then blank out credentials and per-user config
 	cloned := *global
 	cloned.ID = 0 // New auto-increment ID
 	cloned.ProfileID = profileID
+	cloned.Torrent = &models.TorrentSettings{}
+	cloned.MediaPlayer = &models.MediaPlayerSettings{}
+	cloned.Library = &models.LibrarySettings{}
 
 	err = db.gormdb.Create(&cloned).Error
 	if err != nil {
@@ -219,13 +222,9 @@ func (db *Database) UpsertMediastreamSettingsForProfile(profileID string, settin
 }
 
 func (db *Database) CloneMediastreamSettingsForProfile(profileID string) {
-	global, ok := db.GetMediastreamSettings()
-	if !ok || global == nil {
-		return
+	cloned := models.MediastreamSettings{
+		ProfileID: profileID,
 	}
-	cloned := *global
-	cloned.ID = 0
-	cloned.ProfileID = profileID
 	_ = db.gormdb.Create(&cloned).Error
 }
 
@@ -296,13 +295,9 @@ func (db *Database) UpsertTorrentstreamSettingsForProfile(profileID string, sett
 }
 
 func (db *Database) CloneTorrentstreamSettingsForProfile(profileID string) {
-	global, ok := db.GetTorrentstreamSettings()
-	if !ok || global == nil {
-		return
+	cloned := models.TorrentstreamSettings{
+		ProfileID: profileID,
 	}
-	cloned := *global
-	cloned.ID = 0
-	cloned.ProfileID = profileID
 	_ = db.gormdb.Create(&cloned).Error
 }
 
@@ -371,12 +366,8 @@ func (db *Database) UpsertDebridSettingsForProfile(profileID string, settings *m
 }
 
 func (db *Database) CloneDebridSettingsForProfile(profileID string) {
-	global, ok := db.GetDebridSettings()
-	if !ok || global == nil {
-		return
+	cloned := models.DebridSettings{
+		ProfileID: profileID,
 	}
-	cloned := *global
-	cloned.ID = 0
-	cloned.ProfileID = profileID
 	_ = db.gormdb.Create(&cloned).Error
 }

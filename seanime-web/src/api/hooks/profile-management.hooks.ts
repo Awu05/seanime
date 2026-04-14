@@ -17,7 +17,7 @@ export function useDeleteProfile() {
         { success: boolean },
         { id: string }
     >({
-        endpoint: API_ENDPOINTS.ADMIN_PROFILES.DeleteProfile.endpoint,
+        endpoint: "/api/v1/admin/profiles/delete",
         method: "POST",
         mutationKey: [API_ENDPOINTS.ADMIN_PROFILES.DeleteProfile.key],
     })
