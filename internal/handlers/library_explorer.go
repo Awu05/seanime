@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"seanime/internal/core"
+
 	"github.com/labstack/echo/v4"
 )
 
@@ -26,8 +28,10 @@ func (h *Handler) HandleGetLibraryExplorerFileTree(c echo.Context) error {
 	libraryPaths := settings.GetLibrary().GetLibraryPaths()
 	h.App.LibraryExplorer.SetLibraryPaths(libraryPaths)
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get file tree
-	fileTree, err := h.App.LibraryExplorer.GetFileTree()
+	fileTree, err := h.App.LibraryExplorer.GetFileTree(profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

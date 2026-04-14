@@ -56,6 +56,7 @@ type (
 		mu                      sync.Mutex
 		isOfflineRef            *util.Ref[bool]
 		simulationResults       []*SimulationResult // Stores results when running in simulation mode
+		profileID               string
 	}
 
 	// SimulationResult represents a torrent that would be downloaded in simulation mode
@@ -140,6 +141,10 @@ func (ad *AutoDownloader) SetSettings(settings *models.AutoDownloaderSettings) {
 
 func (ad *AutoDownloader) SetAnimeCollection(ac *anilist.AnimeCollection) {
 	ad.animeCollection = mo.Some(ac)
+}
+
+func (ad *AutoDownloader) SetProfileID(profileID string) {
+	ad.profileID = profileID
 }
 
 func (ad *AutoDownloader) SetTorrentClientRepository(repo *torrent_client.Repository) {
@@ -373,7 +378,7 @@ func (ad *AutoDownloader) fetchRunData(ctx context.Context, ruleIDs ...uint) (*r
 	}
 
 	// Get local files from the database
-	lfs, _, err := db_bridge.GetLocalFiles(ad.database)
+	lfs, _, err := db_bridge.GetLocalFiles(ad.database, ad.profileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch local files: %w", err)
 	}

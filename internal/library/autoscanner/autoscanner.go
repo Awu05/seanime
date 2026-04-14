@@ -42,6 +42,7 @@ type (
 		scanning            atomic.Bool
 		onRefreshCollection func()
 		animeCollection     *anilist.AnimeCollection
+		profileID           string
 	}
 	NewAutoScannerOptions struct {
 		Database            *db.Database
@@ -84,6 +85,10 @@ func New(opts *NewAutoScannerOptions) *AutoScanner {
 
 func (as *AutoScanner) SetAnimeCollection(ac *anilist.AnimeCollection) {
 	as.animeCollection = ac
+}
+
+func (as *AutoScanner) SetProfileID(profileID string) {
+	as.profileID = profileID
 }
 
 // Notify is used to notify the AutoScanner that a file action has occurred.
@@ -216,14 +221,14 @@ func (as *AutoScanner) scan() {
 	}
 
 	// Get existing local files
-	existingLfs, _, err := db_bridge.GetLocalFiles(as.db)
+	existingLfs, _, err := db_bridge.GetLocalFiles(as.db, as.profileID)
 	if err != nil {
 		as.logger.Error().Err(err).Msg("autoscanner: Failed to get existing local files")
 		return
 	}
 
 	// Get the latest shelved local files
-	existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(as.db)
+	existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(as.db, as.profileID)
 	if err != nil {
 		as.logger.Error().Err(err).Msg("autoscanner: Failed to get existing shelved local files")
 	}
@@ -275,7 +280,7 @@ func (as *AutoScanner) scan() {
 		as.logger.Trace().Msg("autoscanner: Updating local files")
 
 		// Insert the local files
-		_, err = db_bridge.InsertLocalFiles(as.db, allLfs)
+		_, err = db_bridge.InsertLocalFiles(as.db, as.profileID, allLfs)
 		if err != nil {
 			as.logger.Error().Err(err).Msg("autoscanner: failed to insert local files")
 			return
@@ -285,7 +290,7 @@ func (as *AutoScanner) scan() {
 	if as.db != nil {
 		as.logger.Trace().Msg("autoscanner: Updating shelved local files")
 		// Save the shelved local files
-		err = db_bridge.SaveShelvedLocalFiles(as.db, sc.GetShelvedLocalFiles())
+		err = db_bridge.SaveShelvedLocalFiles(as.db, as.profileID, sc.GetShelvedLocalFiles())
 		if err != nil {
 			as.logger.Error().Err(err).Msg("autoscanner: failed to save shelved local files")
 		}

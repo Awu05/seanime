@@ -110,7 +110,7 @@ func (m *Anime) getAnimeEntry(call goja.FunctionCall) goja.Value {
 
 	go func() {
 		// Get all the local files
-		lfs, _, err := db_bridge.GetLocalFiles(database)
+		lfs, _, err := db_bridge.GetLocalFiles(database, "")
 		if err != nil {
 			_ = reject(m.vm.ToValue(err.Error()))
 			return

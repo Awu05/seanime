@@ -163,7 +163,7 @@ func (m *Manager) DeleteWatchHistoryItem(mediaId int) (err error) {
 
 // GetExternalPlayerEpisodeWatchHistoryItem is called before launching the external player to get the last known position.
 // Unlike GetWatchHistoryItem, this checks if the episode numbers match.
-func (m *Manager) GetExternalPlayerEpisodeWatchHistoryItem(path string, isStream bool, episode, mediaId int) (ret *WatchHistoryItemResponse) {
+func (m *Manager) GetExternalPlayerEpisodeWatchHistoryItem(profileID string, path string, isStream bool, episode, mediaId int) (ret *WatchHistoryItemResponse) {
 	defer util.HandlePanicInModuleThen("continuity/GetExternalPlayerEpisodeWatchHistoryItem", func() {})
 
 	m.mu.RLock()
@@ -232,7 +232,7 @@ func (m *Manager) GetExternalPlayerEpisodeWatchHistoryItem(path string, isStream
 
 	} else {
 		// Find the local file from the path
-		lfs, _, err := db_bridge.GetLocalFiles(m.db)
+		lfs, _, err := db_bridge.GetLocalFiles(m.db, profileID)
 		if err != nil {
 			return ret
 		}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"seanime/internal/api/anilist"
+	"seanime/internal/core"
 	"seanime/internal/customsource"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/library/anime"
@@ -98,7 +99,8 @@ func (h *Handler) HandleGetNakamaAnimeLibrary(c echo.Context) error {
 		return h.RespondWithData(c, &anime.LibraryCollection{})
 	}
 
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	profileID := core.GetProfileIDFromContext(c)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -166,7 +168,8 @@ func (h *Handler) HandleGetNakamaAnimeLibraryFiles(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	lfs, err := h.getFilteredLocalFiles(mId)
+	profileID := core.GetProfileIDFromContext(c)
+	lfs, err := h.getFilteredLocalFiles(profileID, mId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -190,7 +193,8 @@ func (h *Handler) HandleGetNakamaAnimeAllLibraryFiles(c echo.Context) error {
 		return h.RespondWithError(c, errors.New("host is not sharing its anime library"))
 	}
 
-	lfs, err := h.getFilteredLocalFiles(0)
+	profileID := core.GetProfileIDFromContext(c)
+	lfs, err := h.getFilteredLocalFiles(profileID, 0)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -205,8 +209,8 @@ func (h *Handler) HandleGetNakamaAnimeAllLibraryFiles(c echo.Context) error {
 
 // getFilteredLocalFiles retrieves and filters local files based on unshared anime IDs.
 // If mediaId is 0, returns all shared files. Otherwise, returns files for the specified media ID.
-func (h *Handler) getFilteredLocalFiles(mediaId int) ([]*anime.LocalFile, error) {
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+func (h *Handler) getFilteredLocalFiles(profileID string, mediaId int) ([]*anime.LocalFile, error) {
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return nil, err
 	}

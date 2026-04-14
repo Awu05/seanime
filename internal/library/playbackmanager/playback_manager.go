@@ -47,6 +47,7 @@ type (
 		Logger                *zerolog.Logger
 		Database              *db.Database
 		MediaPlayerRepository *mediaplayer.Repository // MediaPlayerRepository is used to control the media player
+		profileID             string
 		continuityManager     *continuity.Manager
 
 		// settings is read on every playback event, so it uses atomic.Pointer for lock-free reads.
@@ -192,6 +193,7 @@ type (
 		DiscordPresence            *discordrpc_presence.Presence
 		IsOfflineRef               *util.Ref[bool]
 		ContinuityManager          *continuity.Manager
+		ProfileID                  string
 	}
 
 	Settings struct {
@@ -214,6 +216,7 @@ func New(opts *NewPlaybackManagerOptions) *PlaybackManager {
 	pm := &PlaybackManager{
 		Logger:                       opts.Logger,
 		Database:                     opts.Database,
+		profileID:                    opts.ProfileID,
 		discordPresence:              opts.DiscordPresence,
 		wsEventManager:               opts.WSEventManager,
 		platformRef:                  opts.PlatformRef,

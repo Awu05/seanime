@@ -87,6 +87,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		DiscordPresence:            a.DiscordPresence,
 		IsOfflineRef:               a.IsOfflineRef(),
 		ContinuityManager:          a.ContinuityManager,
+		ProfileID:                  profileID,
 	})
 
 	// Create DirectStreamManager (depends on NativePlayer + VideoCore)

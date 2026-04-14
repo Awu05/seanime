@@ -299,11 +299,11 @@ func (l *LibraryExplorer) sortTreeChildren(node *FileTreeNode) {
 }
 
 // hydrateLocalFileData hydrates the file tree with LocalFile data and MediaIds
-func (l *LibraryExplorer) hydrateLocalFileData(tree *FileTree) (map[string]*anime.LocalFile, error) {
+func (l *LibraryExplorer) hydrateLocalFileData(profileID string, tree *FileTree) (map[string]*anime.LocalFile, error) {
 	l.logger.Debug().Msg("library explorer: Hydrating file tree with local file data")
 
 	// Get all local files
-	localFiles, _, err := db_bridge.GetLocalFiles(l.database)
+	localFiles, _, err := db_bridge.GetLocalFiles(l.database, profileID)
 	if err != nil {
 		l.logger.Warn().Err(err).Msg("library explorer: Failed to get local files, skipping hydration")
 		return nil, nil // Don't fail the entire operation

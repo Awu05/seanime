@@ -229,7 +229,7 @@ func (m *Repository) Play(path string) error {
 
 	m.Logger.Debug().Str("path", path).Msg("media player: Media requested")
 
-	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem(path, false, 0, 0)
+	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem("", path, false, 0, 0)
 
 	switch m.Default {
 	case "vlc":
@@ -429,7 +429,7 @@ func (m *Repository) Stream(streamUrl string, episode int, mediaId int, windowTi
 		return fmt.Errorf("could not open media player, %w", err)
 	}
 
-	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem("", true, episode, mediaId)
+	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem("", "", true, episode, mediaId)
 
 	switch m.Default {
 	case "vlc":

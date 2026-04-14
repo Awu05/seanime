@@ -355,8 +355,8 @@ func (a *App) initModulesOnce() {
 func HandleNewDatabaseEntries(database *db.Database, logger *zerolog.Logger) {
 
 	// Create initial empty local files collection if none exists
-	if _, _, err := db_bridge.GetLocalFiles(database); err != nil {
-		_, err := db_bridge.InsertLocalFiles(database, make([]*anime.LocalFile, 0))
+	if _, _, err := db_bridge.GetLocalFiles(database, ""); err != nil {
+		_, err := db_bridge.InsertLocalFiles(database, "", make([]*anime.LocalFile, 0))
 		if err != nil {
 			logger.Fatal().Err(err).Msgf("app: Failed to initialize local files in the database")
 		}
