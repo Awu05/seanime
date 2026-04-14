@@ -94,7 +94,9 @@ func (h *Handler) HandleDeleteProfile(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	// Clear cached local files for the deleted profile
+	// Clean up orphaned data for the deleted profile
+	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.LocalFiles{})
+	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.ShelvedLocalFiles{})
 	db_bridge.ClearAllLocalFilesCache()
 
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
