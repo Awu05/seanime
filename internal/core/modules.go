@@ -370,7 +370,7 @@ func HandleNewDatabaseEntries(database *db.Database, logger *zerolog.Logger) {
 //   - After settings are updated.
 //
 // DEVNOTE: Make sure there's no blocking code in this function.
-func (a *App) InitOrRefreshModules() {
+func (a *App) InitOrRefreshModules(profileID string) {
 	a.moduleMu.Lock()
 	defer a.moduleMu.Unlock()
 
@@ -472,6 +472,7 @@ func (a *App) InitOrRefreshModules() {
 		// Refresh auto scanner settings (thread safe)
 		if a.AutoScanner != nil {
 			go a.AutoScanner.SetSettings(*settings.Library)
+			a.AutoScanner.SetProfileID(profileID)
 		}
 
 		// Update the torrent manager settings (thread safe)
@@ -639,6 +640,7 @@ func (a *App) InitOrRefreshModules() {
 	// Update Auto Downloader
 	if settings.AutoDownloader != nil {
 		go a.AutoDownloader.SetSettings(settings.AutoDownloader)
+		a.AutoDownloader.SetProfileID(profileID)
 	}
 
 	// +---------------------+

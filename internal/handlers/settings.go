@@ -151,7 +151,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 	status := h.NewStatus(c)
 
 	// Refresh modules that depend on the settings
-	h.App.InitOrRefreshModules()
+	h.App.InitOrRefreshModules(profileID)
 
 	return h.RespondWithData(c, status)
 }
@@ -282,7 +282,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	status := h.NewStatus(c)
 
 	// Refresh modules that depend on the settings
-	h.App.InitOrRefreshModules()
+	h.App.InitOrRefreshModules(profileID)
 
 	return h.RespondWithData(c, status)
 }
@@ -398,7 +398,7 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.InitOrRefreshModules()
+	h.App.InitOrRefreshModules(profileID)
 
 	return h.RespondWithData(c, true)
 }

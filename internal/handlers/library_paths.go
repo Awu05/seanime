@@ -58,7 +58,7 @@ func (h *Handler) HandleAddLibraryPath(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.InitOrRefreshModules()
+	h.App.InitOrRefreshModules(profileID)
 
 	return h.RespondWithData(c, lp)
 }
@@ -81,7 +81,7 @@ func (h *Handler) HandleDeleteLibraryPath(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.InitOrRefreshModules()
+	h.App.InitOrRefreshModules(profileID)
 
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
 }

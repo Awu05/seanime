@@ -88,7 +88,7 @@ func (a *App) LogoutFromAnilist() {
 
 	a.Logger.Debug().Msg("app: Logged out from AniList, switched to simulated platform")
 
-	a.InitOrRefreshModules()
+	a.InitOrRefreshModules("")
 	a.InitOrRefreshAnilistData()
 }
 
