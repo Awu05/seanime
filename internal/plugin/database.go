@@ -26,11 +26,7 @@ type Database struct {
 // getProfileID reads the __profileID variable from the Goja runtime,
 // which is set by the hook executor when a hook event carries a profile ID.
 func (d *Database) getProfileID() string {
-	v := d.vm.Get("__profileID")
-	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-		return ""
-	}
-	return v.String()
+	return getProfileIDFromVM(d.vm)
 }
 
 // BindDatabase binds the database module to the Goja runtime.

@@ -435,7 +435,7 @@ func (pm *PlaybackManager) StartStreamingUsingMediaPlayer(windowTitle string, op
 	episodeNumber := 0
 
 	// Find the current episode being stream
-	episodeCollection, err := anime.NewEpisodeCollection(anime.NewEpisodeCollectionOptions{
+	episodeCollection, err := anime.NewEpisodeCollection(context.Background(), anime.NewEpisodeCollectionOptions{
 		AnimeMetadata:       nil,
 		Media:               event.Media,
 		MetadataProviderRef: pm.metadataProviderRef,

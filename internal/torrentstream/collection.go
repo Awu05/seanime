@@ -1,6 +1,7 @@
 package torrentstream
 
 import (
+	"context"
 	"fmt"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
@@ -30,9 +31,12 @@ type (
 	}
 )
 
-func (r *Repository) HydrateStreamCollection(opts *HydrateStreamCollectionOptions) {
+func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateStreamCollectionOptions) {
+
+	profileID := util.ProfileIDFromContext(ctx)
 
 	reqEvent := new(anime.AnimeLibraryStreamCollectionRequestedEvent)
+	reqEvent.ProfileID = profileID
 	reqEvent.AnimeCollection = opts.AnimeCollection
 	reqEvent.LibraryCollection = opts.LibraryCollection
 	err := hook.GlobalHookManager.OnAnimeLibraryStreamCollectionRequested().Trigger(reqEvent)
@@ -252,6 +256,7 @@ func (r *Repository) HydrateStreamCollection(opts *HydrateStreamCollectionOption
 	}
 
 	event := new(anime.AnimeLibraryStreamCollectionEvent)
+	event.ProfileID = profileID
 	event.StreamCollection = sc
 	err = hook.GlobalHookManager.OnAnimeLibraryStreamCollection().Trigger(event)
 	if err != nil {

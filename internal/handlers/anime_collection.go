@@ -196,7 +196,7 @@ func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 			(library != nil && library.EnableOnlinestream && library.IncludeOnlineStreamingInLibrary) ||
 			(debridSettings != nil && debridSettings.Enabled && debridSettings.IncludeDebridStreamInLibrary) {
 			session := h.getStreamSession(c)
-			session.TorrentStream.HydrateStreamCollection(&torrentstream.HydrateStreamCollectionOptions{
+			session.TorrentStream.HydrateStreamCollection(c.Request().Context(), &torrentstream.HydrateStreamCollectionOptions{
 				AnimeCollection:     animeCollection,
 				LibraryCollection:   libraryCollection,
 				MetadataProviderRef: h.App.MetadataProviderRef,
@@ -301,7 +301,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		return h.RespondWithData(c, []*anime.ScheduleItem{})
 	}
 
-	ret := anime.GetScheduleItems(animeSchedule, animeCollection)
+	ret := anime.GetScheduleItems(c.Request().Context(), animeSchedule, animeCollection)
 
 	animeScheduleCache.SetT(1, ret, 1*time.Hour)
 

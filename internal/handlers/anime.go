@@ -20,7 +20,7 @@ func (h *Handler) getAnimeEpisodeCollection(c echo.Context, mId int) (*anime.Epi
 		return nil, err
 	}
 
-	ec, err := anime.NewEpisodeCollection(anime.NewEpisodeCollectionOptions{
+	ec, err := anime.NewEpisodeCollection(c.Request().Context(), anime.NewEpisodeCollectionOptions{
 		AnimeMetadata:       animeMetadata,
 		Media:               completeAnime.ToBaseAnime(),
 		MetadataProviderRef: h.App.MetadataProviderRef,

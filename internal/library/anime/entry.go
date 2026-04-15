@@ -236,7 +236,7 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 	// +---------------------+
 
 	// Create episode entities
-	entry.hydrateEntryEpisodeData(anilistEntry, animeMetadata, opts.MetadataProviderRef)
+	entry.hydrateEntryEpisodeData(ctx, anilistEntry, animeMetadata, opts.MetadataProviderRef)
 
 	event := &AnimeEntryEvent{
 		Entry: entry,
@@ -255,6 +255,7 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 // hydrateEntryEpisodeData
 // Metadata, Media and LocalFiles should be defined
 func (e *Entry) hydrateEntryEpisodeData(
+	ctx context.Context,
 	anilistEntry *anilist.AnimeListEntry,
 	animeMetadata *metadata.AnimeMetadata,
 	metadataProviderRef *util.Ref[metadata_provider.Provider],
@@ -314,7 +315,7 @@ func (e *Entry) hydrateEntryEpisodeData(
 	// |    Download Info    |
 	// +---------------------+
 
-	info, err := NewEntryDownloadInfo(&NewEntryDownloadInfoOptions{
+	info, err := NewEntryDownloadInfo(ctx, &NewEntryDownloadInfoOptions{
 		LocalFiles:          e.LocalFiles,
 		AnimeMetadata:       animeMetadata,
 		Progress:            anilistEntry.Progress,

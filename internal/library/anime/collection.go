@@ -99,11 +99,14 @@ func NewLibraryCollection(ctx context.Context, opts *NewLibraryCollectionOptions
 	defer util.HandlePanicInModuleWithError("entities/collection/NewLibraryCollection", &err)
 	lc = new(LibraryCollection)
 
+	profileID := util.ProfileIDFromContext(ctx)
+
 	reqEvent := &AnimeLibraryCollectionRequestedEvent{
 		AnimeCollection:   opts.AnimeCollection,
 		LocalFiles:        opts.LocalFiles,
 		LibraryCollection: lc,
 	}
+	reqEvent.ProfileID = profileID
 	err = hook.GlobalHookManager.OnAnimeLibraryCollectionRequested().Trigger(reqEvent)
 	if err != nil {
 		return nil, err
@@ -116,6 +119,7 @@ func NewLibraryCollection(ctx context.Context, opts *NewLibraryCollectionOptions
 		event := &AnimeLibraryCollectionEvent{
 			LibraryCollection: lc,
 		}
+		event.ProfileID = profileID
 		err = hook.GlobalHookManager.OnAnimeLibraryCollection().Trigger(event)
 		if err != nil {
 			return nil, err
@@ -163,6 +167,7 @@ func NewLibraryCollection(ctx context.Context, opts *NewLibraryCollectionOptions
 	event := &AnimeLibraryCollectionEvent{
 		LibraryCollection: lc,
 	}
+	event.ProfileID = profileID
 	_ = hook.GlobalHookManager.OnAnimeLibraryCollection().Trigger(event)
 	lc = event.LibraryCollection
 

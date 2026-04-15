@@ -1,6 +1,7 @@
 package torrentstream
 
 import (
+	"context"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata_provider"
 	"seanime/internal/database/db"
@@ -80,7 +81,7 @@ func TestStreamCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the stream collection
-	repo.HydrateStreamCollection(&HydrateStreamCollectionOptions{
+	repo.HydrateStreamCollection(context.Background(), &HydrateStreamCollectionOptions{
 		AnimeCollection:   animeCollection,
 		LibraryCollection: libraryCollection,
 	})

@@ -524,7 +524,7 @@ func (h *Handler) HandleGetMissingEpisodes(c echo.Context) error {
 	// Get the silenced media ids
 	silencedMediaIds, _ := h.App.Database.GetSilencedMediaEntryIds()
 
-	missingEps := anime.NewMissingEpisodes(&anime.NewMissingEpisodesOptions{
+	missingEps := anime.NewMissingEpisodes(c.Request().Context(), &anime.NewMissingEpisodesOptions{
 		AnimeCollection:     animeCollection,
 		LocalFiles:          lfs,
 		SilencedMediaIds:    silencedMediaIds,
@@ -571,7 +571,7 @@ func (h *Handler) HandleGetUpcomingEpisodes(c echo.Context) error {
 			Episodes: []*anime.UpcomingEpisode{},
 		})
 	}
-	upcomingEps := anime.NewUpcomingEpisodes(&anime.NewUpcomingEpisodesOptions{
+	upcomingEps := anime.NewUpcomingEpisodes(c.Request().Context(), &anime.NewUpcomingEpisodesOptions{
 		AnimeCollection:     animeCollection,
 		MetadataProviderRef: h.App.MetadataProviderRef,
 	})

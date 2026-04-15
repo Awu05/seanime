@@ -191,7 +191,7 @@ func (m *Manager) PlayTorrentStream(ctx context.Context, opts PlayTorrentStreamO
 	m.playbackMu.Lock()
 	defer m.playbackMu.Unlock()
 
-	episodeCollection, err := anime.NewEpisodeCollection(anime.NewEpisodeCollectionOptions{
+	episodeCollection, err := anime.NewEpisodeCollection(ctx, anime.NewEpisodeCollectionOptions{
 		AnimeMetadata:       nil,
 		Media:               opts.Media,
 		MetadataProviderRef: m.metadataProviderRef,

@@ -1,6 +1,7 @@
 package anime
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
@@ -46,7 +47,9 @@ type (
 
 // NewEntryDownloadInfo returns a list of episodes to download or episodes for the torrent/debrid streaming views
 // based on the options provided.
-func NewEntryDownloadInfo(opts *NewEntryDownloadInfoOptions) (*EntryDownloadInfo, error) {
+func NewEntryDownloadInfo(ctx context.Context, opts *NewEntryDownloadInfoOptions) (*EntryDownloadInfo, error) {
+
+	profileID := util.ProfileIDFromContext(ctx)
 
 	reqEvent := &AnimeEntryDownloadInfoRequestedEvent{
 		LocalFiles:        opts.LocalFiles,
@@ -56,6 +59,7 @@ func NewEntryDownloadInfo(opts *NewEntryDownloadInfoOptions) (*EntryDownloadInfo
 		Status:            opts.Status,
 		EntryDownloadInfo: &EntryDownloadInfo{},
 	}
+	reqEvent.ProfileID = profileID
 
 	err := hook.GlobalHookManager.OnAnimeEntryDownloadInfoRequested().Trigger(reqEvent)
 	if err != nil {
@@ -260,6 +264,7 @@ func NewEntryDownloadInfo(opts *NewEntryDownloadInfoOptions) (*EntryDownloadInfo
 	event := &AnimeEntryDownloadInfoEvent{
 		EntryDownloadInfo: downloadInfo,
 	}
+	event.ProfileID = profileID
 	err = hook.GlobalHookManager.OnAnimeEntryDownloadInfo().Trigger(event)
 	if err != nil {
 		return nil, err

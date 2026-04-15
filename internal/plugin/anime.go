@@ -26,11 +26,7 @@ type Anime struct {
 // getProfileID reads the __profileID variable from the Goja runtime,
 // which is set by the hook executor when a hook event carries a profile ID.
 func (m *Anime) getProfileID() string {
-	v := m.vm.Get("__profileID")
-	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-		return ""
-	}
-	return v.String()
+	return getProfileIDFromVM(m.vm)
 }
 
 func (a *AppContextImpl) BindAnimeToContextObj(vm *goja.Runtime, obj *goja.Object, logger *zerolog.Logger, ext *extension.Extension, scheduler *gojautil.Scheduler) {

@@ -75,7 +75,7 @@ func TestNewMissingEpisodes(t *testing.T) {
 		})
 
 		if assert.NoError(t, err) {
-			missingData := anime.NewMissingEpisodes(&anime.NewMissingEpisodesOptions{
+			missingData := anime.NewMissingEpisodes(context.Background(), &anime.NewMissingEpisodesOptions{
 				AnimeCollection:     animeCollection,
 				LocalFiles:          tt.localFiles,
 				MetadataProviderRef: util.NewRef(metadataProvider),

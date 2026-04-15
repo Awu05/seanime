@@ -1,6 +1,7 @@
 package anime
 
 import (
+	"context"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
 	"seanime/internal/api/metadata_provider"
@@ -35,10 +36,13 @@ type (
 	}
 )
 
-func NewUpcomingEpisodes(opts *NewUpcomingEpisodesOptions) *UpcomingEpisodes {
+func NewUpcomingEpisodes(ctx context.Context, opts *NewUpcomingEpisodesOptions) *UpcomingEpisodes {
 	upcoming := new(UpcomingEpisodes)
 
+	profileID := util.ProfileIDFromContext(ctx)
+
 	reqEvent := new(UpcomingEpisodesRequestedEvent)
+	reqEvent.ProfileID = profileID
 	reqEvent.AnimeCollection = opts.AnimeCollection
 	reqEvent.UpcomingEpisodes = upcoming
 	err := hook.GlobalHookManager.OnUpcomingEpisodesRequested().Trigger(reqEvent)
@@ -51,6 +55,7 @@ func NewUpcomingEpisodes(opts *NewUpcomingEpisodesOptions) *UpcomingEpisodes {
 	// Default prevented by hook, return the upcoming episodes
 	if reqEvent.DefaultPrevented {
 		event := new(UpcomingEpisodesEvent)
+		event.ProfileID = profileID
 		event.UpcomingEpisodes = upcoming
 		err = hook.GlobalHookManager.OnUpcomingEpisodes().Trigger(event)
 		if err != nil {
@@ -141,6 +146,7 @@ func NewUpcomingEpisodes(opts *NewUpcomingEpisodesOptions) *UpcomingEpisodes {
 
 	// Event
 	event := new(UpcomingEpisodesEvent)
+	event.ProfileID = profileID
 	event.UpcomingEpisodes = upcoming
 	err = hook.GlobalHookManager.OnUpcomingEpisodes().Trigger(event)
 	if err != nil {

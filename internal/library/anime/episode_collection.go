@@ -50,7 +50,7 @@ type NewEpisodeCollectionOptions struct {
 // AnimeMetadata is optional, if not provided, it will be fetched from the metadata provider.
 //
 // Note: This is used by Torrent and Debrid streaming
-func NewEpisodeCollection(opts NewEpisodeCollectionOptions) (ec *EpisodeCollection, err error) {
+func NewEpisodeCollection(ctx context.Context, opts NewEpisodeCollectionOptions) (ec *EpisodeCollection, err error) {
 	if opts.Logger == nil {
 		opts.Logger = new(zerolog.Nop())
 	}
@@ -87,11 +87,14 @@ func NewEpisodeCollection(opts NewEpisodeCollectionOptions) (ec *EpisodeCollecti
 		}
 	}
 
+	profileID := util.ProfileIDFromContext(ctx)
+
 	reqEvent := &AnimeEpisodeCollectionRequestedEvent{
 		Media:             opts.Media,
 		Metadata:          opts.AnimeMetadata,
 		EpisodeCollection: &EpisodeCollection{},
 	}
+	reqEvent.ProfileID = profileID
 	err = hook.GlobalHookManager.OnAnimeEpisodeCollectionRequested().Trigger(reqEvent)
 	if err != nil {
 		return nil, err
@@ -113,7 +116,7 @@ func NewEpisodeCollection(opts NewEpisodeCollectionOptions) (ec *EpisodeCollecti
 	// |    Download Info    |
 	// +---------------------+
 
-	info, err := NewEntryDownloadInfo(&NewEntryDownloadInfoOptions{
+	info, err := NewEntryDownloadInfo(ctx, &NewEntryDownloadInfoOptions{
 		LocalFiles:          nil,
 		AnimeMetadata:       opts.AnimeMetadata,
 		Progress:            new(0), // Progress is 0 because we want the entire list
@@ -182,6 +185,7 @@ func NewEpisodeCollection(opts NewEpisodeCollectionOptions) (ec *EpisodeCollecti
 	event := &AnimeEpisodeCollectionEvent{
 		EpisodeCollection: ec,
 	}
+	event.ProfileID = profileID
 	err = hook.GlobalHookManager.OnAnimeEpisodeCollection().Trigger(event)
 	if err != nil {
 		return nil, err

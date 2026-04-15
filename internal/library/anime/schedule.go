@@ -1,10 +1,12 @@
 package anime
 
 import (
+	"context"
 	"fmt"
 	"seanime/internal/api/anilist"
 	"seanime/internal/customsource"
 	"seanime/internal/hook"
+	"seanime/internal/util"
 	"time"
 
 	"github.com/samber/lo"
@@ -24,7 +26,7 @@ type ScheduleItem struct {
 	IsAdult        bool      `json:"isAdult"`
 }
 
-func GetScheduleItems(animeSchedule *anilist.AnimeAiringSchedule, animeCollection *anilist.AnimeCollection) []*ScheduleItem {
+func GetScheduleItems(ctx context.Context, animeSchedule *anilist.AnimeAiringSchedule, animeCollection *anilist.AnimeCollection) []*ScheduleItem {
 	animeEntryMap := make(map[int]*anilist.AnimeListEntry)
 	for _, list := range animeCollection.MediaListCollection.GetLists() {
 		for _, entry := range list.GetEntries() {
@@ -104,10 +106,13 @@ func GetScheduleItems(animeSchedule *anilist.AnimeAiringSchedule, animeCollectio
 		return fmt.Sprintf("%d-%d-%d", item.MediaId, item.EpisodeNumber, item.DateTime.Unix())
 	})
 
+	profileID := util.ProfileIDFromContext(ctx)
+
 	event := &AnimeScheduleItemsEvent{
 		AnimeCollection: animeCollection,
 		Items:           ret,
 	}
+	event.ProfileID = profileID
 	err := hook.GlobalHookManager.OnAnimeScheduleItems().Trigger(event)
 	if err != nil {
 		return ret

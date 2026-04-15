@@ -158,7 +158,7 @@ func (r *Repository) GetMediaEpisodes(provider string, media *anilist.BaseAnime,
 	//	//foundAnimeMetadata := err == nil && animeMetadata != nil
 	//aw := r.metadataProvider.GetAnimeMetadataWrapper(media, animeMetadata)
 
-	episodeCollection, err := anime.NewEpisodeCollection(anime.NewEpisodeCollectionOptions{
+	episodeCollection, err := anime.NewEpisodeCollection(context.Background(), anime.NewEpisodeCollectionOptions{
 		AnimeMetadata:       nil,
 		Media:               media,
 		MetadataProviderRef: r.metadataProviderRef,

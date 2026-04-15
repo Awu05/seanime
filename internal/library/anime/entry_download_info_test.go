@@ -121,7 +121,7 @@ func TestNewEntryDownloadInfo(t *testing.T) {
 			animeMetadata, err := metadataProvider.GetAnimeMetadata(metadata.AnilistPlatform, tt.mediaId)
 			require.NoError(t, err)
 
-			info, err := anime.NewEntryDownloadInfo(&anime.NewEntryDownloadInfoOptions{
+			info, err := anime.NewEntryDownloadInfo(context.Background(), &anime.NewEntryDownloadInfoOptions{
 				LocalFiles:          tt.localFiles,
 				Progress:            &tt.currentProgress,
 				Status:              &tt.status,
@@ -177,7 +177,7 @@ func TestNewEntryDownloadInfo2(t *testing.T) {
 	animeMetadata, err := metadataProvider.GetAnimeMetadata(metadata.AnilistPlatform, mediaId)
 	require.NoError(t, err)
 
-	info, err := anime.NewEntryDownloadInfo(&anime.NewEntryDownloadInfoOptions{
+	info, err := anime.NewEntryDownloadInfo(context.Background(), &anime.NewEntryDownloadInfoOptions{
 		LocalFiles:          nil,
 		Progress:            new(0),
 		Status:              new(anilist.MediaListStatusCurrent),

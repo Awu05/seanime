@@ -287,7 +287,7 @@ func (m *Manager) PlayNakamaStream(ctx context.Context, opts PlayNakamaStreamOpt
 	m.playbackMu.Lock()
 	defer m.playbackMu.Unlock()
 
-	episodeCollection, err := anime.NewEpisodeCollection(anime.NewEpisodeCollectionOptions{
+	episodeCollection, err := anime.NewEpisodeCollection(ctx, anime.NewEpisodeCollectionOptions{
 		AnimeMetadata:       nil,
 		Media:               opts.Media,
 		MetadataProviderRef: m.metadataProviderRef,

@@ -1,6 +1,7 @@
 package anime
 
 import (
+	"context"
 	"fmt"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
@@ -30,10 +31,13 @@ type (
 	}
 )
 
-func NewMissingEpisodes(opts *NewMissingEpisodesOptions) *MissingEpisodes {
+func NewMissingEpisodes(ctx context.Context, opts *NewMissingEpisodesOptions) *MissingEpisodes {
 	missing := new(MissingEpisodes)
 
+	profileID := util.ProfileIDFromContext(ctx)
+
 	reqEvent := new(MissingEpisodesRequestedEvent)
+	reqEvent.ProfileID = profileID
 	reqEvent.AnimeCollection = opts.AnimeCollection
 	reqEvent.LocalFiles = opts.LocalFiles
 	reqEvent.SilencedMediaIds = opts.SilencedMediaIds
@@ -50,6 +54,7 @@ func NewMissingEpisodes(opts *NewMissingEpisodesOptions) *MissingEpisodes {
 	// Default prevented by hook, return the missing episodes
 	if reqEvent.DefaultPrevented {
 		event := new(MissingEpisodesEvent)
+		event.ProfileID = profileID
 		event.MissingEpisodes = missing
 		err = hook.GlobalHookManager.OnMissingEpisodes().Trigger(event)
 		if err != nil {
@@ -96,7 +101,7 @@ func NewMissingEpisodes(opts *NewMissingEpisodesOptions) *MissingEpisodes {
 			}
 
 			// Get download info
-			downloadInfo, err := NewEntryDownloadInfo(&NewEntryDownloadInfoOptions{
+			downloadInfo, err := NewEntryDownloadInfo(ctx, &NewEntryDownloadInfoOptions{
 				LocalFiles:          lfs,
 				AnimeMetadata:       animeMetadata,
 				Media:               entry.Media,
@@ -156,6 +161,7 @@ func NewMissingEpisodes(opts *NewMissingEpisodesOptions) *MissingEpisodes {
 
 	// Event
 	event := new(MissingEpisodesEvent)
+	event.ProfileID = profileID
 	event.MissingEpisodes = missing
 	err = hook.GlobalHookManager.OnMissingEpisodes().Trigger(event)
 	if err != nil {
