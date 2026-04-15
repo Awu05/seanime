@@ -82,6 +82,7 @@ func (h *Handler) getAnimeEntry(c echo.Context, lfs []*anime.LocalFile, mId int)
 	}
 
 	fillerEvent := new(anime.AnimeEntryFillerHydrationEvent)
+	fillerEvent.ProfileID = core.GetProfileIDFromContext(c)
 	fillerEvent.Entry = entry
 	err = hook.GlobalHookManager.OnAnimeEntryFillerHydration().Trigger(fillerEvent)
 	if err != nil {
@@ -457,6 +458,7 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 
 	// Event
 	event := new(anime.AnimeEntryManualMatchBeforeSaveEvent)
+	event.ProfileID = core.GetProfileIDFromContext(c)
 	event.MediaId = b.MediaId
 	event.Paths = b.Paths
 	event.MatchedLocalFiles = selectedLfs
@@ -530,6 +532,7 @@ func (h *Handler) HandleGetMissingEpisodes(c echo.Context) error {
 	})
 
 	event := new(anime.MissingEpisodesEvent)
+	event.ProfileID = core.GetProfileIDFromContext(c)
 	event.MissingEpisodes = missingEps
 	err = hook.GlobalHookManager.OnMissingEpisodes().Trigger(event)
 	if err != nil {
@@ -574,6 +577,7 @@ func (h *Handler) HandleGetUpcomingEpisodes(c echo.Context) error {
 	})
 
 	event := new(anime.UpcomingEpisodesEvent)
+	event.ProfileID = core.GetProfileIDFromContext(c)
 	event.UpcomingEpisodes = upcomingEps
 	err = hook.GlobalHookManager.OnUpcomingEpisodes().Trigger(event)
 	if err != nil {

@@ -31,7 +31,13 @@ type Event struct {
 	next           func() error
 	preventDefault func()
 
-	DefaultPrevented bool `json:"defaultPrevented"`
+	DefaultPrevented bool   `json:"defaultPrevented"`
+	ProfileID        string `json:"profileId,omitempty"`
+}
+
+// GetProfileID returns the profile ID associated with this event.
+func (e *Event) GetProfileID() string {
+	return e.ProfileID
 }
 
 // Next calls the next hook handler.

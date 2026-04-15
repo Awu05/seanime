@@ -351,6 +351,14 @@ func (p *GojaPlugin) bindHooks() {
 					for i, arg := range args {
 						handlerArgs[i] = arg.Interface()
 					}
+
+					// Extract ProfileID from the event and set it on the executor
+					if len(args) > 0 {
+						if eventer, ok := args[0].Interface().(interface{ GetProfileID() string }); ok {
+							executor.Set("__profileID", eventer.GetProfileID())
+						}
+					}
+
 					// Set the global variable $ctx in the executor
 					// executor.Set("$$app", plugin.GlobalAppContext)
 					executor.Set("__args", handlerArgs)
@@ -358,6 +366,7 @@ func (p *GojaPlugin) bindHooks() {
 					res, err := executor.RunProgram(pr)
 					// Clear the __args variable for this executor
 					executor.Set("__args", goja.Undefined())
+					executor.Set("__profileID", goja.Undefined())
 					// executor.Set("$ctx", goja.Undefined())
 
 					// Check for returned Go error value

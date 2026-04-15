@@ -1,7 +1,9 @@
 package anime
 
 import (
+	"context"
 	"seanime/internal/hook"
+	"seanime/internal/util"
 	"strings"
 
 	"github.com/samber/lo"
@@ -29,9 +31,11 @@ type (
 
 // NewEntryLibraryData creates a new EntryLibraryData based on the media id and a list of local files related to the media.
 // It will return false if the list of local files is empty.
-func NewEntryLibraryData(opts *NewEntryLibraryDataOptions) (ret *EntryLibraryData, ok bool) {
+func NewEntryLibraryData(ctx context.Context, opts *NewEntryLibraryDataOptions) (ret *EntryLibraryData, ok bool) {
+	profileID := util.ProfileIDFromContext(ctx)
 
 	reqEvent := new(AnimeEntryLibraryDataRequestedEvent)
+	reqEvent.ProfileID = profileID
 	reqEvent.EntryLocalFiles = opts.EntryLocalFiles
 	reqEvent.MediaId = opts.MediaId
 	reqEvent.CurrentProgress = opts.CurrentProgress
@@ -68,6 +72,7 @@ func NewEntryLibraryData(opts *NewEntryLibraryDataOptions) (ret *EntryLibraryDat
 	ret.MainFileCount = len(mainLfs)
 
 	event := new(AnimeEntryLibraryDataEvent)
+	event.ProfileID = profileID
 	event.EntryLibraryData = ret
 	err = hook.GlobalHookManager.OnAnimeEntryLibraryData().Trigger(event)
 	if err != nil {

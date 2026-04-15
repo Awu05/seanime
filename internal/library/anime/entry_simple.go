@@ -86,7 +86,7 @@ func NewSimpleEntry(ctx context.Context, opts *NewSimpleAnimeEntryOptions) (*Sim
 	lfs := GetLocalFilesFromMediaId(opts.LocalFiles, opts.MediaId)
 	entry.LocalFiles = lfs // Returns empty slice if no local files are found
 
-	libraryData, _ := NewEntryLibraryData(&NewEntryLibraryDataOptions{
+	libraryData, _ := NewEntryLibraryData(ctx, &NewEntryLibraryDataOptions{
 		EntryLocalFiles: lfs,
 		MediaId:         entry.Media.ID,
 		CurrentProgress: anilistEntry.GetProgressSafe(),

@@ -75,7 +75,10 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 	entry := new(Entry)
 	entry.MediaId = opts.MediaId
 
+	profileID := util.ProfileIDFromContext(ctx)
+
 	reqEvent := new(AnimeEntryRequestedEvent)
+	reqEvent.ProfileID = profileID
 	reqEvent.MediaId = opts.MediaId
 	reqEvent.LocalFiles = opts.LocalFiles
 	reqEvent.AnimeCollection = opts.AnimeCollection
@@ -93,6 +96,7 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 	// Default prevented, return the modified entry
 	if reqEvent.DefaultPrevented {
 		event := new(AnimeEntryEvent)
+		event.ProfileID = profileID
 		event.Entry = reqEvent.Entry
 		err = hook.GlobalHookManager.OnAnimeEntry().Trigger(event)
 		if err != nil {
@@ -133,6 +137,7 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 		}
 	} else {
 		animeEvent := new(platform.GetAnimeEvent)
+		animeEvent.ProfileID = profileID
 		animeEvent.Anime = anilistEntry.Media
 		err := hook.GlobalHookManager.OnGetAnime().Trigger(animeEvent)
 		if err != nil {
@@ -161,7 +166,7 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 	lfs := GetLocalFilesFromMediaId(opts.LocalFiles, opts.MediaId)
 	entry.LocalFiles = lfs // Returns empty slice if no local files are found
 
-	libraryData, _ := NewEntryLibraryData(&NewEntryLibraryDataOptions{
+	libraryData, _ := NewEntryLibraryData(ctx, &NewEntryLibraryDataOptions{
 		EntryLocalFiles: lfs,
 		MediaId:         entry.Media.ID,
 		CurrentProgress: anilistEntry.GetProgressSafe(),
@@ -207,6 +212,7 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 				CurrentEpisodeCount: simpleAnimeEntry.CurrentEpisodeCount,
 			},
 		}
+		event.ProfileID = profileID
 		err = hook.GlobalHookManager.OnAnimeEntry().Trigger(event)
 		if err != nil {
 			return nil, err
@@ -235,6 +241,7 @@ func NewEntry(ctx context.Context, opts *NewEntryOptions) (*Entry, error) {
 	event := &AnimeEntryEvent{
 		Entry: entry,
 	}
+	event.ProfileID = profileID
 	err = hook.GlobalHookManager.OnAnimeEntry().Trigger(event)
 	if err != nil {
 		return nil, err

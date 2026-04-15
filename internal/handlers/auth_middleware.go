@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"seanime/internal/core"
+	"seanime/internal/util"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -37,6 +38,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 			c.Set("profileId", "")
 			c.Set("isAdmin", true)
 			c.Set("authScope", "admin")
+			c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), "")))
 			return next(c)
 		}
 
@@ -83,6 +85,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 				c.Set("profileId", claims.ProfileID)
 				c.Set("isAdmin", claims.IsAdmin)
 				c.Set("authScope", claims.Scope)
+				c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
 				return next(c)
 			}
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "INSUFFICIENT_SCOPE"})
@@ -95,6 +98,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 		c.Set("profileId", claims.ProfileID)
 		c.Set("isAdmin", claims.IsAdmin)
 		c.Set("authScope", claims.Scope)
+		c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
 
 		return next(c)
 	}
@@ -124,5 +128,6 @@ func (h *Handler) tryExtractProfile(c echo.Context) {
 		c.Set("profileId", claims.ProfileID)
 		c.Set("isAdmin", claims.IsAdmin)
 		c.Set("authScope", claims.Scope)
+		c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
 	}
 }

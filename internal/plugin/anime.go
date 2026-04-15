@@ -8,6 +8,7 @@ import (
 	"seanime/internal/goja/goja_bindings"
 	"seanime/internal/hook"
 	"seanime/internal/library/anime"
+	"seanime/internal/util"
 	gojautil "seanime/internal/util/goja"
 
 	"github.com/dop251/goja"
@@ -20,6 +21,16 @@ type Anime struct {
 	logger    *zerolog.Logger
 	ext       *extension.Extension
 	scheduler *gojautil.Scheduler
+}
+
+// getProfileID reads the __profileID variable from the Goja runtime,
+// which is set by the hook executor when a hook event carries a profile ID.
+func (m *Anime) getProfileID() string {
+	v := m.vm.Get("__profileID")
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return ""
+	}
+	return v.String()
 }
 
 func (a *AppContextImpl) BindAnimeToContextObj(vm *goja.Runtime, obj *goja.Object, logger *zerolog.Logger, ext *extension.Extension, scheduler *gojautil.Scheduler) {
@@ -108,16 +119,21 @@ func (m *Anime) getAnimeEntry(call goja.FunctionCall) goja.Value {
 		return m.vm.ToValue(promise)
 	}
 
+	profileID := m.getProfileID()
+
 	go func() {
 		// Get all the local files
-		lfs, _, err := db_bridge.GetLocalFiles(database, "")
+		lfs, _, err := db_bridge.GetLocalFiles(database, profileID)
 		if err != nil {
 			_ = reject(m.vm.ToValue(err.Error()))
 			return
 		}
 
+		// Build a context carrying the profile ID so downstream hook events inherit it
+		ctx := util.ContextWithProfileID(context.Background(), profileID)
+
 		// Get the user's anilist collection
-		animeCollection, err := anilistPlatformRef.Get().GetAnimeCollection(context.Background(), false)
+		animeCollection, err := anilistPlatformRef.Get().GetAnimeCollection(ctx, false)
 		if err != nil {
 			_ = reject(m.vm.ToValue(err.Error()))
 			return
@@ -129,7 +145,7 @@ func (m *Anime) getAnimeEntry(call goja.FunctionCall) goja.Value {
 		}
 
 		// Create a new media entry
-		entry, err := anime.NewEntry(context.Background(), &anime.NewEntryOptions{
+		entry, err := anime.NewEntry(ctx, &anime.NewEntryOptions{
 			MediaId:             int(mediaId),
 			LocalFiles:          lfs,
 			AnimeCollection:     animeCollection,
@@ -142,6 +158,7 @@ func (m *Anime) getAnimeEntry(call goja.FunctionCall) goja.Value {
 		}
 
 		fillerEvent := new(anime.AnimeEntryFillerHydrationEvent)
+		fillerEvent.ProfileID = profileID
 		fillerEvent.Entry = entry
 		err = hook.GlobalHookManager.OnAnimeEntryFillerHydration().Trigger(fillerEvent)
 		if err != nil {

@@ -129,6 +129,7 @@ func NewLibraryCollection(ctx context.Context, opts *NewLibraryCollectionOptions
 
 	// Create lists
 	lc.hydrateCollectionLists(
+		ctx,
 		opts.LocalFiles,
 		aniLists,
 	)
@@ -171,6 +172,7 @@ func NewLibraryCollection(ctx context.Context, opts *NewLibraryCollectionOptions
 //----------------------------------------------------------------------------------------------------------------------
 
 func (lc *LibraryCollection) hydrateCollectionLists(
+	ctx context.Context,
 	localFiles []*LocalFile,
 	aniLists []*anilist.AnimeCollection_MediaListCollection_Lists,
 ) {
@@ -210,7 +212,7 @@ func (lc *LibraryCollection) hydrateCollectionLists(
 					if slices.Contains(mIds, entry.Media.ID) {
 
 						entryLfs, _ := groupedLfs[entry.Media.ID]
-						libraryData, _ := NewEntryLibraryData(&NewEntryLibraryDataOptions{
+						libraryData, _ := NewEntryLibraryData(ctx, &NewEntryLibraryDataOptions{
 							EntryLocalFiles: entryLfs,
 							MediaId:         entry.Media.ID,
 							CurrentProgress: entry.GetProgressSafe(),

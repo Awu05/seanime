@@ -18,8 +18,19 @@ import (
 
 type Database struct {
 	ctx    *AppContextImpl
+	vm     *goja.Runtime
 	logger *zerolog.Logger
 	ext    *extension.Extension
+}
+
+// getProfileID reads the __profileID variable from the Goja runtime,
+// which is set by the hook executor when a hook event carries a profile ID.
+func (d *Database) getProfileID() string {
+	v := d.vm.Get("__profileID")
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return ""
+	}
+	return v.String()
 }
 
 // BindDatabase binds the database module to the Goja runtime.
@@ -28,6 +39,7 @@ func (a *AppContextImpl) BindDatabase(vm *goja.Runtime, logger *zerolog.Logger, 
 	dbLogger := logger.With().Str("id", ext.ID).Logger()
 	db := &Database{
 		ctx:    a,
+		vm:     vm,
 		logger: &dbLogger,
 		ext:    ext,
 	}
@@ -90,7 +102,7 @@ func (d *Database) getAllLocalFiles() ([]*anime.LocalFile, error) {
 		return nil, errors.New("database not initialized")
 	}
 
-	files, _, err := db_bridge.GetLocalFiles(db, "")
+	files, _, err := db_bridge.GetLocalFiles(db, d.getProfileID())
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +116,7 @@ func (d *Database) findLocalFilesBy(filterFn func(*anime.LocalFile) bool) ([]*an
 		return nil, errors.New("database not initialized")
 	}
 
-	files, _, err := db_bridge.GetLocalFiles(db, "")
+	files, _, err := db_bridge.GetLocalFiles(db, d.getProfileID())
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +136,8 @@ func (d *Database) saveLocalFiles(filesToSave []*anime.LocalFile) error {
 		return errors.New("database not initialized")
 	}
 
-	lfs, lfsId, err := db_bridge.GetLocalFiles(db, "")
+	profileID := d.getProfileID()
+	lfs, lfsId, err := db_bridge.GetLocalFiles(db, profileID)
 	if err != nil {
 		return err
 	}
@@ -140,7 +153,7 @@ func (d *Database) saveLocalFiles(filesToSave []*anime.LocalFile) error {
 		}
 	}
 
-	_, err = db_bridge.SaveLocalFiles(db, "", lfsId, lfs)
+	_, err = db_bridge.SaveLocalFiles(db, profileID, lfsId, lfs)
 	if err != nil {
 		return err
 	}
@@ -159,7 +172,7 @@ func (d *Database) insertLocalFiles(files []*anime.LocalFile) ([]*anime.LocalFil
 		return nil, errors.New("database not initialized")
 	}
 
-	lfs, err := db_bridge.InsertLocalFiles(db, "", files)
+	lfs, err := db_bridge.InsertLocalFiles(db, d.getProfileID(), files)
 	if err != nil {
 		return nil, err
 	}
