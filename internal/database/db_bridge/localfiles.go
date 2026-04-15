@@ -43,6 +43,9 @@ func GetLocalFiles(db *db.Database, profileID string) ([]*anime.LocalFile, uint,
 		err = db.Gorm().Last(&res).Error
 	}
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return make([]*anime.LocalFile, 0), 0, nil
+		}
 		return nil, 0, err
 	}
 
