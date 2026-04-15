@@ -14,9 +14,9 @@ import (
 // We fetch the latest release from the website first, if it fails we fallback to GitHub API
 // This allows updates even if Seanime is removed from GitHub
 var (
-	websiteUrl        = "https://seanime.app/api/release"
-	fallbackGithubUrl = "https://api.github.com/repos/5rahim/seanime/releases/latest"
-	githubCheckUrl    = "https://seanime.app/api/github-status"
+	websiteUrl        = "https://api.github.com/repos/Awu05/seanime/releases/latest"
+	fallbackGithubUrl = "https://api.github.com/repos/Awu05/seanime/releases/latest"
+	githubCheckUrl    = ""
 )
 
 type (
@@ -114,21 +114,7 @@ func (u *Updater) fetchLatestRelease(channel string) (*Release, error) {
 	var release *Release
 
 	switch channel {
-	case "seanime_nightly":
-		releaseUrl := "https://seanime.app/api/updates/nightly/nightly_server.json"
-		apiRelease, err := u.fetchLatestReleaseFromApi(releaseUrl)
-		if err != nil {
-			return nil, err
-		}
-		release = apiRelease
-	case "seanime":
-		releaseUrl := "https://seanime.app/api/updates/stable/stable_server.json"
-		apiRelease, err := u.fetchLatestReleaseFromApi(releaseUrl)
-		if err != nil {
-			return nil, err
-		}
-		release = apiRelease
-	case "github":
+	case "github", "seanime", "seanime_nightly":
 		fallthrough
 	default:
 		apiRelease, err := u.fetchLatestReleaseFromApi(websiteUrl)

@@ -940,12 +940,9 @@ app.whenReady().then(async () => {
         verifyUpdateCodeSignature: false,
     }
 
+    // All update channels point to the same GitHub releases
     if (currentUpdateChannel === "seanime_nightly") {
-        updateConfig.url = "https://seanime.app/api/updates/nightly/"
         updateConfig.allowPrerelease = true
-    } else if (currentUpdateChannel === "seanime") {
-        updateConfig.url = "https://seanime.app/api/updates/stable/"
-        updateConfig.allowPrerelease = false
     }
 
     if (process.env.UPDATES_URL) {
