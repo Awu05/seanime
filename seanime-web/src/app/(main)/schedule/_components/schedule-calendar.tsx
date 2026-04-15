@@ -1,8 +1,8 @@
 import { AL_MediaListStatus, Anime_ScheduleItem } from "@/api/generated/types"
 import { AdultContentBadge } from "@/app/(main)/_features/media/_components/media-entry-card-components"
+import { useMediaPreviewModal } from "@/app/(main)/_features/media/_containers/media-preview-modal"
 import { useGetAnimeCollectionSchedule } from "@/api/hooks/anime_collection.hooks"
 import { SeaImage } from "@/components/shared/sea-image"
-import { SeaLink } from "@/components/shared/sea-link"
 import { IconButton } from "@/components/ui/button"
 import { CheckboxGroup } from "@/components/ui/checkbox"
 import { cn } from "@/components/ui/core/styling"
@@ -110,10 +110,10 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
             let events = schedule?.filter(item => isSameDayUtc(new Date(item.dateTime!), day) && isStatusIncluded(item.mediaId))?.map(item => {
                 return {
                     id: String(item.mediaId) + "-" + String(item.episodeNumber) + "-" + String(item.dateTime),
+                    mediaId: item.mediaId,
                     name: item.title,
                     time: item.time.replace(":00:00", ":00"),
                     datetime: item.dateTime!,
-                    href: `/entry?id=${item.mediaId}`,
                     image: item.image,
                     episode: item.episodeNumber || 1,
                     isSeasonFinale: item.isSeasonFinale && !item.isMovie,
@@ -280,10 +280,10 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
 
 type CalendarEvent = {
     id: string
+    mediaId: number
     name: string
     time: string
     datetime: string
-    href: string
     image: string
     episode: number
     isSeasonFinale: boolean
@@ -408,8 +408,9 @@ interface MobileEventItemProps {
 }
 
 function MobileEventItem({ event, calendarParams, showAll }: MobileEventItemProps) {
+    const { setPreviewModalMediaId } = useMediaPreviewModal()
     return (
-        <SeaLink href={event.href} className="block" data-schedule-calendar-mobile-list-day-item-event-link>
+        <div onClick={() => setPreviewModalMediaId(event.mediaId, "anime")} className="block cursor-pointer" data-schedule-calendar-mobile-list-day-item-event-link>
             <div
                 className={cn(
                     "flex items-start gap-2 lg:gap-3 p-2 lg:p-3 rounded-lg bg-gray-900/50 hover:bg-gray-800/50 transition-colors",
@@ -468,7 +469,7 @@ function MobileEventItem({ event, calendarParams, showAll }: MobileEventItemProp
                     </div>
                 </div>
             </div>
-        </SeaLink>
+        </div>
     )
 }
 
@@ -544,6 +545,7 @@ interface CalendarEventListProps {
 }
 
 function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListProps) {
+    const { setPreviewModalMediaId } = useMediaPreviewModal()
     const handleEventMouseEnter = (eventId: string) => {
         onEventHover(eventId)
     }
@@ -563,12 +565,12 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
                     onMouseLeave={handleEventMouseLeave}
                     data-schedule-calendar-event-list-item
                 >
-                    <SeaLink
+                    <div
                         className={cn(
-                            "group flex",
+                            "group flex cursor-pointer",
                             showAll && event.isOnList && "pl-1.5 border-l-2 border-[--brand] rounded-l-sm",
                         )}
-                        href={event.href}
+                        onClick={() => setPreviewModalMediaId(event.mediaId, "anime")}
                         data-schedule-calendar-event-item-link
                     >
                         <div className="flex-auto truncate" data-schedule-calendar-event-item-content>
@@ -594,9 +596,6 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
                                     {event.name}
                                     {event.isAdult && <AdultContentBadge />}
                                 </span>
-                                {/*<span className="truncate hidden 2xl:inline-block" data-schedule-calendar-event-item-name>*/}
-                                {/*    {event.name.length > 40 ? event.name.slice(0, 37) + "..." : event.name}*/}
-                                {/*</span>*/}
                             </p>
                             <p className="text-xs text-[--muted] lg:hidden" data-schedule-calendar-event-item-episode>
                                 Ep. {event.episode}
@@ -612,7 +611,7 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
                                 Ep. {event.episode}
                             </span>
                         </time>
-                    </SeaLink>
+                    </div>
                 </li>
             ))}
             {events.length > MAX_EVENT_COUNT && (
@@ -626,12 +625,12 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
                     <ol className="text-sm max-w-full block space-y-2" data-schedule-calendar-event-list-more>
                         {events.slice(MAX_EVENT_COUNT).map((event) => (
                             <li key={event.id} data-schedule-calendar-event-list-item-more>
-                                <SeaLink
+                                <div
                                     className={cn(
-                                        "group flex gap-2",
+                                        "group flex gap-2 cursor-pointer",
                                         showAll && event.isOnList && "pl-1.5 border-l-2 border-[--brand] rounded-l-sm",
                                     )}
-                                    href={event.href}
+                                    onClick={() => setPreviewModalMediaId(event.mediaId, "anime")}
                                     data-schedule-calendar-event-list-item-more-link
                                 >
                                     <p
@@ -660,7 +659,7 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
                                     >
                                         {event.time}
                                     </time>
-                                </SeaLink>
+                                </div>
                             </li>
                         ))}
                     </ol>
