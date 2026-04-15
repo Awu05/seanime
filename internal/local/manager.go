@@ -540,7 +540,7 @@ func (m *ManagerImpl) SynchronizeLocal() error {
 		return fmt.Errorf("cannot sync, upload or ignore local changes before syncing")
 	}
 
-	lfs, _, err := db_bridge.GetLocalFiles(m.db)
+	lfs, _, err := db_bridge.GetLocalFiles(m.db, "")
 	if err != nil {
 		return fmt.Errorf("local manager: Couldn't start syncing, failed to get local files: %w", err)
 	}

@@ -934,7 +934,7 @@ app.whenReady().then(async () => {
 
     const updateConfig = {
         provider: "generic",
-        url: "https://github.com/5rahim/seanime/releases/latest/download",
+        url: "https://github.com/Awu05/seanime/releases/latest/download",
         channel: "latest",
         allowPrerelease: false,
         verifyUpdateCodeSignature: false,

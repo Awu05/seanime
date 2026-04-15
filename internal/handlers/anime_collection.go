@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"seanime/internal/api/anilist"
+	"seanime/internal/core"
 	"seanime/internal/customsource"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/database/models"
@@ -162,7 +163,8 @@ func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 		}
 
 	} else {
-		lfs, _, err = db_bridge.GetLocalFiles(h.App.Database)
+		profileID := core.GetProfileIDFromContext(c)
+		lfs, _, err = db_bridge.GetLocalFiles(h.App.Database, profileID)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}

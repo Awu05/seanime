@@ -469,7 +469,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	}
 
 	// Initialize all modules that depend on settings
-	app.InitOrRefreshModules()
+	app.InitOrRefreshModules("")
 
 	// Load custom source extensions before fetching AniList data
 	LoadCustomSourceExtensions(extensionRepository)

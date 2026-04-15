@@ -34,7 +34,7 @@ func (pm *PlaybackManager) StartRandomVideo(opts *StartRandomVideoOptions) error
 	//
 
 	// Get lfs
-	lfs, _, err := db_bridge.GetLocalFiles(pm.Database)
+	lfs, _, err := db_bridge.GetLocalFiles(pm.Database, pm.profileID)
 	if err != nil {
 		return fmt.Errorf("error getting local files: %s", err.Error())
 	}

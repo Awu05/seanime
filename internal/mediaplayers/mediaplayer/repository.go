@@ -225,11 +225,11 @@ func (m *Repository) GetDefault() string {
 // Play will start the media player and load the video at the given path.
 // The implementation of the specific media player is handled by the respective media player package.
 // Calling it multiple *should* not open multiple instances of the media player -- subsequent calls should just load a new video if the media player is already open.
-func (m *Repository) Play(path string) error {
+func (m *Repository) Play(path string, profileID string) error {
 
 	m.Logger.Debug().Str("path", path).Msg("media player: Media requested")
 
-	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem(path, false, 0, 0)
+	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem(profileID, path, false, 0, 0)
 
 	switch m.Default {
 	case "vlc":
@@ -405,7 +405,7 @@ func (m *Repository) SeekTo(seconds float64) error {
 	}
 }
 
-func (m *Repository) Stream(streamUrl string, episode int, mediaId int, windowTitle string) error {
+func (m *Repository) Stream(streamUrl string, episode int, mediaId int, windowTitle string, profileID string) error {
 
 	m.Logger.Debug().Str("streamUrl", streamUrl).Msg("media player: Stream requested")
 	var err error
@@ -429,7 +429,7 @@ func (m *Repository) Stream(streamUrl string, episode int, mediaId int, windowTi
 		return fmt.Errorf("could not open media player, %w", err)
 	}
 
-	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem("", true, episode, mediaId)
+	lastWatched := m.continuityManager.GetExternalPlayerEpisodeWatchHistoryItem(profileID, "", true, episode, mediaId)
 
 	switch m.Default {
 	case "vlc":

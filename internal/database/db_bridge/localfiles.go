@@ -5,105 +5,119 @@ import (
 	"seanime/internal/database/db"
 	"seanime/internal/database/models"
 	"seanime/internal/library/anime"
+	"sync"
 
 	"github.com/goccy/go-json"
-	"github.com/samber/mo"
 	"gorm.io/gorm"
 )
 
-var CurrLocalFilesDbId uint
-var CurrLocalFiles mo.Option[[]*anime.LocalFile]
+var (
+	localFilesCache   = make(map[string]cachedLocalFiles)
+	localFilesCacheMu sync.RWMutex
+)
 
-// GetLocalFiles will return the latest local files and the id of the entry.
-func GetLocalFiles(db *db.Database) ([]*anime.LocalFile, uint, error) {
+type cachedLocalFiles struct {
+	files []*anime.LocalFile
+	dbID  uint
+}
 
-	if CurrLocalFiles.IsPresent() {
-		return CurrLocalFiles.MustGet(), CurrLocalFilesDbId, nil
+func ClearAllLocalFilesCache() {
+	localFilesCacheMu.Lock()
+	localFilesCache = make(map[string]cachedLocalFiles)
+	localFilesCacheMu.Unlock()
+}
+
+func GetLocalFiles(db *db.Database, profileID string) ([]*anime.LocalFile, uint, error) {
+	localFilesCacheMu.RLock()
+	if cached, ok := localFilesCache[profileID]; ok {
+		localFilesCacheMu.RUnlock()
+		return cached.files, cached.dbID, nil
 	}
+	localFilesCacheMu.RUnlock()
 
-	// Get the latest entry
 	var res models.LocalFiles
-	err := db.Gorm().Last(&res).Error
+	var err error
+	if profileID != "" {
+		err = db.Gorm().Where("profile_id = ?", profileID).Last(&res).Error
+	} else {
+		err = db.Gorm().Last(&res).Error
+	}
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Unmarshal the local files
-	lfsBytes := res.Value
 	var lfs []*anime.LocalFile
-	if err := json.Unmarshal(lfsBytes, &lfs); err != nil {
+	if err := json.Unmarshal(res.Value, &lfs); err != nil {
 		return nil, 0, err
 	}
 
-	db.Logger.Debug().Msg("db: Local files retrieved")
+	db.Logger.Debug().Str("profileId", profileID).Msg("db: Local files retrieved")
 
-	CurrLocalFiles = mo.Some(lfs)
-	CurrLocalFilesDbId = res.ID
+	localFilesCacheMu.Lock()
+	localFilesCache[profileID] = cachedLocalFiles{files: lfs, dbID: res.ID}
+	localFilesCacheMu.Unlock()
 
 	return lfs, res.ID, nil
 }
 
-// SaveLocalFiles will save the local files in the database at the given id.
-func SaveLocalFiles(db *db.Database, lfsId uint, lfs []*anime.LocalFile) ([]*anime.LocalFile, error) {
-	// Marshal the local files
+func SaveLocalFiles(db *db.Database, profileID string, lfsId uint, lfs []*anime.LocalFile) ([]*anime.LocalFile, error) {
 	marshaledLfs, err := json.Marshal(lfs)
 	if err != nil {
 		return nil, err
 	}
 
-	// Save the local files
 	ret, err := db.UpsertLocalFiles(&models.LocalFiles{
-		BaseModel: models.BaseModel{
-			ID: lfsId,
-		},
-		Value: marshaledLfs,
+		BaseModel: models.BaseModel{ID: lfsId},
+		Value:     marshaledLfs,
+		ProfileID: profileID,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the saved local files
 	var retLfs []*anime.LocalFile
 	if err := json.Unmarshal(ret.Value, &retLfs); err != nil {
 		return lfs, nil
 	}
 
-	CurrLocalFiles = mo.Some(retLfs)
-	CurrLocalFilesDbId = ret.ID
+	localFilesCacheMu.Lock()
+	localFilesCache[profileID] = cachedLocalFiles{files: retLfs, dbID: ret.ID}
+	localFilesCacheMu.Unlock()
 
 	return retLfs, nil
 }
 
-// InsertLocalFiles will insert the local files in the database at a new entry.
-func InsertLocalFiles(db *db.Database, lfs []*anime.LocalFile) ([]*anime.LocalFile, error) {
-
-	// Marshal the local files
+func InsertLocalFiles(db *db.Database, profileID string, lfs []*anime.LocalFile) ([]*anime.LocalFile, error) {
 	bytes, err := json.Marshal(lfs)
 	if err != nil {
 		return nil, err
 	}
 
-	// Save the local files to the database
 	ret, err := db.InsertLocalFiles(&models.LocalFiles{
-		Value: bytes,
+		Value:     bytes,
+		ProfileID: profileID,
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
-	CurrLocalFiles = mo.Some(lfs)
-	CurrLocalFilesDbId = ret.ID
+	localFilesCacheMu.Lock()
+	localFilesCache[profileID] = cachedLocalFiles{files: lfs, dbID: ret.ID}
+	localFilesCacheMu.Unlock()
 
 	return lfs, nil
-
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func GetShelvedLocalFiles(db *db.Database) ([]*anime.LocalFile, error) {
+func GetShelvedLocalFiles(db *db.Database, profileID string) ([]*anime.LocalFile, error) {
 	var res models.ShelvedLocalFiles
-	err := db.Gorm().Last(&res).Error
+	var err error
+	if profileID != "" {
+		err = db.Gorm().Where("profile_id = ?", profileID).Last(&res).Error
+	} else {
+		err = db.Gorm().Last(&res).Error
+	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -111,40 +125,36 @@ func GetShelvedLocalFiles(db *db.Database) ([]*anime.LocalFile, error) {
 		return nil, err
 	}
 
-	lfsBytes := res.Value
 	var lfs []*anime.LocalFile
-	if err := json.Unmarshal(lfsBytes, &lfs); err != nil {
+	if err := json.Unmarshal(res.Value, &lfs); err != nil {
 		return nil, err
 	}
 
 	db.Logger.Debug().Msg("db: Shelved local files retrieved")
-
 	return lfs, nil
 }
 
-func SaveShelvedLocalFiles(db *db.Database, lfs []*anime.LocalFile) error {
-	// Marshal the local files
+func SaveShelvedLocalFiles(db *db.Database, profileID string, lfs []*anime.LocalFile) error {
 	marshaledLfs, err := json.Marshal(lfs)
 	if err != nil {
 		return err
 	}
 
-	// Save the local files
-	ret, err := db.UpsertShelvedLocalFiles(&models.ShelvedLocalFiles{
-		BaseModel: models.BaseModel{
-			ID: 1,
-		},
-		Value: marshaledLfs,
+	var existing models.ShelvedLocalFiles
+	var dbID uint = 1
+	if profileID != "" {
+		findErr := db.Gorm().Where("profile_id = ?", profileID).First(&existing).Error
+		if findErr == nil {
+			dbID = existing.ID
+		} else {
+			dbID = 0
+		}
+	}
+
+	_, err = db.UpsertShelvedLocalFiles(&models.ShelvedLocalFiles{
+		BaseModel: models.BaseModel{ID: dbID},
+		Value:     marshaledLfs,
+		ProfileID: profileID,
 	})
-	if err != nil {
-		return err
-	}
-
-	// Unmarshal the saved local files
-	var retLfs []*anime.LocalFile
-	if err := json.Unmarshal(ret.Value, &retLfs); err != nil {
-		return nil
-	}
-
-	return nil
+	return err
 }

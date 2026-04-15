@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/library/anime"
 	"seanime/internal/library/filesystem"
@@ -24,7 +25,8 @@ import (
 //	@returns []anime.LocalFile
 func (h *Handler) HandleGetLocalFiles(c echo.Context) error {
 
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	profileID := core.GetProfileIDFromContext(c)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -34,7 +36,8 @@ func (h *Handler) HandleGetLocalFiles(c echo.Context) error {
 
 func (h *Handler) HandleDumpLocalFilesToFile(c echo.Context) error {
 
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	profileID := core.GetProfileIDFromContext(c)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -82,7 +85,8 @@ func (h *Handler) HandleImportLocalFiles(c echo.Context) error {
 		return h.RespondWithError(c, errors.New("no local files found"))
 	}
 
-	_, err = db_bridge.InsertLocalFiles(h.App.Database, lfs)
+	profileID := core.GetProfileIDFromContext(c)
+	_, err = db_bridge.InsertLocalFiles(h.App.Database, profileID, lfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -110,8 +114,10 @@ func (h *Handler) HandleLocalFileBulkAction(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all the local files
-	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -132,7 +138,7 @@ func (h *Handler) HandleLocalFileBulkAction(c echo.Context) error {
 	}
 
 	// Save the local files
-	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, lfsId, lfs)
+	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, profileID, lfsId, lfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -162,8 +168,10 @@ func (h *Handler) HandleUpdateLocalFileData(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all the local files
-	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -180,7 +188,7 @@ func (h *Handler) HandleUpdateLocalFileData(c echo.Context) error {
 	lf.MediaId = b.MediaId
 
 	// Save the local files
-	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, lfsId, lfs)
+	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, profileID, lfsId, lfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -204,8 +212,10 @@ func (h *Handler) HandleSuperUpdateLocalFiles(c echo.Context) error {
 	if err := c.Bind(b); err != nil {
 		return h.RespondWithError(c, err)
 	}
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Super update the files
-	err := h.App.LibraryExplorer.SuperUpdateFiles(b.Files)
+	err := h.App.LibraryExplorer.SuperUpdateFiles(profileID, b.Files)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -232,8 +242,10 @@ func (h *Handler) HandleUpdateLocalFiles(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all the local files
-	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -270,7 +282,7 @@ func (h *Handler) HandleUpdateLocalFiles(c echo.Context) error {
 	}
 
 	// Save the local files
-	_, err = db_bridge.SaveLocalFiles(h.App.Database, lfsId, lfs)
+	_, err = db_bridge.SaveLocalFiles(h.App.Database, profileID, lfsId, lfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -296,8 +308,10 @@ func (h *Handler) HandleDeleteLocalFiles(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all the local files
-	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -324,7 +338,7 @@ func (h *Handler) HandleDeleteLocalFiles(c echo.Context) error {
 	})
 
 	// Save the local files
-	_, err = db_bridge.SaveLocalFiles(h.App.Database, lfsId, lfs)
+	_, err = db_bridge.SaveLocalFiles(h.App.Database, profileID, lfsId, lfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

@@ -53,5 +53,5 @@ func (a *App) SetOfflineMode(enabled bool) {
 		a.AnilistPlatformRef.Get().ClearCache()
 	})
 
-	a.InitOrRefreshModules()
+	a.InitOrRefreshModules("")
 }

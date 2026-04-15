@@ -19,7 +19,7 @@ type SuperUpdateFileOptions struct {
 	Metadata *anime.LocalFileMetadata `json:"metadata,omitempty"`
 }
 
-func (l *LibraryExplorer) SuperUpdateFiles(opts []*SuperUpdateFileOptions) error {
+func (l *LibraryExplorer) SuperUpdateFiles(profileID string, opts []*SuperUpdateFileOptions) error {
 
 	const MaxConcurrentUpdates = 10
 	sem := make(chan struct{}, MaxConcurrentUpdates)
@@ -31,7 +31,7 @@ func (l *LibraryExplorer) SuperUpdateFiles(opts []*SuperUpdateFileOptions) error
 	wg := sync.WaitGroup{}
 	wg.Add(len(opts))
 
-	lfs, lfsId, err := db_bridge.GetLocalFiles(l.database)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(l.database, profileID)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (l *LibraryExplorer) SuperUpdateFiles(opts []*SuperUpdateFileOptions) error
 	wg.Wait()
 
 	// Save the local files
-	_, err = db_bridge.SaveLocalFiles(l.database, lfsId, lfs)
+	_, err = db_bridge.SaveLocalFiles(l.database, profileID, lfsId, lfs)
 	if err != nil {
 		return err
 	}

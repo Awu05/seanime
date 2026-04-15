@@ -111,7 +111,7 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 
 	h.App.InitOrRefreshAnilistData()
 
-	h.App.InitOrRefreshModules()
+	h.App.InitOrRefreshModules(profileID)
 
 	go func() {
 		defer util.HandlePanicThen(func() {})

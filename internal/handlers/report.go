@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/library/anime"
 	"seanime/internal/report"
@@ -52,8 +53,9 @@ func (h *Handler) HandleSaveIssueReport(c echo.Context) error {
 	var localFiles []*anime.LocalFile
 	if b.IsAnimeLibraryIssue {
 		// Get local files
+		profileID := core.GetProfileIDFromContext(c)
 		var err error
-		localFiles, _, err = db_bridge.GetLocalFiles(h.App.Database)
+		localFiles, _, err = db_bridge.GetLocalFiles(h.App.Database, profileID)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}

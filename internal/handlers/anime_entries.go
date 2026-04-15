@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"seanime/internal/api/anilist"
+	"seanime/internal/core"
 	"seanime/internal/customsource"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/hook"
@@ -117,8 +118,10 @@ func (h *Handler) HandleGetAnimeEntry(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all the local files
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -152,8 +155,10 @@ func (h *Handler) HandleAnimeEntryBulkAction(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all the local files
-	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -188,7 +193,7 @@ func (h *Handler) HandleAnimeEntryBulkAction(c echo.Context) error {
 	}
 
 	// Save the local files
-	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, lfsId, lfs)
+	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, profileID, lfsId, lfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -217,8 +222,10 @@ func (h *Handler) HandleOpenAnimeEntryInExplorer(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all the local files
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -288,8 +295,10 @@ func (h *Handler) HandleFetchAnimeEntrySuggestions(c echo.Context) error {
 		return h.RespondWithData(c, suggestions)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Retrieve local files
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -368,8 +377,10 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Retrieve local files
-	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -463,7 +474,7 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 	lfs = append(lfs, event.MatchedLocalFiles...)
 
 	// Update the local files
-	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, lfsId, lfs)
+	retLfs, err := db_bridge.SaveLocalFiles(h.App.Database, profileID, lfsId, lfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -502,7 +513,8 @@ func (h *Handler) HandleGetMissingEpisodes(c echo.Context) error {
 		})
 	}
 
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	profileID := core.GetProfileIDFromContext(c)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

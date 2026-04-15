@@ -47,6 +47,7 @@ type (
 		Logger                *zerolog.Logger
 		Database              *db.Database
 		MediaPlayerRepository *mediaplayer.Repository // MediaPlayerRepository is used to control the media player
+		profileID             string
 		continuityManager     *continuity.Manager
 
 		// settings is read on every playback event, so it uses atomic.Pointer for lock-free reads.
@@ -192,6 +193,7 @@ type (
 		DiscordPresence            *discordrpc_presence.Presence
 		IsOfflineRef               *util.Ref[bool]
 		ContinuityManager          *continuity.Manager
+		ProfileID                  string
 	}
 
 	Settings struct {
@@ -214,6 +216,7 @@ func New(opts *NewPlaybackManagerOptions) *PlaybackManager {
 	pm := &PlaybackManager{
 		Logger:                       opts.Logger,
 		Database:                     opts.Database,
+		profileID:                    opts.ProfileID,
 		discordPresence:              opts.DiscordPresence,
 		wsEventManager:               opts.WSEventManager,
 		platformRef:                  opts.PlatformRef,
@@ -310,7 +313,7 @@ func (pm *PlaybackManager) StartPlayingUsingMediaPlayer(opts *StartPlayingOption
 	}
 
 	// Send the media file to the media player
-	err = pm.MediaPlayerRepository.Play(opts.Payload)
+	err = pm.MediaPlayerRepository.Play(opts.Payload, pm.profileID)
 	if err != nil {
 		return err
 	}
@@ -373,7 +376,7 @@ func (pm *PlaybackManager) StartUntrackedStreamingUsingMediaPlayer(windowTitle s
 
 	episodeNumber := 0
 
-	err = pm.MediaPlayerRepository.Stream(opts.Payload, episodeNumber, 0, windowTitle)
+	err = pm.MediaPlayerRepository.Stream(opts.Payload, episodeNumber, 0, windowTitle, pm.profileID)
 	if err != nil {
 		pm.Logger.Error().Err(err).Msg("playback manager: Failed to start streaming")
 		return err
@@ -448,7 +451,7 @@ func (pm *PlaybackManager) StartStreamingUsingMediaPlayer(windowTitle string, op
 		pm.Logger.Warn().Str("episode", aniDbEpisode).Msg("playback manager: Failed to find episode in episode collection")
 	}
 
-	err = pm.MediaPlayerRepository.Stream(event.Payload, episodeNumber, event.Media.ID, windowTitle)
+	err = pm.MediaPlayerRepository.Stream(event.Payload, episodeNumber, event.Media.ID, windowTitle, pm.profileID)
 	if err != nil {
 		pm.Logger.Error().Err(err).Msg("playback manager: Failed to start streaming")
 		return err
@@ -493,7 +496,7 @@ func (pm *PlaybackManager) PlayNextEpisode() (err error) {
 			return errors.New("could not play next episode")
 		}
 
-		err = pm.MediaPlayerRepository.Play(nextLf.Path)
+		err = pm.MediaPlayerRepository.Play(nextLf.Path, pm.profileID)
 		if err != nil {
 			return err
 		}

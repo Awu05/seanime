@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/directstream"
 	"seanime/internal/mkvparser"
@@ -26,7 +27,8 @@ func (h *Handler) HandleDirectstreamPlayLocalFile(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	profileID := core.GetProfileIDFromContext(c)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

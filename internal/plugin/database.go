@@ -90,7 +90,7 @@ func (d *Database) getAllLocalFiles() ([]*anime.LocalFile, error) {
 		return nil, errors.New("database not initialized")
 	}
 
-	files, _, err := db_bridge.GetLocalFiles(db)
+	files, _, err := db_bridge.GetLocalFiles(db, "")
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (d *Database) findLocalFilesBy(filterFn func(*anime.LocalFile) bool) ([]*an
 		return nil, errors.New("database not initialized")
 	}
 
-	files, _, err := db_bridge.GetLocalFiles(db)
+	files, _, err := db_bridge.GetLocalFiles(db, "")
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (d *Database) saveLocalFiles(filesToSave []*anime.LocalFile) error {
 		return errors.New("database not initialized")
 	}
 
-	lfs, lfsId, err := db_bridge.GetLocalFiles(db)
+	lfs, lfsId, err := db_bridge.GetLocalFiles(db, "")
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (d *Database) saveLocalFiles(filesToSave []*anime.LocalFile) error {
 		}
 	}
 
-	_, err = db_bridge.SaveLocalFiles(db, lfsId, lfs)
+	_, err = db_bridge.SaveLocalFiles(db, "", lfsId, lfs)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (d *Database) insertLocalFiles(files []*anime.LocalFile) ([]*anime.LocalFil
 		return nil, errors.New("database not initialized")
 	}
 
-	lfs, err := db_bridge.InsertLocalFiles(db, files)
+	lfs, err := db_bridge.InsertLocalFiles(db, "", files)
 	if err != nil {
 		return nil, err
 	}

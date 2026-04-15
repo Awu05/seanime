@@ -57,13 +57,13 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 	}
 
 	// Get the latest local files
-	existingLfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	existingLfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
 	// Get the latest shelved local files
-	existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(h.App.Database)
+	existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -127,13 +127,13 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 	}
 
 	// Insert the local files
-	lfs, err := db_bridge.InsertLocalFiles(h.App.Database, allLfs)
+	lfs, err := db_bridge.InsertLocalFiles(h.App.Database, profileID, allLfs)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
 	// Save the shelved local files
-	err = db_bridge.SaveShelvedLocalFiles(h.App.Database, sc.GetShelvedLocalFiles())
+	err = db_bridge.SaveShelvedLocalFiles(h.App.Database, profileID, sc.GetShelvedLocalFiles())
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

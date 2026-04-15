@@ -54,7 +54,7 @@ func (l *LibraryExplorer) SetLibraryPaths(paths []string) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // GetFileTree returns the file tree of the library (root level only for lazy loading)
-func (l *LibraryExplorer) GetFileTree() (*FileTreeJSON, error) {
+func (l *LibraryExplorer) GetFileTree(profileID string) (*FileTreeJSON, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -64,7 +64,7 @@ func (l *LibraryExplorer) GetFileTree() (*FileTreeJSON, error) {
 	}
 
 	// Hydrate the tree with local file data
-	localFileMap, err := l.hydrateLocalFileData(tree)
+	localFileMap, err := l.hydrateLocalFileData(profileID, tree)
 	if err != nil {
 		return nil, err
 	}

@@ -30,7 +30,7 @@ func (pm *PlaybackManager) getLocalFilePlaybackDetails(path string) (*anilist.An
 	pm.Logger.Debug().Str("path", path).Msg("playback manager: Getting local file playback details")
 
 	// Find the local file from the path
-	lfs, _, err := db_bridge.GetLocalFiles(pm.Database)
+	lfs, _, err := db_bridge.GetLocalFiles(pm.Database, pm.profileID)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("error getting local files: %s", err.Error())
 	}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"seanime/internal/api/anilist"
+	"seanime/internal/core"
 	"seanime/internal/customsource"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/library/anime"
@@ -129,8 +130,10 @@ func (h *Handler) HandleGetPlaylistEpisodes(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	profileID := core.GetProfileIDFromContext(c)
+
 	// Get all local files
-	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database)
+	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
