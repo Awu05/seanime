@@ -880,36 +880,6 @@ function cleanupAndExit() {
 // Initialization
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// returns true if github is ok OR url is unreachable
-// returns false if github is down and fallback should be used
-async function fetchGithubStatus() {
-    try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-        const response = await net.fetch("https://seanime.app/api/github-status", {
-            signal: controller.signal
-        })
-        clearTimeout(timeoutId)
-
-        if (!response.ok) {
-            return { ok: true, fallback: "" }
-        }
-
-        const data = await response.json()
-
-        // url is reachable, status is "down"
-        if (data.status === "down") {
-            log.warn(`[Denshi] App: Changing update channel to ${data.fallback}, reason: ${data.description}`)
-            return { ok: false, fallback: data.fallback || "seanime" }
-        }
-
-        return { ok: true, fallback: "" }
-    } catch (err) {
-        return { ok: true, fallback: "" }
-    }
-}
-
 // Initialize the app
 app.whenReady().then(async () => {
     logStartupEvent("App ready")
@@ -925,24 +895,12 @@ app.whenReady().then(async () => {
     }
     log.info("[Denshi] Loaded settings:", JSON.stringify(denshiSettings))
 
-    let currentUpdateChannel = denshiSettings.updateChannel
-    const { ok, fallback } = await fetchGithubStatus()
-    // if github is down, use fallback channel
-    if (!ok) {
-        currentUpdateChannel = fallback
-    }
-
     const updateConfig = {
         provider: "generic",
         url: "https://github.com/Awu05/seanime/releases/latest/download",
         channel: "latest",
-        allowPrerelease: false,
+        allowPrerelease: denshiSettings.updateChannel === "seanime_nightly",
         verifyUpdateCodeSignature: false,
-    }
-
-    // All update channels point to the same GitHub releases
-    if (currentUpdateChannel === "seanime_nightly") {
-        updateConfig.allowPrerelease = true
     }
 
     if (process.env.UPDATES_URL) {

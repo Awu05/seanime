@@ -1,7 +1,6 @@
 package updater
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -11,13 +10,7 @@ import (
 	"github.com/goccy/go-json"
 )
 
-// We fetch the latest release from the website first, if it fails we fallback to GitHub API
-// This allows updates even if Seanime is removed from GitHub
-var (
-	websiteUrl        = "https://api.github.com/repos/Awu05/seanime/releases/latest"
-	fallbackGithubUrl = "https://api.github.com/repos/Awu05/seanime/releases/latest"
-	githubCheckUrl    = ""
-)
+var githubApiUrl = "https://api.github.com/repos/Awu05/seanime/releases/latest"
 
 type (
 	GitHubResponse struct {
@@ -51,10 +44,6 @@ type (
 		TarballURL string `json:"tarball_url"`
 		ZipballURL string `json:"zipball_url"`
 		Body       string `json:"body"`
-	}
-
-	DocsResponse struct {
-		Release Release `json:"release"`
 	}
 
 	Release struct {
@@ -111,46 +100,26 @@ func (u *Updater) GetReleaseName(version string) string {
 }
 
 func (u *Updater) fetchLatestRelease(channel string) (*Release, error) {
-	var release *Release
-
-	switch channel {
-	case "github", "seanime", "seanime_nightly":
-		fallthrough
-	default:
-		apiRelease, err := u.fetchLatestReleaseFromApi(websiteUrl)
-		if err != nil {
-			if u.logger != nil {
-				u.logger.Warn().Err(err).Msg("updater: Failed to fetch from GitHub, falling back to Seanime")
-			}
-			ghRelease, ghErr := u.fetchLatestReleaseFromGitHub()
-			if ghErr != nil {
-				return nil, err // Return original error if fallback also fails
-			}
-			release = ghRelease
-		} else {
-			release = apiRelease
-		}
-	}
-
-	return release, nil
-}
-
-func (u *Updater) fetchLatestReleaseFromGitHub() (*Release, error) {
-
-	response, err := u.client.Get(fallbackGithubUrl)
+	response, err := u.client.Get(githubApiUrl)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 
+	if response.StatusCode == 429 {
+		return nil, errors.New("rate limited, try again later")
+	}
+	if response.StatusCode < 200 || response.StatusCode > 299 {
+		return nil, fmt.Errorf("http error code: %d", response.StatusCode)
+	}
+
 	byteArr, readErr := io.ReadAll(response.Body)
 	if readErr != nil {
-		return nil, fmt.Errorf("error reading response: %w\n", readErr)
+		return nil, fmt.Errorf("error reading response: %w", readErr)
 	}
 
 	var res GitHubResponse
-	err = json.Unmarshal(byteArr, &res)
-	if err != nil {
+	if err = json.Unmarshal(byteArr, &res); err != nil {
 		return nil, err
 	}
 
@@ -181,79 +150,4 @@ func (u *Updater) fetchLatestReleaseFromGitHub() (*Release, error) {
 	}
 
 	return release, nil
-}
-
-// returns true if github is ok OR url is unreachable
-// returns false if github is down and fallback should be used
-func (u *Updater) fetchGithubStatus() (string, bool) {
-	type GithubStatus struct {
-		Status      string `json:"status"`
-		Fallback    string `json:"fallback"`
-		Description string `json:"description"`
-	}
-
-	response, err := u.client.Get(githubCheckUrl)
-	if err != nil {
-		return "", true // unreachable = ok
-	}
-	defer response.Body.Close()
-
-	statusCode := response.StatusCode
-
-	if !((statusCode >= 200) && (statusCode <= 299)) {
-		return "", true // unreachable = ok
-	}
-
-	byteArr, readErr := io.ReadAll(response.Body)
-	if readErr != nil {
-		return "", true // unreachable = ok
-	}
-
-	var res GithubStatus
-	err = json.Unmarshal(byteArr, &res)
-	if err != nil {
-		return "", true // unreachable = ok
-	}
-
-	// url is reachable, status is "down"
-	if res.Status == "down" {
-		u.logger.Warn().Str("reason", res.Description).Msgf("app: Changing update channel to %s", res.Fallback)
-		return cmp.Or(res.Fallback, "seanime"), false
-	}
-
-	return "", true
-}
-
-func (u *Updater) fetchLatestReleaseFromApi(releaseUrl string) (*Release, error) {
-
-	response, err := u.client.Get(releaseUrl)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	statusCode := response.StatusCode
-
-	if statusCode == 429 {
-		return nil, errors.New("rate limited, try again later")
-	}
-
-	if !((statusCode >= 200) && (statusCode <= 299)) {
-		return nil, fmt.Errorf("http error code: %d\n", statusCode)
-	}
-
-	byteArr, readErr := io.ReadAll(response.Body)
-	if readErr != nil {
-		return nil, fmt.Errorf("error reading response: %w", readErr)
-	}
-
-	var res DocsResponse
-	err = json.Unmarshal(byteArr, &res)
-	if err != nil {
-		return nil, err
-	}
-
-	res.Release.Version = strings.TrimPrefix(res.Release.TagName, "v")
-
-	return &res.Release, nil
 }
