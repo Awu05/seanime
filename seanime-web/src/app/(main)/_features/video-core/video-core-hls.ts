@@ -61,6 +61,8 @@ export function useVideoCoreHls({
 }) {
     const hlsRef = useRef<Hls | null>(null)
     const hlsAutoPlayTriggered = useRef(false)
+    const networkRecoveryAttempts = useRef(0)
+    const mediaRecoveryAttempts = useRef(0)
 
     const audioManager = useAtomValue(vc_audioManager)
     const autoPlay = useAtomValue(vc_autoPlayVideoAtom)
@@ -101,6 +103,8 @@ export function useVideoCoreHls({
                 hlsRef.current.destroy()
             }
             hlsAutoPlayTriggered.current = false
+            networkRecoveryAttempts.current = 0
+            mediaRecoveryAttempts.current = 0
 
             // Extract clientId from the stream URL to propagate to all HLS sub-requests
             let clientIdParam = ""
@@ -231,6 +235,15 @@ export function useVideoCoreHls({
                 }
             })
 
+            // Reset recovery counters on each successful fragment load
+            // so that transient network issues don't accumulate over a long session
+            hls.on(Events.FRAG_LOADED, () => {
+                if (networkRecoveryAttempts.current > 0 || mediaRecoveryAttempts.current > 0) {
+                    networkRecoveryAttempts.current = 0
+                    mediaRecoveryAttempts.current = 0
+                }
+            })
+
             hls.on(Events.LEVEL_SWITCHED, (event, data) => {
                 hlsLog.info("Quality level switched to", data.level)
                 setCurrentQuality(hls.currentLevel)
@@ -241,25 +254,40 @@ export function useVideoCoreHls({
                 setCurrentAudioTrack(hls.audioTrack)
             })
 
+            const MAX_NETWORK_RECOVERY_ATTEMPTS = 5
+            const MAX_MEDIA_RECOVERY_ATTEMPTS = 3
+
             hls.on(Events.ERROR, (event, data: ErrorData) => {
                 hlsLog.error("HLS error", data)
-                if (data.fatal) {
-                    hlsLog.error("Fatal error, cannot recover")
-                    hls.destroy()
-                    onFatalError?.(data)
-                    // switch (data.type) {
-                    //     case Hls.ErrorTypes.NETWORK_ERROR:
-                    //         hlsLog.error("Fatal network error, trying to recover")
-                    //         hls.startLoad()
-                    //         break
-                    //     case Hls.ErrorTypes.MEDIA_ERROR:
-                    //         hlsLog.error("Fatal media error, trying to recover")
-                    //         hls.recoverMediaError()
-                    //         break
-                    //     default:
-                    //         break
-                    // }
+                if (!data.fatal) return
+
+                switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        if (networkRecoveryAttempts.current < MAX_NETWORK_RECOVERY_ATTEMPTS) {
+                            networkRecoveryAttempts.current++
+                            hlsLog.warn(`Fatal network error, attempting recovery (${networkRecoveryAttempts.current}/${MAX_NETWORK_RECOVERY_ATTEMPTS})`)
+                            hls.startLoad()
+                            return
+                        }
+                        break
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        if (mediaRecoveryAttempts.current < MAX_MEDIA_RECOVERY_ATTEMPTS) {
+                            mediaRecoveryAttempts.current++
+                            hlsLog.warn(`Fatal media error, attempting recovery (${mediaRecoveryAttempts.current}/${MAX_MEDIA_RECOVERY_ATTEMPTS})`)
+                            if (mediaRecoveryAttempts.current === 1) {
+                                hls.recoverMediaError()
+                            } else {
+                                hls.swapAudioCodec()
+                                hls.recoverMediaError()
+                            }
+                            return
+                        }
+                        break
                 }
+
+                hlsLog.error("Fatal error, giving up after max recovery attempts")
+                hls.destroy()
+                onFatalError?.(data)
             })
 
             return () => {
