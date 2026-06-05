@@ -53,8 +53,14 @@ func Abs(x int32) int32 {
 }
 
 func (t *Tracker) start() {
-	inactiveTime := 1 * time.Hour
-	timer := time.NewTicker(inactiveTime)
+	// inactiveTime is how long a client can go without requesting a segment before
+	// its encoder heads are killed. Bumped from 1h to 4h so a viewer who pauses for
+	// a meal/sleep can resume without a transcoder cold start.
+	// checkInterval controls how often we scan for idle clients. Kept short so the
+	// kill happens close to the actual deadline rather than up to inactiveTime late.
+	inactiveTime := 4 * time.Hour
+	checkInterval := 30 * time.Minute
+	timer := time.NewTicker(checkInterval)
 	defer timer.Stop()
 	for {
 		select {
@@ -130,7 +136,7 @@ func (t *Tracker) KillStreamIfDead(path string) bool {
 			return false
 		}
 	}
-	t.logger.Trace().Msgf("Killing stream %s", path)
+	t.logger.Trace().Msgf("transcoder: Killing stream %s", path)
 
 	stream, ok := t.transcoder.streams.Get(path)
 	if !ok {
@@ -144,8 +150,6 @@ func (t *Tracker) KillStreamIfDead(path string) bool {
 		case <-time.After(4 * time.Hour):
 			t.deletedStream <- path
 		}
-		//time.Sleep(4 * time.Hour)
-		//t.deletedStream <- path
 	}()
 	return true
 }
@@ -200,8 +204,6 @@ func (t *Tracker) KillQualityIfDead(path string, quality Quality) bool {
 		return false
 	}
 	vstream.Kill()
-
-	//t.logger.Trace().Msgf("transcoder: Killed %s video stream in %.2fs", quality, time.Since(start).Seconds())
 	return true
 }
 

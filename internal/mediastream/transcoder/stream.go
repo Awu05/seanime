@@ -202,16 +202,12 @@ func (ts *Stream) GetSegment(segment int32) (string, error) {
 			return "", errors.New("could not retrieve segment (timeout)")
 		}
 	}
-	//go ts.prepareNextSegments(segment)
 	ts.prepareNextSegments(segment)
 	return fmt.Sprintf(filepath.ToSlash(ts.handle.getOutPath(ts.segments[segment].encoder)), segment), nil
 }
 
 // prepareNextSegments will start the next segments if they are not already started.
 func (ts *Stream) prepareNextSegments(segment int32) {
-	//if ts.IsKilled() {
-	//	return
-	//}
 	// Audio is way cheaper to create than video, so we don't need to run them in advance
 	// Running it in advance might actually slow down the video encode since less compute
 	// power can be used, so we simply disable that.
@@ -281,11 +277,9 @@ func (ts *Stream) IsKilled() bool {
 // KillHead
 // Stream is assumed to be locked
 func (ts *Stream) KillHead(encoderId int) {
-	//streamLogger.Trace().Int("eid", encoderId).Msgf("transcoder: Killing %s encoder head", ts.kind)
 	defer streamLogger.Trace().Int("eid", encoderId).Msgf("transcoder: Killed %s encoder head", ts.kind)
 	defer func() {
-		if r := recover(); r != nil {
-		}
+		_ = recover()
 	}()
 	close(ts.killCh)
 	ts.cancel()
@@ -293,9 +287,6 @@ func (ts *Stream) KillHead(encoderId int) {
 		return
 	}
 	ts.heads[encoderId].command.Process.Signal(os.Interrupt)
-	//_, _ = ts.heads[encoderId].stdin.Write([]byte("q"))
-	//_ = ts.heads[encoderId].stdin.Close()
-
 	ts.heads[encoderId] = DeletedHead
 }
 

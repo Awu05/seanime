@@ -34,16 +34,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodHead {
-		r.Response.Header.Set("Content-Type", "video/mp4")
-		r.Response.Header.Set("Content-Length", strconv.Itoa(int(h.repository.client.currentFile.MustGet().Length())))
-		r.Response.Header.Set("Content-Disposition", "inline; filename="+h.repository.client.currentFile.MustGet().DisplayPath())
-		r.Response.Header.Set("Accept-Ranges", "bytes")
-		r.Response.Header.Set("Cache-Control", "no-cache")
-		r.Response.Header.Set("Pragma", "no-cache")
-		r.Response.Header.Set("Expires", "0")
-		r.Response.Header.Set("X-Content-Type-Options", "nosniff")
-
-		// No content, just headers
+		file := h.repository.client.currentFile.MustGet()
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Content-Length", strconv.FormatInt(file.Length(), 10))
+		w.Header().Set("Content-Disposition", "inline; filename="+file.DisplayPath())
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
 		return
 	}

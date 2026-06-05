@@ -87,9 +87,6 @@ func (h *Handler) HandleRequestMediastreamMediaContainer(c echo.Context) error {
 		mediaContainer, err = h.App.MediastreamRepository.RequestDirectPlay(b.Path, b.ClientId)
 	case mediastream.StreamTypeTranscode:
 		mediaContainer, err = h.App.MediastreamRepository.RequestTranscodeStream(b.Path, b.ClientId)
-	case mediastream.StreamTypeOptimized:
-		err = fmt.Errorf("stream type %s not implemented", b.StreamType)
-		//mediaContainer, err = h.App.MediastreamRepository.RequestOptimizedStream(b.Path)
 	default:
 		err = fmt.Errorf("stream type %s not implemented", b.StreamType)
 	}

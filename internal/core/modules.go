@@ -51,7 +51,9 @@ import (
 func (a *App) initModulesOnce() {
 
 	if a.StreamSessionManager == nil {
-		a.StreamSessionManager = NewStreamSessionManager(30 * time.Minute)
+		// Bumped from 30m to 2h so a viewer who pauses mid-episode (meal, sleep, etc.)
+		// doesn't lose their direct/torrent stream session and have to rebootstrap.
+		a.StreamSessionManager = NewStreamSessionManager(2 * time.Hour)
 		a.Cleanups = append(a.Cleanups, func() {
 			a.StreamSessionManager.Stop()
 		})

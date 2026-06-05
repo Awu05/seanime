@@ -64,34 +64,6 @@ func serveContentRange(w http.ResponseWriter, r *http.Request, ctx context.Conte
 	_, _ = copyWithContext(ctx, w, reader, ra.Length)
 }
 
-func serveTorrent(w http.ResponseWriter, r *http.Request, ctx context.Context, reader io.ReadSeekCloser, name string, size int64, contentType string, ra httputil.Range) {
-	w.Header().Set("Accept-Ranges", "bytes")
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Cache-Control", "no-store")
-
-	// Validate range
-	if ra.Start >= size || ra.Start < 0 || ra.Length <= 0 {
-		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", size))
-		http.Error(w, "Range Not Satisfiable", http.StatusRequestedRangeNotSatisfiable)
-		return
-	}
-
-	// Set response headers for partial content
-	w.Header().Set("Content-Range", ra.ContentRange(size))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", ra.Length))
-	w.WriteHeader(http.StatusPartialContent)
-
-	// SeekToSlow to the requested position
-	_, err := reader.Seek(ra.Start, io.SeekStart)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_, _ = copyWithContext(ctx, w, reader, ra.Length)
-}
-
 // copyWithContext copies n bytes from src to dst, respecting context cancellation
 func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader, n int64) (int64, error) {
 	// Use a reasonably sized buffer

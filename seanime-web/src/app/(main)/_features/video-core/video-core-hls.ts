@@ -134,6 +134,24 @@ export function useVideoCoreHls({
                         errorRetry: { maxNumRetry: 5, retryDelayMs: 2000, maxRetryDelayMs: 16000 },
                     },
                 },
+                // If the transcoder restarts or the network blips, give the manifest/playlist
+                // load enough room to recover instead of failing fast and killing playback.
+                manifestLoadPolicy: {
+                    default: {
+                        maxTimeToFirstByteMs: 20000,
+                        maxLoadTimeMs: 60000,
+                        timeoutRetry: { maxNumRetry: 5, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+                        errorRetry: { maxNumRetry: 5, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+                    },
+                },
+                playlistLoadPolicy: {
+                    default: {
+                        maxTimeToFirstByteMs: 20000,
+                        maxLoadTimeMs: 60000,
+                        timeoutRetry: { maxNumRetry: 5, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+                        errorRetry: { maxNumRetry: 5, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+                    },
+                },
                 // Propagate clientId to all HLS sub-requests (index.m3u8, segments.ts)
                 xhrSetup: clientIdParam ? (xhr, url) => {
                     if (!url.includes("clientId=")) {
