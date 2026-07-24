@@ -6,11 +6,23 @@ import (
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/nativeplayer"
+	"seanime/internal/platforms/platform"
 	"seanime/internal/torrentstream"
 	"seanime/internal/util"
 	"seanime/internal/videocore"
 	"time"
 )
+
+// sessionPlatform returns the platform a profile's stream session must use.
+// In multi-user mode this comes from the AnilistPool so progress updates and
+// collection fetches go to the profile's own AniList account — never the
+// global platform, which carries whichever account logged in last.
+func (a *App) sessionPlatform(profileID string) (platform.Platform, bool) {
+	if a.MultiUserEnabled && profileID != "" && profileID != "_default" && a.AnilistPool != nil {
+		return a.AnilistPool.GetPlatformForProfile(profileID), true
+	}
+	return a.AnilistPlatformRef.Get(), false
+}
 
 // Shutdown releases per-session streaming resources without touching shared infrastructure
 // (the anacrolix torrent engine, MediaPlayerRepository, etc.). Called when a session is evicted
@@ -25,18 +37,18 @@ func (s *ProfileStreamSession) Shutdown() {
 	}
 }
 
-// SeedSessionCollection pulls the current anime collection from the platform and seeds
-// the session's PlaybackManager and DirectStreamManager. This is called outside the
-// StreamSessionManager lock because GetAnimeCollection may fall back to a network request
-// on cache miss, which must not block concurrent session creation or settings refresh.
-// Safe to call multiple times (idempotent).
-func (a *App) SeedSessionCollection(session *ProfileStreamSession) {
+// SeedSessionCollection pulls the profile's anime collection from its own platform
+// and seeds the session's PlaybackManager and DirectStreamManager. This is called
+// outside the StreamSessionManager lock because GetAnimeCollection may fall back to
+// a network request on cache miss, which must not block concurrent session creation
+// or settings refresh. Safe to call multiple times (idempotent).
+func (a *App) SeedSessionCollection(profileID string, session *ProfileStreamSession) {
 	defer util.HandlePanicInModuleThen("core/SeedSessionCollection", func() {})
-	platform := a.AnilistPlatformRef.Get()
-	if platform == nil {
+	plat, _ := a.sessionPlatform(profileID)
+	if plat == nil {
 		return
 	}
-	collection, err := platform.GetAnimeCollection(context.Background(), false)
+	collection, err := plat.GetAnimeCollection(context.Background(), false)
 	if err != nil || collection == nil {
 		return
 	}
@@ -53,8 +65,18 @@ func (a *App) SeedSessionCollection(session *ProfileStreamSession) {
 // wrapper (with its own currentTorrent/currentFile tracking) but shares the single anacrolix
 // torrent engine from the App's singleton.
 func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
+	// Resolve the profile's own platform (pool-backed in multi-user mode).
+	plat, isProfilePlatform := a.sessionPlatform(profileID)
+	platformRef := a.AnilistPlatformRef
 	refreshAnimeCollection := func() {
 		_, _ = a.RefreshAnimeCollection()
+	}
+	if isProfilePlatform {
+		platformRef = util.NewRef[platform.Platform](plat)
+		refreshAnimeCollection = func() {
+			defer util.HandlePanicThen(func() {})
+			_, _ = plat.GetAnimeCollection(context.Background(), true)
+		}
 	}
 
 	// Create VideoCore
@@ -64,7 +86,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		ContinuityManager:          a.ContinuityManager,
 		MetadataProviderRef:        a.MetadataProviderRef,
 		DiscordPresence:            a.DiscordPresence,
-		PlatformRef:                a.AnilistPlatformRef,
+		PlatformRef:                platformRef,
 		RefreshAnimeCollectionFunc: refreshAnimeCollection,
 		IsOfflineRef:               a.IsOfflineRef(),
 	})
@@ -80,7 +102,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	pm := playbackmanager.New(&playbackmanager.NewPlaybackManagerOptions{
 		WSEventManager:             a.WSEventManager,
 		Logger:                     a.Logger,
-		PlatformRef:                a.AnilistPlatformRef,
+		PlatformRef:                platformRef,
 		MetadataProviderRef:        a.MetadataProviderRef,
 		Database:                   a.Database,
 		RefreshAnimeCollectionFunc: refreshAnimeCollection,
@@ -97,7 +119,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		ContinuityManager:          a.ContinuityManager,
 		MetadataProviderRef:        a.MetadataProviderRef,
 		DiscordPresence:            a.DiscordPresence,
-		PlatformRef:                a.AnilistPlatformRef,
+		PlatformRef:                platformRef,
 		RefreshAnimeCollectionFunc: refreshAnimeCollection,
 		IsOfflineRef:               a.IsOfflineRef(),
 		NativePlayer:               np,
@@ -119,7 +141,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		CompleteAnimeCache:  anilist.NewCompleteAnimeCache(),
 		MetadataProviderRef: a.MetadataProviderRef,
 		TorrentRepository:   a.TorrentRepository,
-		PlatformRef:         a.AnilistPlatformRef,
+		PlatformRef:         platformRef,
 		PlaybackManager:     pm,
 		WSEventManager:      a.WSEventManager,
 		Database:            a.Database,

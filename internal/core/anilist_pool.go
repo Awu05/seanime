@@ -1,6 +1,7 @@
 package core
 
 import (
+	"path/filepath"
 	"seanime/internal/api/anilist"
 	"seanime/internal/platforms/anilist_platform"
 	"seanime/internal/platforms/platform"
@@ -8,51 +9,27 @@ import (
 	"sync"
 )
 
-// AnilistClientPool manages per-profile AniList clients and platforms.
-// Each profile gets its own client (with its own token) to avoid cross-profile data leaking.
+// AnilistClientPool manages per-profile AniList platforms.
+// Each profile gets its own platform (with its own token and cache directory)
+// to avoid cross-profile data leaking.
 type AnilistClientPool struct {
-	clients   map[string]anilist.AnilistClient   // keyed by profileID
-	platforms map[string]platform.Platform        // keyed by profileID
+	platforms map[string]platform.Platform // keyed by profileID
 	mu        sync.RWMutex
 	app       *App
 }
 
 func NewAnilistClientPool(app *App) *AnilistClientPool {
 	return &AnilistClientPool{
-		clients:   make(map[string]anilist.AnilistClient),
 		platforms: make(map[string]platform.Platform),
 		app:       app,
 	}
 }
 
-// GetClientForProfile returns an AniList client for the given profile.
-// Creates one lazily from the profile's stored token.
-func (p *AnilistClientPool) GetClientForProfile(profileID string) anilist.AnilistClient {
-	if profileID == "" {
-		return p.app.AnilistClientRef.Get()
-	}
-
-	p.mu.RLock()
-	if client, ok := p.clients[profileID]; ok {
-		p.mu.RUnlock()
-		return client
-	}
-	p.mu.RUnlock()
-
-	// Create a new client from the profile's token
-	token := p.app.Database.GetAnilistTokenForProfile(profileID)
-	if token == "" {
-		// Return an empty client — don't fall back to global (admin's client)
-		return anilist.NewAnilistClient("", p.app.AnilistCacheDir)
-	}
-
-	client := anilist.NewAnilistClient(token, p.app.AnilistCacheDir)
-
-	p.mu.Lock()
-	p.clients[profileID] = client
-	p.mu.Unlock()
-
-	return client
+// profileCacheDir returns a per-profile cache directory. Profiles must not
+// share a cache directory: collection cache keys are static, so a shared dir
+// would serve one profile's cached collection to another on network fallback.
+func (p *AnilistClientPool) profileCacheDir(profileID string) string {
+	return filepath.Join(p.app.AnilistCacheDir, "profiles", profileID)
 }
 
 // GetPlatformForProfile returns a Platform for the given profile.
@@ -82,7 +59,7 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 	if token == "" {
 		// No AniList linked for this profile — return a nil-token platform
 		// that returns empty collections, NOT the admin's global platform
-		emptyClient := anilist.NewAnilistClient("", p.app.AnilistCacheDir)
+		emptyClient := anilist.NewAnilistClient("", p.profileCacheDir(profileID))
 		emptyRef := util.NewRef[anilist.AnilistClient](emptyClient)
 		plat := anilist_platform.NewAnilistPlatform(
 			emptyRef,
@@ -97,7 +74,7 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 		return plat
 	}
 
-	client := anilist.NewAnilistClient(token, p.app.AnilistCacheDir)
+	client := anilist.NewAnilistClient(token, p.profileCacheDir(profileID))
 	clientRef := util.NewRef[anilist.AnilistClient](client)
 
 	plat := anilist_platform.NewAnilistPlatform(
@@ -112,18 +89,16 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 	plat.SetUsername(username)
 
 	p.mu.Lock()
-	p.clients[profileID] = client
 	p.platforms[profileID] = plat
 	p.mu.Unlock()
 
 	return plat
 }
 
-// InvalidateProfile removes cached client/platform for a profile (e.g. on login/logout).
+// InvalidateProfile removes the cached platform for a profile (e.g. on login/logout).
 func (p *AnilistClientPool) InvalidateProfile(profileID string) {
 	p.mu.Lock()
 	plat := p.platforms[profileID]
-	delete(p.clients, profileID)
 	delete(p.platforms, profileID)
 	p.mu.Unlock()
 
