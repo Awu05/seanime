@@ -79,6 +79,14 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "INVALID_TOKEN"})
 		}
 
+		// Reject tokens whose profile no longer exists — otherwise a deleted
+		// profile's JWT keeps working until it expires.
+		if claims.ProfileID != "" {
+			if _, err := h.App.Database.GetProfileByID(claims.ProfileID); err != nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "PROFILE_NOT_FOUND"})
+			}
+		}
+
 		if path == "/api/v1/auth/select-profile" || path == "/api/v1/auth/profiles" || path == "/api/v1/auth/create-profile" {
 			if claims.Scope == "access" || claims.Scope == "admin" || claims.Scope == "profile" {
 				c.Set("profileId", claims.ProfileID)
