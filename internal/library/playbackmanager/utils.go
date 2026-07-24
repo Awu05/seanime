@@ -36,6 +36,7 @@ func (pm *PlaybackManager) getLocalFilePlaybackDetails(path string) (*anilist.An
 	}
 
 	reqEvent := &PlaybackLocalFileDetailsRequestedEvent{
+		ProfileID:             pm.profileID,
 		Path:                  path,
 		LocalFiles:            lfs,
 		AnimeListEntry:        &anilist.AnimeListEntry{},
@@ -116,6 +117,7 @@ func (pm *PlaybackManager) getStreamPlaybackDetails(mId int) mo.Option[*anilist.
 	}
 
 	reqEvent := &PlaybackStreamDetailsRequestedEvent{
+		ProfileID:       pm.profileID,
 		AnimeCollection: collection,
 		MediaId:         mId,
 		AnimeListEntry:  &anilist.AnimeListEntry{},

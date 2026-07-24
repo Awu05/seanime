@@ -152,9 +152,14 @@ export function useServerQuery<R, V = any>(
         if (!muteError && props.isError) {
             if (props.error?.response?.data?.error === "UNAUTHENTICATED" &&
                 !pathname.startsWith("/login") && !pathname.startsWith("/access") &&
-                !pathname.startsWith("/profiles") && !pathname.startsWith("/setup")) {
+                !pathname.startsWith("/profiles") && !pathname.startsWith("/setup") &&
+                !pathname.startsWith("/public/auth")) {
                 setPassword(undefined)
-                window.location.href = "/login"
+                // Redirect to "/" rather than hardcoding "/login": UNAUTHENTICATED is
+                // also returned by the legacy server-password flow, which has no
+                // admin account for /login to authenticate against. ServerDataWrapper
+                // picks the right auth page (/login vs /public/auth) on mount.
+                window.location.href = "/"
                 return
             }
             console.log("Server error", props.error)

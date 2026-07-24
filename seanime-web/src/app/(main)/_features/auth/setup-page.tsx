@@ -26,7 +26,9 @@ export function SetupPage() {
 
         setup({ username: username.trim(), password, confirmPassword, accessCode: enableAccessCode ? accessCode.trim() : undefined }, {
             onSuccess: () => {
-                window.location.href = "/login"
+                // The server sets the session cookie on setup success — no need to
+                // make the admin retype the credentials they just created.
+                window.location.href = "/profiles"
             },
             onError: (err: any) => {
                 setError(err?.response?.data?.error || "Failed to create admin account")

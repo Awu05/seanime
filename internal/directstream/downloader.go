@@ -2,6 +2,7 @@ package directstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +20,78 @@ import (
 )
 
 const DefaultMaxDownloadSize int64 = 10 * 1024 * 1024 * 1024 // 10GB
+
+// windowsReservedNames are device names Windows reserves regardless of extension.
+var windowsReservedNames = regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$`)
+
+// sanitizeFilename strips characters os.Create would reject on Windows and
+// avoids reserved device names, so a download can't silently fail to create
+// its destination file.
+func sanitizeFilename(name string) string {
+	invalid := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
+	cleaned := invalid.ReplaceAllString(name, "_")
+	cleaned = strings.TrimRight(cleaned, " .")
+	if cleaned == "" || windowsReservedNames.MatchString(cleaned) {
+		cleaned = "_" + cleaned
+	}
+	return cleaned
+}
+
+// downloaderRegistry deduplicates background downloads by URL so two clients
+// streaming the same debrid URL share one download instead of truncating and
+// overwriting the same destination file concurrently.
+var (
+	downloaderRegistryMu sync.Mutex
+	downloaderRegistry   = make(map[string]*sharedDownloader)
+)
+
+type sharedDownloader struct {
+	d      *DebridDownloader
+	refs   int
+	cancel func()
+}
+
+// AcquireDebridDownloader returns the shared downloader for streamUrl,
+// starting it on first acquisition. Release must be called exactly once per
+// Acquire when the caller no longer needs it; the underlying download is
+// only cleaned up when the last reference is released.
+func AcquireDebridDownloader(streamUrl, hash, downloadDir string, contentLength int64, logger *zerolog.Logger, parentCtx context.Context) (*DebridDownloader, bool) {
+	downloaderRegistryMu.Lock()
+	defer downloaderRegistryMu.Unlock()
+
+	if existing, ok := downloaderRegistry[streamUrl]; ok {
+		existing.refs++
+		return existing.d, true
+	}
+
+	d := NewDebridDownloader(streamUrl, hash, downloadDir, contentLength, logger)
+	if !d.ShouldDownload() {
+		return d, false
+	}
+	d.Start(parentCtx)
+	downloaderRegistry[streamUrl] = &sharedDownloader{d: d, refs: 1}
+	return d, true
+}
+
+// ReleaseDebridDownloader drops one reference; the download is torn down
+// (files removed) only when the last referencing client releases it.
+func ReleaseDebridDownloader(streamUrl string) {
+	downloaderRegistryMu.Lock()
+	entry, ok := downloaderRegistry[streamUrl]
+	if !ok {
+		downloaderRegistryMu.Unlock()
+		return
+	}
+	entry.refs--
+	if entry.refs > 0 {
+		downloaderRegistryMu.Unlock()
+		return
+	}
+	delete(downloaderRegistry, streamUrl)
+	downloaderRegistryMu.Unlock()
+
+	entry.d.Cleanup()
+}
 
 // downloaderClient is used for background full-file downloads. It has no overall
 // request Timeout because downloads can take many minutes; stalls are detected via
@@ -90,6 +165,7 @@ func (d *DebridDownloader) Start(parentCtx context.Context) {
 			filename = base
 		}
 	}
+	filename = sanitizeFilename(filename)
 
 	done := make(chan struct{})
 
@@ -166,6 +242,15 @@ func (d *DebridDownloader) download(ctx context.Context) {
 		}
 	}
 
+	// Verify the full file was actually received when the server advertised a
+	// length — a short body from a chunked response or mismatched Content-Length
+	// would otherwise be trusted as complete, and GetInputPath would read a
+	// truncated file unconditionally.
+	if d.contentLength > 0 && d.downloaded.Load() != d.contentLength {
+		d.setError(fmt.Errorf("incomplete download: got %d of %d bytes", d.downloaded.Load(), d.contentLength))
+		return
+	}
+
 	d.mu.Lock()
 	d.complete = true
 	d.mu.Unlock()
@@ -177,7 +262,9 @@ func (d *DebridDownloader) setError(err error) {
 	d.mu.Lock()
 	d.err = err
 	d.mu.Unlock()
-	if err != context.Canceled {
+	// context.Canceled may be wrapped (e.g. *url.Error from the http client),
+	// so a normal user-initiated stop doesn't get logged as a failure.
+	if !errors.Is(err, context.Canceled) {
 		d.logger.Error().Err(err).Msg("downloader: Download failed")
 	}
 }

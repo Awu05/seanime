@@ -59,24 +59,40 @@ type Stream interface {
 	OnSubtitleFileUploaded(filename string, content string)
 }
 
+// HasStream reports whether this manager has a stream registered for clientId.
+// Used by handlers to route a request to whichever manager instance
+// (per-profile session vs. the App singleton used by debrid/Nakama/playlist)
+// actually owns the client's stream.
+func (m *Manager) HasStream(clientId string) bool {
+	if clientId == "" {
+		return false
+	}
+	_, ok := m.streams.Get(clientId)
+	return ok
+}
+
 func (m *Manager) getStreamHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Look up the stream by clientId query param
 		clientId := r.URL.Query().Get("clientId")
 		if clientId != "" {
+			// A clientId was specified: only serve that exact stream. Falling
+			// back to "any active stream" here could serve a different
+			// client's (or a different tab's) video.
 			if stream, ok := m.streams.Get(clientId); ok {
 				stream.GetStreamHandler().ServeHTTP(w, r)
 				return
 			}
+			http.Error(w, "no stream", http.StatusNotFound)
+			return
 		}
-		// Fallback: try to find any active stream (backward compatibility for single-stream)
+		// No clientId: backward compatibility for single-stream setups.
 		var activeStream Stream
 		m.streams.Range(func(_ string, s Stream) bool {
 			activeStream = s
 			return false
 		})
 		if activeStream == nil {
-			http.Error(w, "no stream", http.StatusInternalServerError)
+			http.Error(w, "no stream", http.StatusNotFound)
 			return
 		}
 		activeStream.GetStreamHandler().ServeHTTP(w, r)
@@ -124,9 +140,24 @@ func (m *Manager) abortPreparation(clientId string, err error) {
 	m.nativePlayer.AbortOpen(clientId, err.Error())
 }
 
+// lockClient acquires this client's load mutex, returning an unlock func.
+func (m *Manager) lockClient(clientId string) func() {
+	v, _ := m.clientLoadMu.LoadOrStore(clientId, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
 // loadStream loads a new stream for a client. Does not affect other clients' streams.
+// Serialized per clientId: two rapid Play calls for the same client would
+// otherwise interleave prepareNewStream's terminate-and-replace with the
+// map registration, leaking the loser's downloader/cache/subtitle streams.
 func (m *Manager) loadStream(stream Stream) {
 	clientId := stream.ClientId()
+
+	unlock := m.lockClient(clientId)
+	defer unlock()
+
 	m.prepareNewStream(clientId, "Loading stream...")
 
 	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Loading stream")
@@ -136,6 +167,11 @@ func (m *Manager) loadStream(stream Stream) {
 	if bs, ok := m.getBaseStream(stream); ok {
 		bs.streamCtx = ctx
 		bs.streamCancelFunc = cancel
+		bs.self = stream
+	} else {
+		// No BaseStream to hold streamCancelFunc for later cleanup — nothing
+		// will ever cancel this context, so cancel it now to avoid a leak.
+		cancel()
 	}
 
 	// Register the stream
@@ -226,7 +262,7 @@ func (m *Manager) listenToPlayerEvents() {
 			case *videocore.VideoTerminatedEvent:
 				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video terminated")
 				cs.Terminate()
-				m.streams.Delete(cs.ClientId())
+				m.streams.DeleteIfSame(cs.ClientId(), cs)
 			case *videocore.VideoCompletedEvent:
 				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video completed")
 
@@ -242,18 +278,6 @@ func (m *Manager) listenToPlayerEvents() {
 			}
 		}
 	}()
-}
-
-// unloadStreamByClientId removes and terminates a specific client's stream.
-func (m *Manager) unloadStreamByClientId(clientId string) {
-	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Unloading stream for client")
-
-	if stream, ok := m.streams.Get(clientId); ok {
-		stream.Terminate()
-		m.streams.Delete(clientId)
-	}
-
-	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Stream unloaded successfully")
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -279,16 +303,17 @@ type BaseStream struct {
 	streamCtx        context.Context
 	streamCancelFunc context.CancelFunc
 
+	// self holds the concrete Stream this BaseStream is embedded in, set once
+	// by loadStream. Needed because a method promoted from BaseStream only
+	// receives the embedded field's address, not the original interface value
+	// the streams map holds — self lets StreamError delete-by-identity.
+	self Stream
+
 	// Subtitle stream management
 	activeSubtitleStreams *result.Map[string, *SubtitleStream]
 
 	manager        *Manager
 	updateProgress sync.Once
-}
-
-// StreamCtx returns this stream's context. Use this instead of manager.playbackCtx.
-func (s *BaseStream) StreamCtx() context.Context {
-	return s.streamCtx
 }
 
 var _ Stream = (*BaseStream)(nil)
@@ -355,8 +380,13 @@ func (s *BaseStream) StreamError(err error) {
 	s.logger.Error().Err(err).Msg("directstream: Stream error occurred")
 	s.manager.nativePlayer.Error(s.clientId, err)
 	s.Terminate()
-	// Remove from the map without calling Terminate again
-	s.manager.streams.Delete(s.clientId)
+	// Remove from the map only if it's still THIS stream — a late error on a
+	// stream the client has already replaced must not delete the new one.
+	if s.self != nil {
+		s.manager.streams.DeleteIfSame(s.clientId, s.self)
+	} else {
+		s.manager.streams.Delete(s.clientId)
+	}
 }
 
 func (s *BaseStream) GetSubtitleEventCache() *result.Map[string, *mkvparser.SubtitleEvent] {
@@ -404,7 +434,10 @@ func loadContentType(path string, reader ...io.ReadSeekCloser) string {
 func (m *Manager) preStreamError(stream Stream, err error) {
 	stream.Terminate()
 	m.nativePlayer.Error(stream.ClientId(), err)
-	m.streams.Delete(stream.ClientId())
+	// Only remove if still this stream — loadStream holds the client lock for
+	// its whole duration, so this can't race a newer registration, but keep
+	// the identity check for defense in depth.
+	m.streams.DeleteIfSame(stream.ClientId(), stream)
 }
 
 func (m *Manager) getContentTypeAndLength(url string) (string, int64, error) {

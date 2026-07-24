@@ -61,6 +61,20 @@ func (c *Map[K, V]) Delete(key K) {
 	c.store.Delete(key)
 }
 
+// DeleteIfSame deletes key only if its current value is still expected,
+// returning whether a deletion happened. Use this instead of Delete when a
+// late/stale caller might otherwise remove a value that a newer operation
+// already replaced under the same key.
+func (c *Map[K, V]) DeleteIfSame(key K, expected V) bool {
+	return c.store.LoadAndDeleteIf(key, func(raw interface{}) bool {
+		ci, ok := raw.(*mapItem[K, V])
+		if !ok {
+			return false
+		}
+		return any(ci.value) == any(expected)
+	})
+}
+
 func (c *Map[K, V]) Clear() {
 	c.store.Range(func(key interface{}, value interface{}) bool {
 		c.store.Delete(key)

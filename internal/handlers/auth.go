@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"seanime/internal/api/anilist"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/platforms/anilist_platform"
@@ -33,11 +34,22 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	// Set a new AniList client by passing to JWT token
-	h.App.UpdateAnilistClientToken(b.Token)
+	profileID := core.GetProfileIDFromContext(c)
+	isProfileLogin := h.App.MultiUserEnabled && profileID != ""
 
-	// Get viewer data from AniList
-	getViewer, err := h.App.AnilistClientRef.Get().GetViewer(context.Background())
+	// Validate the token and fetch viewer data.
+	// In multi-user mode this must use a throwaway client: mutating the global
+	// client would make the global platform carry whichever profile logged in last.
+	var getViewer *anilist.GetViewer
+	var err error
+	if isProfileLogin {
+		tempClient := anilist.NewAnilistClient(b.Token, "")
+		getViewer, err = tempClient.GetViewer(context.Background())
+	} else {
+		// Set a new AniList client by passing to JWT token
+		h.App.UpdateAnilistClientToken(b.Token)
+		getViewer, err = h.App.AnilistClientRef.Get().GetViewer(context.Background())
+	}
 	if err != nil {
 		h.App.Logger.Error().Msg("Could not authenticate to AniList")
 		return h.RespondWithError(c, err)
@@ -54,8 +66,6 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 	}
 
 	// Save account data in database
-	profileID := core.GetProfileIDFromContext(c)
-
 	if profileID == "" {
 		// Legacy single-user mode
 		_, err = h.App.Database.UpsertAccount(&models.Account{
@@ -97,12 +107,19 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 
 	h.App.Logger.Info().Msg("app: Authenticated to AniList")
 
-	// Invalidate the pool cache for this profile so it picks up the new token
-	if h.App.AnilistPool != nil && profileID != "" {
-		h.App.AnilistPool.InvalidateProfile(profileID)
+	if isProfileLogin {
+		// Invalidate the pool cache for this profile so it picks up the new token,
+		// and evict the profile's stream session so it's rebuilt with the new platform.
+		if h.App.AnilistPool != nil {
+			h.App.AnilistPool.InvalidateProfile(profileID)
+		}
+		if h.App.StreamSessionManager != nil {
+			h.App.StreamSessionManager.EvictSession(profileID)
+		}
+		return h.RespondWithData(c, h.NewStatus(c))
 	}
 
-	// Update the platform
+	// Legacy single-user mode: update the global platform
 	anilistPlatform := anilist_platform.NewAnilistPlatform(h.App.AnilistClientRef, h.App.ExtensionBankRef, h.App.Logger, h.App.Database, h.App.LogoutFromAnilist)
 	h.App.UpdatePlatform(anilistPlatform)
 
@@ -139,6 +156,9 @@ func (h *Handler) HandleLogout(c echo.Context) error {
 		_ = h.App.Database.ClearAccountForProfile(profileID)
 		if h.App.AnilistPool != nil {
 			h.App.AnilistPool.InvalidateProfile(profileID)
+		}
+		if h.App.StreamSessionManager != nil {
+			h.App.StreamSessionManager.EvictSession(profileID)
 		}
 	} else {
 		h.App.LogoutFromAnilist()

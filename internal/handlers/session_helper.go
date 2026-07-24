@@ -15,7 +15,7 @@ func (h *Handler) getStreamSession(c echo.Context) *core.ProfileStreamSession {
 		// GetAnimeCollection may fall back to a network request on cache miss.
 		go func() {
 			defer util.HandlePanicThen(func() {})
-			h.App.SeedSessionCollection(session)
+			h.App.SeedSessionCollection(profileID, session)
 		}()
 	}
 	return session

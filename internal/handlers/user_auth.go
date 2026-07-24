@@ -4,12 +4,21 @@ import (
 	"net/http"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// dummyBcryptHash equalizes response time when the username doesn't exist
+// (bcrypt hash of an arbitrary string, never matches real input in practice).
+var dummyBcryptHash = []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
+
+// adminSetupMu serializes initial admin setup so two concurrent setup posts
+// can't both pass the AdminExists check and create two admins.
+var adminSetupMu sync.Mutex
 
 // HandleSetupCheck
 //
@@ -52,6 +61,9 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 	if b.Password != b.ConfirmPassword {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Passwords do not match"})
 	}
+
+	adminSetupMu.Lock()
+	defer adminSetupMu.Unlock()
 
 	exists, _ := h.App.Database.AdminExists()
 	if exists {
@@ -108,10 +120,7 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
-		_, err = h.App.Database.UpsertInstanceConfig(&models.InstanceConfig{
-			AccessCodeHash: string(accessCodeHash),
-		})
-		if err != nil {
+		if err := h.App.Database.SetInstanceAccessCodeHash(string(accessCodeHash)); err != nil {
 			return h.RespondWithError(c, err)
 		}
 	}
@@ -119,6 +128,73 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 	h.App.MultiUserEnabled = true
 	h.App.Logger.Info().Msg("app: Admin account created")
 
+	// Log the new admin in immediately so they don't have to retype the
+	// credentials they just created.
+	token, err := core.GenerateToken(h.App.JWTSecret, profile.ID, true, "admin", 24*time.Hour)
+	if err != nil {
+		return h.RespondWithData(c, map[string]interface{}{"success": true})
+	}
+	c.SetCookie(&http.Cookie{
+		Name:     "seanime-auth",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
+	})
+
+	return h.RespondWithData(c, map[string]interface{}{"success": true, "token": token, "profile": profile})
+}
+
+// HandleChangeAdminPassword
+//
+//	@summary changes the admin password (admin only, current password required).
+//	@route /api/v1/auth/change-password [POST]
+//	@returns map[string]interface{}
+func (h *Handler) HandleChangeAdminPassword(c echo.Context) error {
+	if !core.GetIsAdminFromContext(c) {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})
+	}
+
+	type body struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+		ConfirmPassword string `json:"confirmPassword"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	if b.NewPassword == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "New password is required"})
+	}
+	if b.NewPassword != b.ConfirmPassword {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Passwords do not match"})
+	}
+
+	admin, err := h.App.Database.GetAdmin()
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Admin account not found"})
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(admin.PasswordHash), []byte(b.CurrentPassword)); err != nil {
+		authLimiter.fail(c.RealIP())
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+	}
+	authLimiter.success(c.RealIP())
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(b.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	if err := h.App.Database.UpdateAdminPassword(admin.ID, string(newHash)); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	h.App.Logger.Info().Msg("app: Admin password changed")
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
 }
 
@@ -138,14 +214,24 @@ func (h *Handler) HandleAdminLogin(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if resp := h.checkAuthRateLimit(c); resp != nil {
+		return resp
+	}
+
 	admin, err := h.App.Database.GetAdminByUsername(b.Username)
 	if err != nil {
+		// Equalize response time with the known-username path (username enumeration)
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(b.Password))
+		authLimiter.fail(c.RealIP())
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(admin.PasswordHash), []byte(b.Password)); err != nil {
+		authLimiter.fail(c.RealIP())
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 	}
+
+	authLimiter.success(c.RealIP())
 
 	token, err := core.GenerateToken(h.App.JWTSecret, admin.ProfileID, true, "admin", 24*time.Hour)
 	if err != nil {
@@ -182,14 +268,21 @@ func (h *Handler) HandleAccessCode(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if resp := h.checkAuthRateLimit(c); resp != nil {
+		return resp
+	}
+
 	config, err := h.App.Database.GetInstanceConfig()
 	if err != nil || config.AccessCodeHash == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "No access code configured"})
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(config.AccessCodeHash), []byte(b.AccessCode)); err != nil {
+		authLimiter.fail(c.RealIP())
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid access code"})
 	}
+
+	authLimiter.success(c.RealIP())
 
 	token, err := core.GenerateToken(h.App.JWTSecret, "", false, "access", 24*time.Hour)
 	if err != nil {
@@ -243,12 +336,19 @@ func (h *Handler) HandleSelectProfile(c echo.Context) error {
 	}
 
 	if profile.PinHash != "" {
+		if resp := h.checkAuthRateLimit(c); resp != nil {
+			return resp
+		}
 		if err := bcrypt.CompareHashAndPassword([]byte(profile.PinHash), []byte(b.Pin)); err != nil {
+			authLimiter.fail(c.RealIP())
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid PIN"})
 		}
+		authLimiter.success(c.RealIP())
 	}
 
-	isAdmin := core.GetIsAdminFromContext(c) || profile.IsAdmin
+	// Admin capability comes exclusively from admin-login (password-verified).
+	// Selecting the admin's profile with an access-code token must not grant admin scope.
+	isAdmin := core.GetIsAdminFromContext(c)
 
 	scope := "profile"
 	if isAdmin {

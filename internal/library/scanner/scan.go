@@ -52,6 +52,10 @@ type Scanner struct {
 	ConfigAsString       string
 	// Optional, used to add custom sources
 	AnimeCollection *anilist.AnimeCollection
+	// ProfileID identifies which profile this scan run is for, propagated to
+	// hook events so plugins can distinguish scans across profiles instead
+	// of falling back to the legacy/unowned bucket.
+	ProfileID string
 }
 
 // Scan will scan the directory and return a list of anime.LocalFile.
@@ -102,6 +106,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 	// Invoke ScanStarted hook
 	event := &ScanStartedEvent{
+		ProfileID:         scn.ProfileID,
 		LibraryPath:       scn.DirPath,
 		OtherLibraryPaths: scn.OtherDirPaths,
 		Enhanced:          scn.Enhanced,
@@ -120,6 +125,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 	if event.DefaultPrevented {
 		// Invoke ScanCompleted hook
 		completedEvent := &ScanCompletedEvent{
+			ProfileID:  scn.ProfileID,
 			LocalFiles: event.LocalFiles,
 			Duration:   int(time.Since(startTime).Milliseconds()),
 		}
@@ -194,6 +200,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 	// Invoke ScanFilePathsRetrieved hook
 	fpEvent := &ScanFilePathsRetrievedEvent{
+		ProfileID: scn.ProfileID,
 		FilePaths: paths,
 	}
 	_ = hook.GlobalHookManager.OnScanFilePathsRetrieved().Trigger(fpEvent)
@@ -256,6 +263,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 	// Invoke ScanLocalFilesParsed hook
 	parsedEvent := &ScanLocalFilesParsedEvent{
+		ProfileID:  scn.ProfileID,
 		LocalFiles: localFiles,
 	}
 	_ = hook.GlobalHookManager.OnScanLocalFilesParsed().Trigger(parsedEvent)
@@ -321,6 +329,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 		// Invoke ScanCompleted hook
 		completedEvent := &ScanCompletedEvent{
+			ProfileID:  scn.ProfileID,
 			LocalFiles: localFiles,
 			Duration:   int(time.Since(startTime).Milliseconds()),
 		}
@@ -343,6 +352,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 	// Fetch media needed for matching
 	mf, err := NewMediaFetcher(ctx, &MediaFetcherOptions{
+		ProfileID:                  scn.ProfileID,
 		Enhanced:                   scn.Enhanced,
 		EnhanceWithOfflineDatabase: scn.EnhanceWithOfflineDatabase,
 		PlatformRef:                scn.PlatformRef,
@@ -382,6 +392,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 	// Create a new matcher
 	matcher := &Matcher{
+		ProfileID:         scn.ProfileID,
 		LocalFiles:        localFiles,
 		MediaContainer:    mc,
 		Logger:            scn.Logger,
@@ -415,6 +426,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 	// Create a new hydrator
 	hydrator := &FileHydrator{
+		ProfileID:           scn.ProfileID,
 		AllMedia:            mc.NormalizedMedia,
 		LocalFiles:          localFiles,
 		MetadataProviderRef: scn.MetadataProviderRef,
@@ -495,6 +507,7 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 
 	// Invoke ScanCompleted hook
 	completedEvent := &ScanCompletedEvent{
+		ProfileID:  scn.ProfileID,
 		LocalFiles: localFiles,
 		Duration:   int(time.Since(startTime).Milliseconds()),
 	}

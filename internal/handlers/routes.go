@@ -157,6 +157,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/auth/create-profile", h.HandleSelfCreateProfile)
 	v1.GET("/auth/me", h.HandleGetMe)
 	v1.POST("/auth/logout-session", h.HandleLogoutAuth)
+	v1.POST("/auth/change-password", h.HandleChangeAdminPassword)
 
 	// Admin profile management
 	v1.POST("/admin/profiles", h.HandleCreateProfile)

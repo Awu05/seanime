@@ -233,7 +233,7 @@ func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 
 //----------------------------------------------------------------------------------------------------------------------------------------------------
 
-var animeScheduleCache = result.NewCache[int, []*anime.ScheduleItem]()
+var animeScheduleCache = result.NewCache[string, []*anime.ScheduleItem]()
 
 // HandleGetAnimeCollectionSchedule
 //
@@ -254,10 +254,11 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 		enableAdultContent = currentSettings.GetAnilist().EnableAdultContent
 	}
 
-	// Cache key: 1 = user schedule, 2 = all airing
-	cacheKey := 1
+	// The user schedule is derived from the profile's collection, so it must be
+	// cached per profile; the all-airing schedule is public and shared.
+	cacheKey := "user:" + core.GetProfileIDFromContext(c)
 	if showAll {
-		cacheKey = 2
+		cacheKey = "all"
 	}
 
 	filterAdult := func(items []*anime.ScheduleItem) []*anime.ScheduleItem {
@@ -303,7 +304,7 @@ func (h *Handler) HandleGetAnimeCollectionSchedule(c echo.Context) error {
 
 	ret := anime.GetScheduleItems(c.Request().Context(), animeSchedule, animeCollection)
 
-	animeScheduleCache.SetT(1, ret, 1*time.Hour)
+	animeScheduleCache.SetT(cacheKey, ret, 1*time.Hour)
 
 	return h.RespondWithData(c, filterAdult(ret))
 }

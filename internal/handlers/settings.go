@@ -108,7 +108,12 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	if b.EnableTorrentStreaming {
+	// The branches below write GLOBAL secondary settings (torrentstream,
+	// mediastream, debrid provider/API key) — only admins may change those.
+	// A non-admin re-running getting-started only writes their own settings.
+	isAdmin := core.GetIsAdminFromContext(c)
+
+	if b.EnableTorrentStreaming && isAdmin {
 		go func() {
 			defer util.HandlePanicThen(func() {})
 			prev, found := h.App.Database.GetTorrentstreamSettings()
@@ -120,7 +125,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 		}()
 	}
 
-	if b.EnableTranscode {
+	if b.EnableTranscode && isAdmin {
 		go func() {
 			defer util.HandlePanicThen(func() {})
 			prev, found := h.App.Database.GetMediastreamSettings()
@@ -131,7 +136,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 		}()
 	}
 
-	if b.DebridProvider != "" && b.DebridProvider != "none" {
+	if b.DebridProvider != "" && b.DebridProvider != "none" && isAdmin {
 		go func() {
 			defer util.HandlePanicThen(func() {})
 			prev, found := h.App.Database.GetDebridSettings()

@@ -164,7 +164,7 @@ func (m *Anime) getAnimeEntry(call goja.FunctionCall) goja.Value {
 		entry = fillerEvent.Entry
 
 		if !fillerEvent.DefaultPrevented {
-			fillerManager.HydrateFillerData(fillerEvent.Entry)
+			fillerManager.HydrateFillerData(fillerEvent.Entry, profileID)
 		}
 
 		m.scheduler.ScheduleAsync(func() error {

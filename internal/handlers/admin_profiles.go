@@ -90,18 +90,19 @@ func (h *Handler) HandleDeleteProfile(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "Cannot delete admin profile"})
 	}
 
-	if err := h.App.Database.DeleteProfile(id); err != nil {
+	// Delete the profile and everything it owns in one transaction
+	if err := h.App.Database.DeleteProfileAndData(id); err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	// Clean up all per-profile data for the deleted profile
-	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.LocalFiles{})
-	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.ShelvedLocalFiles{})
-	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.Settings{})
-	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.MediastreamSettings{})
-	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.TorrentstreamSettings{})
-	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.DebridSettings{})
-	h.App.Database.Gorm().Where("profile_id = ?", id).Delete(&models.ProfileSettings{})
+	// Drop in-memory state tied to the deleted profile: its cached AniList
+	// client (still carrying the token), its stream session, and file caches.
+	if h.App.AnilistPool != nil {
+		h.App.AnilistPool.InvalidateProfile(id)
+	}
+	if h.App.StreamSessionManager != nil {
+		h.App.StreamSessionManager.EvictSession(id)
+	}
 	db_bridge.ClearAllLocalFilesCache()
 
 	return h.RespondWithData(c, map[string]interface{}{"success": true})
@@ -135,10 +136,7 @@ func (h *Handler) HandleSetAccessCode(c echo.Context) error {
 		accessCodeHash = string(hash)
 	}
 
-	_, err := h.App.Database.UpsertInstanceConfig(&models.InstanceConfig{
-		AccessCodeHash: accessCodeHash,
-	})
-	if err != nil {
+	if err := h.App.Database.SetInstanceAccessCodeHash(accessCodeHash); err != nil {
 		return h.RespondWithError(c, err)
 	}
 

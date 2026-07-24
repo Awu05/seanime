@@ -5,14 +5,11 @@ import (
 	"seanime/internal/api/anilist"
 	"time"
 	"seanime/internal/continuity"
-	"seanime/internal/database/db"
-	"seanime/internal/database/db_bridge"
 	"seanime/internal/database/models"
 	debrid_client "seanime/internal/debrid/client"
 	"seanime/internal/directstream"
 	discordrpc_presence "seanime/internal/discordrpc/presence"
 	"seanime/internal/events"
-	"seanime/internal/library/anime"
 	"seanime/internal/library/autodownloader"
 	"seanime/internal/library/autoscanner"
 	"seanime/internal/library/fillermanager"
@@ -41,7 +38,6 @@ import (
 
 	"github.com/cli/browser"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -352,20 +348,6 @@ func (a *App) initModulesOnce() {
 
 }
 
-// HandleNewDatabaseEntries initializes essential database collections.
-// It creates an empty local files collection if one does not already exist.
-func HandleNewDatabaseEntries(database *db.Database, logger *zerolog.Logger) {
-
-	// Create initial empty local files collection if none exists
-	if _, _, err := db_bridge.GetLocalFiles(database, ""); err != nil {
-		_, err := db_bridge.InsertLocalFiles(database, "", make([]*anime.LocalFile, 0))
-		if err != nil {
-			logger.Fatal().Err(err).Msgf("app: Failed to initialize local files in the database")
-		}
-	}
-
-}
-
 // InitOrRefreshModules will initialize or refresh modules that depend on settings.
 // This function is called:
 //   - After the App instance is created
@@ -419,12 +401,7 @@ func (a *App) InitOrRefreshModules(profileID string) {
 				a.Logger.Error().Err(genErr).Msg("app: Failed to generate JWT secret")
 			} else {
 				a.JWTSecret = secret
-				// Persist to DB — load existing config to avoid overwriting other fields
-				if config == nil {
-					config = &models.InstanceConfig{}
-				}
-				config.JWTSecret = secret
-				_, _ = a.Database.UpsertInstanceConfig(config)
+				_ = a.Database.SetInstanceJWTSecret(secret)
 			}
 		}
 	}
@@ -474,7 +451,6 @@ func (a *App) InitOrRefreshModules(profileID string) {
 		// Refresh auto scanner settings (thread safe)
 		if a.AutoScanner != nil {
 			go a.AutoScanner.SetSettings(*settings.Library)
-			a.AutoScanner.SetProfileID(profileID)
 		}
 
 		// Update the torrent manager settings (thread safe)
@@ -642,7 +618,6 @@ func (a *App) InitOrRefreshModules(profileID string) {
 	// Update Auto Downloader
 	if settings.AutoDownloader != nil {
 		go a.AutoDownloader.SetSettings(settings.AutoDownloader)
-		a.AutoDownloader.SetProfileID(profileID)
 	}
 
 	// +---------------------+
@@ -968,9 +943,7 @@ func (a *App) bootstrapAdminFromEnv(username, password, accessCode string) {
 	if accessCode != "" {
 		codeHash, err := bcrypt.GenerateFromPassword([]byte(accessCode), bcrypt.DefaultCost)
 		if err == nil {
-			_, _ = a.Database.UpsertInstanceConfig(&models.InstanceConfig{
-				AccessCodeHash: string(codeHash),
-			})
+			_ = a.Database.SetInstanceAccessCodeHash(string(codeHash))
 		}
 	}
 

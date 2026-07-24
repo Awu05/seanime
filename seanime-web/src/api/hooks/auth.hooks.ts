@@ -7,6 +7,10 @@ import { useRouter } from "@/lib/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+// Query key for useAuthMe — kept in sync with the hook below so mutations
+// that change the session (login/logout/select-profile) can invalidate it.
+const AUTH_ME_KEY = [API_ENDPOINTS.USER_AUTH.GetMe.key]
+
 export function useLogin() {
     const queryClient = useQueryClient()
     const router = useRouter()
@@ -62,7 +66,7 @@ export function useLogout() {
 
 // Multi-user auth hooks
 
-export function useAuthSetupCheck() {
+export function useAuthSetupCheck(enabled: boolean = true) {
     return useServerQuery<{
         needsSetup: boolean
         hasAccessCode: boolean
@@ -72,7 +76,11 @@ export function useAuthSetupCheck() {
         endpoint: API_ENDPOINTS.USER_AUTH.SetupCheck.endpoint,
         method: API_ENDPOINTS.USER_AUTH.SetupCheck.methods[0],
         queryKey: [API_ENDPOINTS.USER_AUTH.SetupCheck.key],
-        enabled: true,
+        enabled,
+        // Once we know setup is/isn't needed for this session, there's no need
+        // to re-check on every navigation.
+        staleTime: Infinity,
+        muteError: true,
     })
 }
 
@@ -88,6 +96,7 @@ export function useAuthSetup() {
 }
 
 export function useAuthAdminLogin() {
+    const queryClient = useQueryClient()
     return useServerMutation<
         { token: string; profile: any },
         { username: string; password: string }
@@ -95,6 +104,13 @@ export function useAuthAdminLogin() {
         endpoint: API_ENDPOINTS.USER_AUTH.AdminLogin.endpoint,
         method: API_ENDPOINTS.USER_AUTH.AdminLogin.methods[0],
         mutationKey: [API_ENDPOINTS.USER_AUTH.AdminLogin.key],
+        // Suppress the default error toast — the login page shows its own
+        // inline error, and a wrong password isn't the "unexpected server
+        // error" the global toast is meant for.
+        onError: () => {},
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY })
+        },
     })
 }
 
@@ -106,6 +122,7 @@ export function useAuthAccessCode() {
         endpoint: API_ENDPOINTS.USER_AUTH.AccessCode.endpoint,
         method: API_ENDPOINTS.USER_AUTH.AccessCode.methods[0],
         mutationKey: [API_ENDPOINTS.USER_AUTH.AccessCode.key],
+        onError: () => {},
     })
 }
 
@@ -119,6 +136,7 @@ export function useAuthGetProfiles() {
 }
 
 export function useAuthSelectProfile() {
+    const queryClient = useQueryClient()
     return useServerMutation<
         { token: string; profile: any },
         { profileId: string; pin?: string }
@@ -126,10 +144,13 @@ export function useAuthSelectProfile() {
         endpoint: API_ENDPOINTS.USER_AUTH.SelectProfile.endpoint,
         method: API_ENDPOINTS.USER_AUTH.SelectProfile.methods[0],
         mutationKey: [API_ENDPOINTS.USER_AUTH.SelectProfile.key],
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY })
+        },
     })
 }
 
-export function useAuthMe() {
+export function useAuthMe(enabled: boolean = true) {
     return useServerQuery<{
         profile?: any
         isAdmin: boolean
@@ -138,15 +159,24 @@ export function useAuthMe() {
         endpoint: API_ENDPOINTS.USER_AUTH.GetMe.endpoint,
         method: API_ENDPOINTS.USER_AUTH.GetMe.methods[0],
         queryKey: [API_ENDPOINTS.USER_AUTH.GetMe.key],
-        enabled: true,
+        enabled,
+        // Re-checked only when explicitly invalidated (login/logout), not on
+        // every navigation — the cookie-based session doesn't change otherwise.
+        staleTime: Infinity,
+        retry: false,
+        muteError: true,
     })
 }
 
 export function useAuthLogout() {
+    const queryClient = useQueryClient()
     return useServerMutation<{ success: boolean }, void>({
         endpoint: API_ENDPOINTS.USER_AUTH.LogoutAuth.endpoint,
         method: API_ENDPOINTS.USER_AUTH.LogoutAuth.methods[0],
         mutationKey: [API_ENDPOINTS.USER_AUTH.LogoutAuth.key],
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY })
+        },
     })
 }
 

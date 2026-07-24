@@ -40,11 +40,17 @@ func GetLocalFiles(db *db.Database, profileID string) ([]*anime.LocalFile, uint,
 	if profileID != "" {
 		err = db.Gorm().Where("profile_id = ?", profileID).Last(&res).Error
 	} else {
-		err = db.Gorm().Last(&res).Error
+		// Empty profileID means the legacy/unowned bucket — never fall back to
+		// another profile's rows (that would leak one profile's library to another).
+		err = db.Gorm().Where("profile_id = '' OR profile_id IS NULL").Last(&res).Error
 	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return make([]*anime.LocalFile, 0), 0, nil
+			empty := make([]*anime.LocalFile, 0)
+			localFilesCacheMu.Lock()
+			localFilesCache[profileID] = cachedLocalFiles{files: empty, dbID: 0}
+			localFilesCacheMu.Unlock()
+			return empty, 0, nil
 		}
 		return nil, 0, err
 	}
@@ -111,15 +117,47 @@ func InsertLocalFiles(db *db.Database, profileID string, lfs []*anime.LocalFile)
 	return lfs, nil
 }
 
+// GetAllLocalFilesAcrossProfiles returns the union of every profile's local files
+// plus the legacy/unowned bucket, deduplicated by normalized path.
+// Used by global modules (e.g. the autodownloader) that need the on-disk
+// inventory rather than a single profile's view of it.
+func GetAllLocalFilesAcrossProfiles(db *db.Database) []*anime.LocalFile {
+	profileIDs := []string{""}
+	if profiles, err := db.GetAllProfiles(); err == nil {
+		for _, p := range profiles {
+			profileIDs = append(profileIDs, p.ID)
+		}
+	}
+
+	seen := make(map[string]struct{})
+	out := make([]*anime.LocalFile, 0)
+	for _, pid := range profileIDs {
+		lfs, _, err := GetLocalFiles(db, pid)
+		if err != nil {
+			continue
+		}
+		for _, lf := range lfs {
+			key := lf.GetNormalizedPath()
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, lf)
+		}
+	}
+	return out
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func GetShelvedLocalFiles(db *db.Database, profileID string) ([]*anime.LocalFile, error) {
 	var res models.ShelvedLocalFiles
 	var err error
+	// First (lowest ID) to match the row SaveShelvedLocalFiles targets
 	if profileID != "" {
-		err = db.Gorm().Where("profile_id = ?", profileID).Last(&res).Error
+		err = db.Gorm().Where("profile_id = ?", profileID).First(&res).Error
 	} else {
-		err = db.Gorm().Last(&res).Error
+		err = db.Gorm().Where("profile_id = '' OR profile_id IS NULL").First(&res).Error
 	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -143,15 +181,19 @@ func SaveShelvedLocalFiles(db *db.Database, profileID string, lfs []*anime.Local
 		return err
 	}
 
+	// Look up the row belonging to this profile (or the legacy/unowned bucket for "").
+	// Never assume a fixed row ID: an UpdateAll upsert against someone else's row
+	// would overwrite their shelved files and reassign the row.
 	var existing models.ShelvedLocalFiles
-	var dbID uint = 1
+	var dbID uint = 0
+	query := db.Gorm()
 	if profileID != "" {
-		findErr := db.Gorm().Where("profile_id = ?", profileID).First(&existing).Error
-		if findErr == nil {
-			dbID = existing.ID
-		} else {
-			dbID = 0
-		}
+		query = query.Where("profile_id = ?", profileID)
+	} else {
+		query = query.Where("profile_id = '' OR profile_id IS NULL")
+	}
+	if findErr := query.First(&existing).Error; findErr == nil {
+		dbID = existing.ID
 	}
 
 	_, err = db.UpsertShelvedLocalFiles(&models.ShelvedLocalFiles{

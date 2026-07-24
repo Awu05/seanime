@@ -45,6 +45,14 @@ type (
 
 		playbackMu sync.Mutex
 
+		// clientLoadMu holds one mutex per clientId, serializing loadStream
+		// against itself per client. playbackMu only covers the synchronous
+		// setup in each PlayX method; loadStream itself runs in a goroutine
+		// after playbackMu is released, so rapid double-plays for the same
+		// client still need their own serialization to avoid interleaving
+		// terminate-old/register-new.
+		clientLoadMu sync.Map // clientId string -> *sync.Mutex
+
 		// ---------- Playback State ---------- //
 
 		streams *result.Map[string, Stream] // Active streams keyed by clientId

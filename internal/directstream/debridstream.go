@@ -39,6 +39,7 @@ type DebridStream struct {
 	streamReadyCh     chan struct{}        // Closed by the initiator when the stream is ready
 	httpStream        *httputil.FileStream // Shared file-backed cache for multiple readers
 	cacheMu           sync.RWMutex         // Protects httpStream access
+	downloaderMu      sync.Mutex           // Protects downloader (set on the loadStream goroutine, read from Terminate)
 	downloader        *DebridDownloader
 	terminateDebridOn sync.Once // guards DebridStream-specific terminate body
 }
@@ -100,8 +101,11 @@ func (s *DebridStream) Close() error {
 func (s *DebridStream) Terminate() {
 	s.terminateDebridOn.Do(func() {
 		// Clean up background downloader (Cleanup is idempotent via its own sync.Once).
-		if s.downloader != nil {
-			s.downloader.Cleanup()
+		s.downloaderMu.Lock()
+		hadDownloader := s.downloader != nil
+		s.downloaderMu.Unlock()
+		if hadDownloader {
+			ReleaseDebridDownloader(s.streamUrl)
 		}
 		// Clean up transcode session for this client
 		if s.manager.transcodeRequester != nil {
@@ -259,8 +263,12 @@ func (s *DebridStream) needsAudioTranscode(metadata *mkvparser.Metadata) bool {
 	return false
 }
 
-// startBackgroundDownload begins downloading the debrid file to local storage.
-// When complete, it notifies the transcoder so new encoder heads use the local file.
+// startBackgroundDownload begins downloading the debrid file to local storage
+// (deduplicated across clients streaming the same URL). Switchover to the
+// local file happens only on full completion: an early switch let ffmpeg
+// heads outrun the partial file, hit EOF, and get permanently cached as a
+// truncated segment — worse than waiting for the download to finish, which
+// estimated keyframes already make tolerable for seeking.
 func (s *DebridStream) startBackgroundDownload() {
 	if s.manager.transcodeRequester == nil {
 		return
@@ -274,32 +282,26 @@ func (s *DebridStream) startBackgroundDownload() {
 	hashBytes := sha1.Sum([]byte(s.streamUrl))
 	hash := hex.EncodeToString(hashBytes[:])
 
-	d := NewDebridDownloader(s.streamUrl, hash, downloadDir, s.contentLength, s.logger)
-	if !d.ShouldDownload() {
+	d, started := AcquireDebridDownloader(s.streamUrl, hash, downloadDir, s.contentLength, s.logger, s.streamCtx)
+	if !started {
 		s.logger.Info().Int64("size", s.contentLength).Msg("directstream(debrid): File exceeds download cap, using remote-only with estimated keyframes")
 		return
 	}
 
+	s.downloaderMu.Lock()
 	s.downloader = d
-	d.Start(s.streamCtx)
-
-	// Early switch threshold: only switch before download completes for smaller files
-	// where the download finishes quickly and seeking past the range is unlikely.
-	const earlySwitchMaxSize int64 = 5 * 1024 * 1024 * 1024 // 5GB
+	s.downloaderMu.Unlock()
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
-		switchedToLocal := false
 		for {
 			select {
 			case <-s.streamCtx.Done():
 				return
 			case <-ticker.C:
 				if d.IsComplete() {
-					if !switchedToLocal {
-						s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), 0)
-					}
+					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), 0)
 					s.logger.Info().Msg("directstream(debrid): Background download complete, switched to local file")
 
 					// Start subtitle extraction from the local file
@@ -315,16 +317,7 @@ func (s *DebridStream) startBackgroundDownload() {
 				}
 				if d.Error() != nil {
 					s.logger.Warn().Err(d.Error()).Msg("directstream(debrid): Background download failed, continuing with remote stream")
-					d.Cleanup()
 					return
-				}
-				// Switch to local file early for smaller files (under 5GB).
-				// Download completes quickly so seeking past the range is rare.
-				// Larger files wait for full download to avoid choppy remote URL fallback.
-				if !switchedToLocal && s.contentLength <= earlySwitchMaxSize && d.Progress() >= 0.05 {
-					s.manager.transcodeRequester.NotifyDownloadComplete(s.streamUrl, d.FilePath(), s.contentLength)
-					switchedToLocal = true
-					s.logger.Info().Msgf("directstream(debrid): Switched to local file at %.1f%% downloaded", d.Progress()*100)
 				}
 				s.logger.Debug().Msgf("directstream(debrid): Download progress: %.1f%%", d.Progress()*100)
 			}

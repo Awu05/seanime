@@ -35,8 +35,10 @@ func (db *Database) GetAccount() (*models.Account, error) {
 		return accountCache, nil
 	}
 
+	// Only the legacy/unowned row: per-profile accounts must never become the
+	// "global" identity just because their profile linked AniList most recently.
 	var acc models.Account
-	err := db.gormdb.Last(&acc).Error
+	err := db.gormdb.Where("profile_id = '' OR profile_id IS NULL").Last(&acc).Error
 	if err != nil {
 		return nil, err
 	}

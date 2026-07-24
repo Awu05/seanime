@@ -58,12 +58,20 @@ export function DebridSettings(props: DebridSettingsProps) {
                 mRef={formRef}
                 onSubmit={data => {
                     if (settings) {
+                        const provider = data.provider === "-" ? "" : data.provider
+                        // StremThru-only fields aren't unmounted from form state when the
+                        // user switches provider away from it — clear them explicitly so a
+                        // stale apiUrl/storeName/storeApiKey never gets submitted for a
+                        // different provider.
+                        const isStremthru = provider === "stremthru"
                         mutate({
                             settings: {
                                 ...settings,
                                 ...data,
-                                provider: data.provider === "-" ? "" : data.provider,
-                                storeName: data.storeName === "-" ? "" : data.storeName,
+                                provider,
+                                apiUrl: isStremthru ? data.apiUrl : "",
+                                storeName: isStremthru ? (data.storeName === "-" ? "" : data.storeName) : "",
+                                storeApiKey: isStremthru ? data.storeApiKey : "",
                                 streamPreferredResolution: data.streamPreferredResolution === "-" ? "" : data.streamPreferredResolution,
                             },
                         },

@@ -25,6 +25,7 @@ import (
 
 // MediaFetcher holds all anilist.BaseAnime that will be used for the comparison process
 type MediaFetcher struct {
+	ProfileID                    string
 	AllMedia                     []*anime.NormalizedMedia
 	CollectionMediaIds           []int
 	UnknownMediaIds              []int // Media IDs that are not in the user's collection
@@ -33,6 +34,7 @@ type MediaFetcher struct {
 }
 
 type MediaFetcherOptions struct {
+	ProfileID                  string
 	Enhanced                   bool
 	EnhanceWithOfflineDatabase bool
 	PlatformRef                *util.Ref[platform.Platform]
@@ -65,6 +67,7 @@ func NewMediaFetcher(ctx context.Context, opts *MediaFetcherOptions) (ret *Media
 
 	mf := new(MediaFetcher)
 	mf.ScanLogger = opts.ScanLogger
+	mf.ProfileID = opts.ProfileID
 
 	opts.Logger.Debug().
 		Any("enhanced", opts.Enhanced).
@@ -77,6 +80,7 @@ func NewMediaFetcher(ctx context.Context, opts *MediaFetcherOptions) (ret *Media
 
 	// Invoke ScanMediaFetcherStarted hook
 	event := &ScanMediaFetcherStartedEvent{
+		ProfileID:                  opts.ProfileID,
 		Enhanced:                   opts.Enhanced,
 		EnhanceWithOfflineDatabase: opts.EnhanceWithOfflineDatabase,
 		DisableAnimeCollection:     opts.DisableAnimeCollection,
@@ -234,6 +238,7 @@ func NewMediaFetcher(ctx context.Context, opts *MediaFetcherOptions) (ret *Media
 
 	// Invoke ScanMediaFetcherCompleted hook
 	completedEvent := &ScanMediaFetcherCompletedEvent{
+		ProfileID:       mf.ProfileID,
 		AllMedia:        mf.AllMedia,
 		UnknownMediaIds: mf.UnknownMediaIds,
 	}

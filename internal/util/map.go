@@ -60,6 +60,21 @@ func (m *RWMutexMap) Delete(key interface{}) {
 	m.mu.Unlock()
 }
 
+// LoadAndDeleteIf atomically deletes the entry for key only if predicate
+// returns true for its current stored value, returning whether a deletion
+// happened. Prevents a stale/late operation from deleting a value that was
+// replaced under the same key after a check-then-act race.
+func (m *RWMutexMap) LoadAndDeleteIf(key interface{}, predicate func(value interface{}) bool) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, ok := m.dirty[key]
+	if !ok || !predicate(current) {
+		return false
+	}
+	delete(m.dirty, key)
+	return true
+}
+
 func (m *RWMutexMap) Range(f func(key, value interface{}) (shouldContinue bool)) {
 	m.mu.RLock()
 	keys := make([]interface{}, 0, len(m.dirty))

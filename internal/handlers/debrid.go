@@ -14,7 +14,9 @@ import (
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
 	"seanime/internal/util"
 	"sort"
+	"strings"
 
+	"github.com/goccy/go-json"
 	"github.com/labstack/echo/v4"
 )
 
@@ -313,40 +315,44 @@ func (h *Handler) findDebridLocalVideoFile(torrentId string) (string, error) {
 		return "", errors.New("local download record not found")
 	}
 
-	info, err := os.Stat(record.LocalPath)
-	if err != nil {
-		return "", errors.New("local download directory is missing")
-	}
-
-	// If LocalPath is a file (future-proofing), return it directly.
-	if !info.IsDir() {
-		return record.LocalPath, nil
-	}
-
-	// Walk the directory and collect video files with sizes, then pick the largest.
+	// Walk only the paths this download actually created. Legacy records that
+	// point at a library root must not be walked — the largest video in the
+	// whole library is almost certainly not this download.
 	type videoEntry struct {
 		path string
 		size int64
 	}
 	var videos []videoEntry
-	err = filepath.Walk(record.LocalPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
+	for _, p := range debridLocalDownloadPaths(record) {
+		if p == "" || h.isProtectedLibraryAncestor(p) {
+			continue
 		}
-		if !util.IsValidMediaFile(path) {
-			return nil
+		info, statErr := os.Stat(p)
+		if statErr != nil {
+			continue
 		}
-		if !util.IsValidVideoExtension(filepath.Ext(path)) {
-			return nil
+		if !info.IsDir() {
+			if util.IsValidMediaFile(p) && util.IsValidVideoExtension(filepath.Ext(p)) {
+				videos = append(videos, videoEntry{path: p, size: info.Size()})
+			}
+			continue
 		}
-		videos = append(videos, videoEntry{path: path, size: info.Size()})
-		return nil
-	})
-	if err != nil {
-		return "", err
+		_ = filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+			if !util.IsValidMediaFile(path) {
+				return nil
+			}
+			if !util.IsValidVideoExtension(filepath.Ext(path)) {
+				return nil
+			}
+			videos = append(videos, videoEntry{path: path, size: info.Size()})
+			return nil
+		})
 	}
 	if len(videos) == 0 {
-		return "", errors.New("no video files found in local download directory")
+		return "", errors.New("no video files found in local download")
 	}
 	sort.Slice(videos, func(i, j int) bool { return videos[i].size > videos[j].size })
 	return videos[0].path, nil
@@ -388,13 +394,21 @@ func (h *Handler) HandleDebridDeleteLocalDownload(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	// Remove the files on disk (best-effort).
-	if record.LocalPath != "" {
-		if info, statErr := os.Stat(record.LocalPath); statErr == nil {
+	// Remove the files on disk (best-effort). Prefer the exact paths the
+	// download created; fall back to LocalPath for legacy records, but never
+	// delete a path that is (or contains) a library root — legacy records
+	// stored the raw destination, which often WAS the library root.
+	pathsToDelete := debridLocalDownloadPaths(record)
+	for _, p := range pathsToDelete {
+		if p == "" || h.isProtectedLibraryAncestor(p) {
+			h.App.Logger.Warn().Str("path", p).Msg("debrid: Refusing to delete protected path for local download")
+			continue
+		}
+		if info, statErr := os.Stat(p); statErr == nil {
 			if info.IsDir() {
-				_ = os.RemoveAll(record.LocalPath)
+				_ = os.RemoveAll(p)
 			} else {
-				_ = os.Remove(record.LocalPath)
+				_ = os.Remove(p)
 			}
 		}
 	}
@@ -404,6 +418,43 @@ func (h *Handler) HandleDebridDeleteLocalDownload(c echo.Context) error {
 	}
 
 	return h.RespondWithData(c, true)
+}
+
+// debridLocalDownloadPaths returns the paths a local-download record refers to:
+// the exact created paths when recorded, otherwise the legacy LocalPath.
+func debridLocalDownloadPaths(record *models.DebridLocalDownload) []string {
+	if record.LocalPaths != "" {
+		var paths []string
+		if err := json.Unmarshal([]byte(record.LocalPaths), &paths); err == nil && len(paths) > 0 {
+			return paths
+		}
+	}
+	if record.LocalPath != "" {
+		return []string{record.LocalPath}
+	}
+	return nil
+}
+
+// isProtectedLibraryAncestor reports whether p equals or contains any
+// configured library path — deleting such a path would delete the library.
+func (h *Handler) isProtectedLibraryAncestor(p string) bool {
+	norm := func(s string) string {
+		return strings.TrimSuffix(util.NormalizePath(filepath.Clean(s)), "/") + "/"
+	}
+	np := norm(p)
+	libPaths, _ := h.App.Database.GetAllLibraryPathsFromSettings()
+	if extra, err := h.App.Database.GetAllLibraryPathStrings(); err == nil {
+		libPaths = append(libPaths, extra...)
+	}
+	for _, lp := range libPaths {
+		if lp == "" {
+			continue
+		}
+		if strings.HasPrefix(norm(lp), np) {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleDebridGetTorrentInfo

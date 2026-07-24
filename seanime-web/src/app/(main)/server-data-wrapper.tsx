@@ -1,3 +1,4 @@
+import { useAuthMe, useAuthSetupCheck } from "@/api/hooks/auth.hooks"
 import { useGetStatus } from "@/api/hooks/status.hooks"
 import { serverAuthTokenAtom } from "@/app/(main)/_atoms/server-status.atoms"
 import { GettingStartedPage } from "@/app/(main)/_features/getting-started/getting-started-page"
@@ -56,64 +57,65 @@ export function ServerDataWrapper(props: ServerDataWrapperProps) {
 
     const [authenticated, setAuthenticated] = React.useState(false)
 
-    // Check if first-time setup is needed and redirect to /setup
+    const isSetupPath = pathname.startsWith("/setup")
+    const isAuthExemptPath = pathname.startsWith("/login") ||
+        pathname.startsWith("/access") ||
+        pathname.startsWith("/profiles") ||
+        pathname.startsWith("/setup") ||
+        pathname.startsWith("/auth/callback")
+
+    // Check if first-time setup is needed and redirect to /setup.
+    // staleTime: Infinity on the hook means this only re-fetches once per
+    // session, not on every navigation.
+    const { data: setupCheck } = useAuthSetupCheck(!!serverStatus && !isSetupPath)
     React.useEffect(() => {
-        if (serverStatus && !pathname.startsWith("/setup")) {
-            fetch("/api/v1/auth/setup-check", { credentials: "include" })
-                .then(res => res.json())
-                .then((body: any) => {
-                    if (body?.data?.needsSetup) {
-                        window.location.href = "/setup"
-                    }
-                })
-                .catch(() => {})
+        if (setupCheck?.needsSetup) {
+            window.location.href = "/setup"
         }
-    }, [serverStatus, pathname])
+    }, [setupCheck?.needsSetup])
+
+    // Multi-user mode: check for a valid session and redirect to /login if none.
+    // staleTime: Infinity means this only re-fetches when explicitly invalidated
+    // (login/logout/select-profile), not on every navigation.
+    const authMeEnabled = !!serverStatus?.multiUserEnabled && !isAuthExemptPath
+    const { data: authMe, isError: authMeIsError, isFetched: authMeIsFetched } = useAuthMe(authMeEnabled)
 
     React.useEffect(() => {
-        if (serverStatus) {
-            // Multi-user mode: redirect to login if no auth cookie
-            if (serverStatus?.multiUserEnabled &&
-                !pathname.startsWith("/login") &&
-                !pathname.startsWith("/access") &&
-                !pathname.startsWith("/profiles") &&
-                !pathname.startsWith("/setup") &&
-                !pathname.startsWith("/auth/callback")
-            ) {
-                // Check if we have a valid auth cookie by trying the auth/me endpoint
-                fetch("/api/v1/auth/me", { credentials: "include" })
-                    .then(res => {
-                        if (res.status === 401) {
-                            window.location.href = "/login"
-                            setAuthenticated(false)
-                        } else {
-                            res.json().then((body: any) => {
-                                if (body?.data?.profile) {
-                                    setCurrentProfile({
-                                        id: body.data.profile.id,
-                                        name: body.data.profile.name,
-                                        isAdmin: body.data.profile.isAdmin,
-                                        avatar: body.data.profile.avatar,
-                                    })
-                                }
-                            }).catch(() => {})
-                            setAuthenticated(true)
-                        }
-                    })
-                    .catch(() => {
-                        setAuthenticated(true) // Network error — let it through
-                    })
+        if (!serverStatus) return
+
+        if (authMeEnabled) {
+            if (!authMeIsFetched) return
+            if (authMeIsError) {
+                window.location.href = "/login"
+                setAuthenticated(false)
                 return
             }
-            if (serverStatus?.serverHasPassword && !password && pathname !== "/public/auth") {
-                window.location.href = "/public/auth"
-                setAuthenticated(false)
-                console.warn("Redirecting to auth")
-            } else {
-                setAuthenticated(true)
+            if (authMe?.profile) {
+                setCurrentProfile({
+                    id: authMe.profile.id,
+                    name: authMe.profile.name,
+                    isAdmin: authMe.profile.isAdmin,
+                    avatar: authMe.profile.avatar,
+                })
             }
+            setAuthenticated(true)
+            return
         }
-    }, [serverStatus?.serverHasPassword, serverStatus?.multiUserEnabled, password, pathname])
+
+        if (serverStatus?.multiUserEnabled) {
+            // Exempt path (login/access/profiles/setup/callback) — let it render.
+            setAuthenticated(true)
+            return
+        }
+
+        if (serverStatus?.serverHasPassword && !password && pathname !== "/public/auth") {
+            window.location.href = "/public/auth"
+            setAuthenticated(false)
+            console.warn("Redirecting to auth")
+        } else {
+            setAuthenticated(true)
+        }
+    }, [serverStatus?.serverHasPassword, serverStatus?.multiUserEnabled, password, pathname, authMeEnabled, authMeIsFetched, authMeIsError, authMe])
 
     // Refetch the server status every 2 seconds if serverReady is false
     // This is a fallback to the websocket

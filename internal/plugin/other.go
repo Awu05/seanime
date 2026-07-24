@@ -268,7 +268,7 @@ func (a *AppContextImpl) BindFillerManagerToContextObj(vm *goja.Runtime, obj *go
 		if !ok {
 			goja_bindings.PanicThrowErrorString(vm, "fillerManager not set")
 		}
-		fillerManager.HydrateFillerData(e)
+		fillerManager.HydrateFillerData(e, getProfileIDFromVM(vm))
 		return goja.Undefined()
 	})
 
@@ -277,7 +277,7 @@ func (a *AppContextImpl) BindFillerManagerToContextObj(vm *goja.Runtime, obj *go
 		if !ok {
 			goja_bindings.PanicThrowErrorString(vm, "fillerManager not set")
 		}
-		fillerManager.HydrateOnlinestreamFillerData(mId, episodes)
+		fillerManager.HydrateOnlinestreamFillerData(mId, episodes, getProfileIDFromVM(vm))
 		return goja.Undefined()
 	})
 

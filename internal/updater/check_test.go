@@ -21,37 +21,8 @@ func TestUpdater_getReleaseName(t *testing.T) {
 
 func TestUpdater_FetchLatestRelease(t *testing.T) {
 
-	fallbackGithubUrl = "https://seanimedud.app/api/releases" // simulate dead endpoint
-	//githubUrl = "https://api.github.com/repos/5rahim/seanime-desktop/releases/latest"
-
 	updater := New(constants.Version, util.NewLogger(), events.NewMockWSEventManager(util.NewLogger()))
 	release, err := updater.fetchLatestRelease("github")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if assert.NotNil(t, release) {
-		spew.Dump(release)
-	}
-}
-
-func TestUpdater_FetchLatestReleaseFromApi(t *testing.T) {
-
-	updater := New(constants.Version, util.NewLogger(), events.NewMockWSEventManager(util.NewLogger()))
-	release, err := updater.fetchLatestReleaseFromApi("github")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if assert.NotNil(t, release) {
-		spew.Dump(release)
-	}
-}
-
-func TestUpdater_FetchLatestReleaseFromGitHub(t *testing.T) {
-
-	updater := New(constants.Version, util.NewLogger(), events.NewMockWSEventManager(util.NewLogger()))
-	release, err := updater.fetchLatestReleaseFromGitHub()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -72,6 +72,25 @@ func (sm *StreamSessionManager) WithSessionsLocked(fn func(sessions []*ProfileSt
 	fn(sessions)
 }
 
+// EvictSession removes and shuts down a profile's session. Called when the
+// profile's AniList identity changes (login/logout) so the next request
+// rebuilds the session with a platform carrying the current token.
+// Safe to call when no session exists.
+func (sm *StreamSessionManager) EvictSession(profileID string) {
+	if profileID == "" {
+		profileID = "_default"
+	}
+	sm.mu.Lock()
+	session, ok := sm.sessions[profileID]
+	if ok {
+		delete(sm.sessions, profileID)
+	}
+	sm.mu.Unlock()
+	if ok {
+		session.Shutdown()
+	}
+}
+
 func (sm *StreamSessionManager) cleanupLoop() {
 	for {
 		select {

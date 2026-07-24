@@ -11,7 +11,8 @@ import (
 // Prevent default to skip the default behavior and return your own data.
 type HydrateFillerDataRequestedEvent struct {
 	hook_resolver.Event
-	Entry *anime.Entry `json:"entry"`
+	ProfileID string       `json:"profileId"`
+	Entry     *anime.Entry `json:"entry"`
 }
 
 // HydrateOnlinestreamFillerDataRequestedEvent is triggered when the filler manager requests to hydrate the filler data for online streaming episodes.
@@ -19,7 +20,8 @@ type HydrateFillerDataRequestedEvent struct {
 // Prevent default to skip the default behavior and return your own data.
 type HydrateOnlinestreamFillerDataRequestedEvent struct {
 	hook_resolver.Event
-	Episodes []*onlinestream.Episode `json:"episodes"`
+	ProfileID string                  `json:"profileId"`
+	Episodes  []*onlinestream.Episode `json:"episodes"`
 }
 
 // HydrateEpisodeFillerDataRequestedEvent is triggered when the filler manager requests to hydrate the filler data for specific episodes.
@@ -27,5 +29,6 @@ type HydrateOnlinestreamFillerDataRequestedEvent struct {
 // Prevent default to skip the default behavior and return your own data.
 type HydrateEpisodeFillerDataRequestedEvent struct {
 	hook_resolver.Event
-	Episodes []*anime.Episode `json:"episodes"`
+	ProfileID string           `json:"profileId"`
+	Episodes  []*anime.Episode `json:"episodes"`
 }

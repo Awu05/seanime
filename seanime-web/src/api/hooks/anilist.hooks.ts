@@ -132,7 +132,10 @@ export function useAnilistListSeasonAnime(variables: AnilistListSeasonAnime_Vari
         queryKey: [API_ENDPOINTS.ANILIST.AnilistListSeasonAnime.key, variables],
         data: variables,
         enabled: enabled,
-        gcTime: 1000 * 60 * 10, // 10 minutes — match the backend cache TTL
+        // staleTime (not gcTime) is what prevents refetching on remount — without
+        // it, every mount refetched even though cached data was shown meanwhile.
+        staleTime: 1000 * 60 * 10, // 10 minutes — match the backend cache TTL
+        gcTime: 1000 * 60 * 10,
     })
 }
 
