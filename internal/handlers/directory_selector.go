@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
+	"seanime/internal/core"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -30,6 +32,11 @@ type DirectorySelectorResponse struct {
 //	@route /api/v1/directory-selector [POST]
 //	@returns handlers.DirectorySelectorResponse
 func (h *Handler) HandleDirectorySelector(c echo.Context) error {
+
+	// Browsing the server filesystem is an admin capability
+	if !core.GetIsAdminFromContext(c) {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})
+	}
 
 	type body struct {
 		Input string `json:"input"`
