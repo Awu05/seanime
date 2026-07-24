@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"seanime/internal/core"
 	"seanime/internal/library/anime"
 	"strconv"
 
@@ -30,7 +31,7 @@ func (h *Handler) getAnimeEpisodeCollection(c echo.Context, mId int) (*anime.Epi
 		return nil, err
 	}
 
-	h.App.FillerManager.HydrateEpisodeFillerData(mId, ec.Episodes)
+	h.App.FillerManager.HydrateEpisodeFillerData(mId, ec.Episodes, core.GetProfileIDFromContext(c))
 
 	return ec, nil
 }

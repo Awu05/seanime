@@ -91,7 +91,7 @@ func (h *Handler) getAnimeEntry(c echo.Context, lfs []*anime.LocalFile, mId int)
 	entry = fillerEvent.Entry
 
 	if !fillerEvent.DefaultPrevented {
-		h.App.FillerManager.HydrateFillerData(fillerEvent.Entry)
+		h.App.FillerManager.HydrateFillerData(fillerEvent.Entry, fillerEvent.ProfileID)
 	}
 
 	if hydratedFromNakama {

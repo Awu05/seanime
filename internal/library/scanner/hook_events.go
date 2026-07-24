@@ -9,6 +9,8 @@ import (
 // Prevent default to skip the rest of the scanning process and return the local files.
 type ScanStartedEvent struct {
 	hook_resolver.Event
+	// ProfileID identifies which profile this scan is for (empty for the legacy/unowned bucket)
+	ProfileID string `json:"profileId"`
 	// The main directory to scan
 	LibraryPath string `json:"libraryPath"`
 	// Other directories to scan
@@ -30,6 +32,7 @@ type ScanStartedEvent struct {
 // The event includes file paths of local files that will be skipped.
 type ScanFilePathsRetrievedEvent struct {
 	hook_resolver.Event
+	ProfileID string   `json:"profileId"`
 	FilePaths []string `json:"filePaths"`
 }
 
@@ -37,6 +40,7 @@ type ScanFilePathsRetrievedEvent struct {
 // The event does not include local files that are skipped.
 type ScanLocalFilesParsedEvent struct {
 	hook_resolver.Event
+	ProfileID  string              `json:"profileId"`
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 }
 
@@ -45,6 +49,7 @@ type ScanLocalFilesParsedEvent struct {
 // Right after this event, the local files will be inserted as a new entry.
 type ScanCompletedEvent struct {
 	hook_resolver.Event
+	ProfileID  string              `json:"profileId"`
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 	Duration   int                `json:"duration"` // in milliseconds
 }
@@ -52,6 +57,7 @@ type ScanCompletedEvent struct {
 // ScanMediaFetcherStartedEvent is triggered right before Seanime starts fetching media to be matched against the local files.
 type ScanMediaFetcherStartedEvent struct {
 	hook_resolver.Event
+	ProfileID string `json:"profileId"`
 	// Whether to use enhanced scanning.
 	// Enhanced scanning will fetch media from AniList based on the local files' titles,
 	// and use the metadata to match the local files.
@@ -68,6 +74,7 @@ type ScanMediaFetcherStartedEvent struct {
 // The event includes the media IDs that are not in the user's collection.
 type ScanMediaFetcherCompletedEvent struct {
 	hook_resolver.Event
+	ProfileID string `json:"profileId"`
 	// All media fetched from AniList, to be matched against the local files.
 	AllMedia []*anime.NormalizedMedia `json:"allMedia"`
 	// Media IDs that are not in the user's collection.
@@ -78,6 +85,7 @@ type ScanMediaFetcherCompletedEvent struct {
 // Prevent default to skip the default matching, in which case modified local files will be used.
 type ScanMatchingStartedEvent struct {
 	hook_resolver.Event
+	ProfileID string `json:"profileId"`
 	// Local files to be matched.
 	// If default is prevented, these local files will be returned.
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
@@ -95,6 +103,7 @@ type ScanMatchingStartedEvent struct {
 // Prevent default to skip the default analysis and override the match.
 type ScanLocalFileMatchedEvent struct {
 	hook_resolver.Event
+	ProfileID string `json:"profileId"`
 	// Can be nil if there's no match
 	Match     *anime.NormalizedMedia `json:"match"`
 	Found     bool                   `json:"found"`
@@ -105,6 +114,7 @@ type ScanLocalFileMatchedEvent struct {
 // ScanMatchingCompletedEvent is triggered when the matching process completes.
 type ScanMatchingCompletedEvent struct {
 	hook_resolver.Event
+	ProfileID  string              `json:"profileId"`
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 }
 
@@ -112,6 +122,7 @@ type ScanMatchingCompletedEvent struct {
 // Prevent default to skip the rest of the hydration process, in which case the event's local files will be used.
 type ScanHydrationStartedEvent struct {
 	hook_resolver.Event
+	ProfileID string `json:"profileId"`
 	// Local files to be hydrated.
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 	// Media to be hydrated.
@@ -122,6 +133,7 @@ type ScanHydrationStartedEvent struct {
 // Prevent default to skip the default hydration and override the hydration.
 type ScanLocalFileHydrationStartedEvent struct {
 	hook_resolver.Event
+	ProfileID string                  `json:"profileId"`
 	LocalFile *anime.LocalFile       `json:"localFile"`
 	Media     *anime.NormalizedMedia `json:"media"`
 }
@@ -129,6 +141,7 @@ type ScanLocalFileHydrationStartedEvent struct {
 // ScanLocalFileHydratedEvent is triggered when a local file's metadata is hydrated
 type ScanLocalFileHydratedEvent struct {
 	hook_resolver.Event
+	ProfileID string           `json:"profileId"`
 	LocalFile *anime.LocalFile `json:"localFile"`
 	MediaId   int              `json:"mediaId"`
 	Episode   int              `json:"episode"`

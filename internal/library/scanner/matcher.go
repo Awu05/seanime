@@ -46,6 +46,7 @@ var ignoredSynonymsPool = sync.Pool{
 }
 
 type Matcher struct {
+	ProfileID         string
 	LocalFiles        []*anime.LocalFile
 	MediaContainer    *MediaContainer
 	Logger            *zerolog.Logger
@@ -136,6 +137,7 @@ func (m *Matcher) MatchLocalFilesWithMedia() error {
 
 	// Invoke ScanMatchingStarted hook
 	event := &ScanMatchingStartedEvent{
+		ProfileID:       m.ProfileID,
 		LocalFiles:      m.LocalFiles,
 		NormalizedMedia: m.MediaContainer.NormalizedMedia,
 		Algorithm:       m.Algorithm,
@@ -194,6 +196,7 @@ func (m *Matcher) MatchLocalFilesWithMedia() error {
 
 	// Invoke ScanMatchingCompleted hook
 	completedEvent := &ScanMatchingCompletedEvent{
+		ProfileID:  m.ProfileID,
 		LocalFiles: m.LocalFiles,
 	}
 	_ = hook.GlobalHookManager.OnScanMatchingCompleted().Trigger(completedEvent)
@@ -511,6 +514,7 @@ func (m *Matcher) matchLocalFile(lf *anime.LocalFile) {
 
 	// Invoke ScanLocalFileMatched hook
 	event := &ScanLocalFileMatchedEvent{
+		ProfileID: m.ProfileID,
 		LocalFile: lf,
 		Score:     bestScore,
 		Match:     bestMedia,
@@ -1520,6 +1524,7 @@ func (m *Matcher) matchLocalFileLegacy(lf *anime.LocalFile) {
 	// After setting the mediaId, add the hook invocation
 	// Invoke ScanLocalFileMatched hook
 	event := &ScanLocalFileMatchedEvent{
+		ProfileID: m.ProfileID,
 		LocalFile: lf,
 		Score:     finalRating,
 		Match:     mediaMatch,

@@ -290,7 +290,8 @@ type StartPlayingOptions struct {
 func (pm *PlaybackManager) StartPlayingUsingMediaPlayer(opts *StartPlayingOptions) error {
 
 	event := &LocalFilePlaybackRequestedEvent{
-		Path: opts.Payload,
+		ProfileID: pm.profileID,
+		Path:      opts.Payload,
 	}
 	err := hook.GlobalHookManager.OnLocalFilePlaybackRequested().Trigger(event)
 	if err != nil {
@@ -319,7 +320,8 @@ func (pm *PlaybackManager) StartPlayingUsingMediaPlayer(opts *StartPlayingOption
 	}
 
 	trackingEvent := &PlaybackBeforeTrackingEvent{
-		IsStream: false,
+		ProfileID: pm.profileID,
+		IsStream:  false,
 	}
 	err = hook.GlobalHookManager.OnPlaybackBeforeTracking().Trigger(trackingEvent)
 	if err != nil {
@@ -354,6 +356,7 @@ func (pm *PlaybackManager) StartUntrackedStreamingUsingMediaPlayer(windowTitle s
 	defer util.HandlePanicInModuleWithError("library/playbackmanager/StartUntrackedStreamingUsingMediaPlayer", &err)
 
 	event := &StreamPlaybackRequestedEvent{
+		ProfileID:    pm.profileID,
 		WindowTitle:  windowTitle,
 		Payload:      opts.Payload,
 		Media:        nil,
@@ -394,6 +397,7 @@ func (pm *PlaybackManager) StartStreamingUsingMediaPlayer(windowTitle string, op
 	defer util.HandlePanicInModuleWithError("library/playbackmanager/StartStreamingUsingMediaPlayer", &err)
 
 	event := &StreamPlaybackRequestedEvent{
+		ProfileID:    pm.profileID,
 		WindowTitle:  windowTitle,
 		Payload:      opts.Payload,
 		Media:        media,
@@ -460,7 +464,8 @@ func (pm *PlaybackManager) StartStreamingUsingMediaPlayer(windowTitle string, op
 	pm.Logger.Trace().Msg("playback manager: Sent stream to media player")
 
 	trackingEvent := &PlaybackBeforeTrackingEvent{
-		IsStream: true,
+		ProfileID: pm.profileID,
+		IsStream:  true,
 	}
 	err = hook.GlobalHookManager.OnPlaybackBeforeTracking().Trigger(trackingEvent)
 	if err != nil {

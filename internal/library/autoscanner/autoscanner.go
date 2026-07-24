@@ -279,6 +279,7 @@ func (as *AutoScanner) scanForProfile(profileID string, settings *models.Setting
 
 	// Create a new scanner
 	sc := scanner.Scanner{
+		ProfileID:            profileID,
 		DirPath:              settings.Library.LibraryPath,
 		OtherDirPaths:        settings.Library.LibraryPaths,
 		Enhanced:             false, // Do not use enhanced mode for auto scanner.

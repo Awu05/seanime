@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"seanime/internal/api/anilist"
+	"seanime/internal/core"
 	"seanime/internal/onlinestream"
 
 	"github.com/labstack/echo/v4"
@@ -58,7 +59,7 @@ func (h *Handler) HandleGetOnlineStreamEpisodeList(c echo.Context) error {
 		Media:    media,
 	}
 
-	h.App.FillerManager.HydrateOnlinestreamFillerData(b.MediaId, ret.Episodes)
+	h.App.FillerManager.HydrateOnlinestreamFillerData(b.MediaId, ret.Episodes, core.GetProfileIDFromContext(c))
 
 	return h.RespondWithData(c, ret)
 }

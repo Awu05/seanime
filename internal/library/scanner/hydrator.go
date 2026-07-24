@@ -26,6 +26,7 @@ import (
 // FileHydrator hydrates the metadata of all (matched) LocalFiles.
 // LocalFiles should already have their media ID hydrated.
 type FileHydrator struct {
+	ProfileID  string                   // Profile this scan run is for, propagated to hook events
 	LocalFiles []*anime.LocalFile       // Local files to hydrate
 	AllMedia   []*anime.NormalizedMedia // All media used to hydrate local files
 	// Used by media tree analysis
@@ -64,6 +65,7 @@ func (fh *FileHydrator) HydrateMetadata() {
 
 	// Invoke ScanHydrationStarted hook
 	event := &ScanHydrationStartedEvent{
+		ProfileID:  fh.ProfileID,
 		LocalFiles: fh.LocalFiles,
 		AllMedia:   fh.AllMedia,
 	}
@@ -161,6 +163,7 @@ func (fh *FileHydrator) hydrateGroupMetadata(
 
 		// Invoke ScanLocalFileHydrationStarted hook
 		event := &ScanLocalFileHydrationStartedEvent{
+			ProfileID: fh.ProfileID,
 			LocalFile: lf,
 			Media:     media,
 		}
@@ -171,6 +174,7 @@ func (fh *FileHydrator) hydrateGroupMetadata(
 		defer func() {
 			// Invoke ScanLocalFileHydrated hook
 			event := &ScanLocalFileHydratedEvent{
+				ProfileID: fh.ProfileID,
 				LocalFile: lf,
 				MediaId:   mId,
 				Episode:   episode,

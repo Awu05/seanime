@@ -94,6 +94,7 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 
 	// Create a new scanner
 	sc := scanner.Scanner{
+		ProfileID:                  profileID,
 		DirPath:                    libraryPath,
 		OtherDirPaths:              additionalLibraryPaths,
 		Enhanced:                   b.Enhanced,

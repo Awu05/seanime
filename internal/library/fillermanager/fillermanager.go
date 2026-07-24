@@ -206,7 +206,7 @@ func (fm *FillerManager) IsEpisodeFiller(mediaId int, episodeNumber int) bool {
 	return false
 }
 
-func (fm *FillerManager) HydrateFillerData(e *anime.Entry) {
+func (fm *FillerManager) HydrateFillerData(e *anime.Entry, profileID string) {
 	if fm == nil {
 		return
 	}
@@ -215,7 +215,8 @@ func (fm *FillerManager) HydrateFillerData(e *anime.Entry) {
 	}
 
 	event := &HydrateFillerDataRequestedEvent{
-		Entry: e,
+		ProfileID: profileID,
+		Entry:     e,
 	}
 	_ = hook.GlobalHookManager.OnHydrateFillerDataRequested().Trigger(event)
 	if event.DefaultPrevented {
@@ -236,7 +237,7 @@ func (fm *FillerManager) HydrateFillerData(e *anime.Entry) {
 	})
 }
 
-func (fm *FillerManager) HydrateOnlinestreamFillerData(mId int, episodes []*onlinestream.Episode) {
+func (fm *FillerManager) HydrateOnlinestreamFillerData(mId int, episodes []*onlinestream.Episode, profileID string) {
 	if fm == nil {
 		return
 	}
@@ -245,7 +246,8 @@ func (fm *FillerManager) HydrateOnlinestreamFillerData(mId int, episodes []*onli
 	}
 
 	event := &HydrateOnlinestreamFillerDataRequestedEvent{
-		Episodes: episodes,
+		ProfileID: profileID,
+		Episodes:  episodes,
 	}
 	_ = hook.GlobalHookManager.OnHydrateOnlinestreamFillerDataRequested().Trigger(event)
 	if event.DefaultPrevented {
@@ -263,13 +265,14 @@ func (fm *FillerManager) HydrateOnlinestreamFillerData(mId int, episodes []*onli
 	}
 }
 
-func (fm *FillerManager) HydrateEpisodeFillerData(mId int, episodes []*anime.Episode) {
+func (fm *FillerManager) HydrateEpisodeFillerData(mId int, episodes []*anime.Episode, profileID string) {
 	if fm == nil || len(episodes) == 0 {
 		return
 	}
 
 	event := &HydrateEpisodeFillerDataRequestedEvent{
-		Episodes: episodes,
+		ProfileID: profileID,
+		Episodes:  episodes,
 	}
 	_ = hook.GlobalHookManager.OnHydrateEpisodeFillerDataRequested().Trigger(event)
 	if event.DefaultPrevented {

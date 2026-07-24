@@ -10,13 +10,15 @@ import (
 // Prevent default to skip the default playback and override the playback.
 type LocalFilePlaybackRequestedEvent struct {
 	hook_resolver.Event
-	Path string `json:"path"`
+	ProfileID string `json:"profileId"`
+	Path      string `json:"path"`
 }
 
 // StreamPlaybackRequestedEvent is triggered when a stream is requested to be played.
 // Prevent default to skip the default playback and override the playback.
 type StreamPlaybackRequestedEvent struct {
 	hook_resolver.Event
+	ProfileID    string             `json:"profileId"`
 	WindowTitle  string             `json:"windowTitle"`
 	Payload      string             `json:"payload"`
 	Media        *anilist.BaseAnime `json:"media"`
@@ -27,7 +29,8 @@ type StreamPlaybackRequestedEvent struct {
 // Prevent default to skip playback tracking.
 type PlaybackBeforeTrackingEvent struct {
 	hook_resolver.Event
-	IsStream bool `json:"isStream"`
+	ProfileID string `json:"profileId"`
+	IsStream  bool   `json:"isStream"`
 }
 
 // PlaybackLocalFileDetailsRequestedEvent is triggered when the local files details for a specific path are requested.
@@ -37,7 +40,8 @@ type PlaybackBeforeTrackingEvent struct {
 // Prevent default to skip the default fetching and override the details.
 type PlaybackLocalFileDetailsRequestedEvent struct {
 	hook_resolver.Event
-	Path string `json:"path"`
+	ProfileID string `json:"profileId"`
+	Path      string `json:"path"`
 	// List of all local files
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 	// Empty anime list entry
@@ -53,6 +57,7 @@ type PlaybackLocalFileDetailsRequestedEvent struct {
 // In the current implementation, the details are fetched by selecting the anime from the anime collection. If nothing is found, the stream is still tracked.
 type PlaybackStreamDetailsRequestedEvent struct {
 	hook_resolver.Event
+	ProfileID       string                   `json:"profileId"`
 	AnimeCollection *anilist.AnimeCollection `json:"animeCollection"`
 	MediaId         int                      `json:"mediaId"`
 	// Empty anime list entry
