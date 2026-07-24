@@ -360,14 +360,12 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	// This will stop the stream and close the server
 	// This also sends the eventTorrentStopped event
 	r.client.mu.Lock()
-	r.client.repository.logger.Debug().Msg("torrentstream: Stopping stream and freeing all resources")
+	r.client.repository.logger.Debug().Msg("torrentstream: Stopping stream and freeing this session's resources")
 
-	// Drop all torrents — stop seeding, close connections, free disk
-	if r.client.currentTorrent.IsPresent() {
-		r.client.dropTorrents()
-	}
+	hadTorrent := r.client.currentTorrent.IsPresent()
 
-	// Remove this session's active stream
+	// Release this session's claims FIRST so the drop below only sees
+	// claims still held by other sessions (and other tabs of this one).
 	r.currentClientIdMu.RLock()
 	clientId := r.currentClientId
 	r.currentClientIdMu.RUnlock()
@@ -387,6 +385,12 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 			ps.CancelFunc()
 		}
 		r.preloadedStream = mo.None[*preloadedStream]()
+	}
+
+	// Drop torrents no session claims any more — stops seeding and frees disk
+	// without touching torrents other users are still streaming
+	if hadTorrent {
+		r.client.dropUnclaimedTorrents()
 	}
 
 	// Reset playback state
@@ -415,15 +419,13 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 }
 
 func (r *Repository) DropTorrent() error {
-	r.logger.Info().Msg("torrentstream: Dropping last torrent")
+	r.logger.Info().Msg("torrentstream: Dropping unclaimed torrents")
 
 	if r.client.torrentClient.IsAbsent() {
 		return nil
 	}
 
-	for _, t := range r.client.torrentClient.MustGet().Torrents() {
-		t.Drop()
-	}
+	r.client.dropUnclaimedTorrents()
 
 	r.mediaPlayerRepository.Stop()
 

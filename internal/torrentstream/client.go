@@ -67,6 +67,14 @@ type (
 	}
 )
 
+// Registry of every live Client wrapper sharing the anacrolix engine.
+// Drop operations consult all wrappers' claims so one session can never drop
+// a torrent (or delete its data) that another session is still streaming.
+var (
+	allClientsMu sync.RWMutex
+	allClients   = make(map[*Client]struct{})
+)
+
 func NewClient(repository *Repository) *Client {
 	ret := &Client{
 		repository:                  repository,
@@ -78,7 +86,45 @@ func NewClient(repository *Repository) *Client {
 		mediaPlayerPlaybackStatusCh: make(chan *mediaplayer.PlaybackStatus, 1),
 	}
 
+	allClientsMu.Lock()
+	allClients[ret] = struct{}{}
+	allClientsMu.Unlock()
+
 	return ret
+}
+
+// unregisterClient removes a wrapper from the shared registry when its
+// session is evicted, releasing its torrent claims.
+func unregisterClient(c *Client) {
+	allClientsMu.Lock()
+	delete(allClients, c)
+	allClientsMu.Unlock()
+}
+
+// claimedHashes returns the infohashes any live wrapper still uses:
+// per-client active streams, the legacy current torrent, and preloaded streams.
+func claimedHashes() map[metainfo.Hash]bool {
+	keep := make(map[metainfo.Hash]bool)
+	allClientsMu.RLock()
+	defer allClientsMu.RUnlock()
+	for cl := range allClients {
+		cl.streamsMu.RLock()
+		for _, stream := range cl.activeStreams {
+			if stream.Torrent != nil {
+				keep[stream.Torrent.InfoHash()] = true
+			}
+		}
+		cl.streamsMu.RUnlock()
+		if t, ok := cl.currentTorrent.Get(); ok {
+			keep[t.InfoHash()] = true
+		}
+		if cl.repository != nil {
+			if ps, ok := cl.repository.preloadedStream.Get(); ok && ps.Torrent != nil {
+				keep[ps.Torrent.InfoHash()] = true
+			}
+		}
+	}
+	return keep
 }
 
 // GetTorrentClient returns the underlying anacrolix torrent client (if initialized).
@@ -160,7 +206,7 @@ func (c *Client) initializeClient() error {
 	}
 	c.repository.logger.Info().Msgf("torrentstream: Initialized torrent client on port %d", settings.TorrentClientPort)
 	c.torrentClient = mo.Some(client)
-	c.dropTorrents()
+	c.dropUnclaimedTorrents()
 	c.mu.Unlock()
 
 	go c.monitorLoop(ctx)
@@ -319,7 +365,7 @@ func (c *Client) AddTorrent(id string) (*torrent.Torrent, error) {
 	}
 
 	// Drop torrents except current stream and prepared stream
-	c.dropExcessTorrents()
+	c.dropUnclaimedTorrents()
 
 	if strings.HasPrefix(id, "magnet") {
 		return c.addTorrentMagnet(id)
@@ -420,7 +466,7 @@ func (c *Client) Shutdown() (errs []error) {
 	if c.torrentClient.IsAbsent() {
 		return
 	}
-	c.dropTorrents()
+	c.dropUnclaimedTorrents()
 	c.currentTorrent = mo.None[*torrent.Torrent]()
 	c.currentTorrentStatus = TorrentStatus{}
 	c.repository.logger.Debug().Msg("torrentstream: Closing torrent client")
@@ -460,79 +506,36 @@ func (c *Client) RemoveTorrent(infoHash string) error {
 	return fmt.Errorf("no torrent found")
 }
 
-func (c *Client) dropTorrents() {
-	if c.torrentClient.IsAbsent() {
-		return
-	}
-	c.repository.logger.Trace().Msg("torrentstream: Dropping all torrents")
-
-	for _, t := range c.torrentClient.MustGet().Torrents() {
-		t.Drop()
-	}
-
-	if c.repository.settings.IsPresent() {
-		// Delete all torrents
-		fe, err := os.ReadDir(c.repository.settings.MustGet().DownloadDir)
-		if err == nil {
-			for _, f := range fe {
-				if f.IsDir() {
-					_ = os.RemoveAll(path.Join(c.repository.settings.MustGet().DownloadDir, f.Name()))
-				}
-			}
-		}
-	}
-
-	c.repository.logger.Debug().Msg("torrentstream: Dropped all torrents")
-}
-
-// dropExcessTorrents drops all torrents except active streams, current stream, and prepared stream
-func (c *Client) dropExcessTorrents() {
+// dropUnclaimedTorrents drops torrents that NO live session claims (across
+// every wrapper sharing the engine) and deletes only those torrents'
+// directories. Torrents another session is streaming are left untouched.
+func (c *Client) dropUnclaimedTorrents() {
 	if c.torrentClient.IsAbsent() {
 		return
 	}
 
-	// Collect info hashes we want to keep
-	keepHashes := make(map[metainfo.Hash]bool)
+	keepHashes := claimedHashes()
 
-	// Keep all active stream torrents
-	c.streamsMu.RLock()
-	for _, stream := range c.activeStreams {
-		if stream.Torrent != nil {
-			keepHashes[stream.Torrent.InfoHash()] = true
-		}
-	}
-	c.streamsMu.RUnlock()
-
-	// Keep legacy current torrent
-	if c.currentTorrent.IsPresent() {
-		keepHashes[c.currentTorrent.MustGet().InfoHash()] = true
-	}
-
-	// Keep prepared torrent
-	if c.repository.preloadedStream.IsPresent() {
-		prepared := c.repository.preloadedStream.MustGet()
-		keepHashes[prepared.Torrent.InfoHash()] = true
-	}
-
-	// Drop torrents that aren't in the keep list
 	droppedCount := 0
 	for _, t := range c.torrentClient.MustGet().Torrents() {
 		infoHash := t.InfoHash()
-		if !keepHashes[infoHash] {
-			c.repository.logger.Trace().Msgf("torrentstream: Dropping excess torrent: %s", infoHash)
-			t.Drop()
-			droppedCount++
+		if keepHashes[infoHash] {
+			continue
+		}
+		name := t.Name()
+		c.repository.logger.Trace().Msgf("torrentstream: Dropping unclaimed torrent: %s", infoHash)
+		t.Drop()
+		droppedCount++
 
-			// Also remove its directory
-			if c.repository.settings.IsPresent() {
-				torrentDir := path.Join(c.repository.settings.MustGet().DownloadDir, t.Name())
-				_ = os.RemoveAll(torrentDir)
-			}
+		// Remove only this torrent's directory
+		if c.repository.settings.IsPresent() && name != "" {
+			torrentDir := path.Join(c.repository.settings.MustGet().DownloadDir, name)
+			_ = os.RemoveAll(torrentDir)
 		}
 	}
 
 	if droppedCount > 0 {
-		c.repository.logger.Debug().Msgf("torrentstream: Dropped %d excess torrent(s)", droppedCount)
+		c.repository.logger.Debug().Msgf("torrentstream: Dropped %d unclaimed torrent(s)", droppedCount)
 	}
 }
 

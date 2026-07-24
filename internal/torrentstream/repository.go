@@ -272,18 +272,17 @@ func (r *Repository) CleanupSession() {
 	r.client.mu.Lock()
 	defer r.client.mu.Unlock()
 
-	// Drop this session's torrent (if any) and remove its activeStreams entry.
-	// Only affects the torrent this session was streaming, not the shared engine.
+	// Release this session's claims: remove its activeStreams entry and
+	// clear the legacy current torrent/file.
 	r.currentClientIdMu.Lock()
 	clientId := r.currentClientId
 	r.currentClientId = ""
 	r.currentClientIdMu.Unlock()
 	if clientId != "" {
-		if stream := r.client.GetActiveStream(clientId); stream != nil && stream.Torrent != nil {
-			stream.Torrent.Drop()
-		}
 		r.client.RemoveActiveStream(clientId)
 	}
+	r.client.currentTorrent = mo.None[*itorrent.Torrent]()
+	r.client.currentFile = mo.None[*itorrent.File]()
 
 	// Cancel any preloaded stream for this session
 	if r.preloadedStream.IsPresent() {
@@ -300,6 +299,19 @@ func (r *Repository) CleanupSession() {
 		r.playback.mediaPlayerCtxCancelFunc()
 		r.playback.mediaPlayerCtxCancelFunc = nil
 	}
+
+	// Stop this wrapper's monitor goroutine (previously leaked on every
+	// session eviction) and remove it from the shared registry so its
+	// claims are released.
+	if r.client.cancelFunc != nil {
+		r.client.cancelFunc()
+		r.client.cancelFunc = nil
+	}
+	unregisterClient(r.client)
+
+	// Drop torrents that no remaining session claims (only this session's
+	// torrents can become unclaimed here)
+	r.client.dropUnclaimedTorrents()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
