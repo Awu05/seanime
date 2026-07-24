@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/nwaples/rardecode/v2"
 )
@@ -186,6 +187,40 @@ func moveFolderOrFileTo(src, dest string) error {
 //					- Ep1.mkv
 //					- Ep2.mkv
 //	moveContentsTo("/path/to/src", "/path/to/dest") -> "/path/to/dest/Anime"
+// moveMu serializes tracked moves so concurrent downloads into the same
+// destination can attribute created entries correctly.
+var moveMu sync.Mutex
+
+// moveContentsToTracked moves src's contents into dest and returns the
+// top-level destination paths created by this move (diff of dest's entries
+// before/after). Callers persist these so deletion can target exactly what
+// the download created — never the destination root itself.
+func moveContentsToTracked(src, dest string) ([]string, error) {
+	moveMu.Lock()
+	defer moveMu.Unlock()
+
+	before := make(map[string]struct{})
+	if entries, err := os.ReadDir(dest); err == nil {
+		for _, e := range entries {
+			before[e.Name()] = struct{}{}
+		}
+	}
+
+	if err := moveContentsTo(src, dest); err != nil {
+		return nil, err
+	}
+
+	created := make([]string, 0)
+	if entries, err := os.ReadDir(dest); err == nil {
+		for _, e := range entries {
+			if _, ok := before[e.Name()]; !ok {
+				created = append(created, filepath.Join(dest, e.Name()))
+			}
+		}
+	}
+	return created, nil
+}
+
 func moveContentsTo(src, dest string) error {
 	// Ensure the source and destination directories exist
 	if _, err := os.Stat(src); os.IsNotExist(err) {

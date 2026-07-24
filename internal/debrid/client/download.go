@@ -2,6 +2,7 @@ package debrid_client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -145,6 +146,16 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, torrent
 		downloadUrls := strings.Split(downloadUrl, ",")
 		downloadMap := result.NewMap[string, downloadStatus]()
 		var successCount atomic.Int32
+		var createdMu sync.Mutex
+		createdPaths := make([]string, 0)
+
+		// For batch torrents (multiple URLs), the torrent name must not be used
+		// as the filename — every file would get the same name and overwrite
+		// the others. Fall back to Content-Disposition / URL basename per file.
+		nameForFile := torrentName
+		if len(downloadUrls) > 1 {
+			nameForFile = ""
+		}
 
 		for _, url := range downloadUrls {
 			wg.Add(1)
@@ -152,10 +163,13 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, torrent
 				defer wg.Done()
 
 				// Download the file
-				ok := r.downloadFile(ctx, tId, url, destination, torrentName, downloadMap)
+				paths, ok := r.downloadFile(ctx, tId, url, destination, nameForFile, downloadMap)
 				if !ok {
 					return
 				}
+				createdMu.Lock()
+				createdPaths = append(createdPaths, paths...)
+				createdMu.Unlock()
 				successCount.Add(1)
 			}(ctx, url)
 		}
@@ -163,12 +177,20 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, torrent
 
 		// Record the local download in the DB if at least one file was downloaded successfully.
 		// The UI uses this to show a "downloaded" indicator and offer "play locally".
+		// LocalPath records the actual created path — never the raw destination,
+		// which may be the library root (deleting it would delete the library).
 		if successCount.Load() > 0 {
+			localPath := destination
+			if len(createdPaths) == 1 {
+				localPath = createdPaths[0]
+			}
+			pathsJson, _ := json.Marshal(createdPaths)
 			if err := r.db.UpsertDebridLocalDownload(&models.DebridLocalDownload{
 				TorrentItemID: tId,
 				TorrentName:   torrentName,
 				TorrentHash:   torrentHash,
-				LocalPath:     destination,
+				LocalPath:     localPath,
+				LocalPaths:    string(pathsJson),
 			}); err != nil {
 				r.logger.Err(err).Str("torrentItemId", tId).Msg("debrid: Failed to record local download")
 			}
@@ -190,7 +212,9 @@ func (r *Repository) downloadTorrentItem(tId string, torrentName string, torrent
 	return nil
 }
 
-func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl string, destination string, torrentName string, downloadMap *result.Map[string, downloadStatus]) (ok bool) {
+// downloadFile downloads one file into destination and returns the top-level
+// destination paths it created (for exact deletion later).
+func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl string, destination string, torrentName string, downloadMap *result.Map[string, downloadStatus]) (createdPaths []string, ok bool) {
 	defer util.HandlePanicInModuleThen("debrid/client/downloadFile", func() {
 		ok = false
 	})
@@ -199,7 +223,7 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadUrl, nil)
 	if err != nil {
 		r.logger.Err(err).Str("downloadUrl", downloadUrl).Msg("debrid: Failed to create request")
-		return false
+		return nil, false
 	}
 
 	_ = os.MkdirAll(destination, os.ModePerm)
@@ -211,7 +235,7 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 	if err != nil {
 		r.logger.Err(err).Str("destination", destination).Msg("debrid: Failed to create temp folder")
 		r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Failed to create temp folder: %v", err))
-		return false
+		return nil, false
 	}
 	defer os.RemoveAll(tmpDirPath) // Clean up temp folder on exit
 
@@ -227,7 +251,7 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 	if err != nil {
 		r.logger.Err(err).Str("downloadUrl", downloadUrl).Msg("debrid: Failed to execute request")
 		r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Failed to execute download request: %v", err))
-		return false
+		return nil, false
 	}
 	defer resp.Body.Close()
 
@@ -375,7 +399,7 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 	if err != nil {
 		r.logger.Err(err).Str("tmpDownloadedFilePath", tmpDownloadedFilePath).Msg("debrid: Failed to create temp file")
 		r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Failed to create temp file: %v", err))
-		return false
+		return nil, false
 	}
 
 	totalSize := resp.ContentLength
@@ -396,7 +420,7 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 				r.logger.Err(writeErr).Str("tmpDownloadedFilePath", tmpDownloadedFilePath).Msg("debrid: Failed to write to temp file")
 				r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Download failed / Failed to write to temp file: %v", writeErr))
 				r.sendDownloadCancelledEvent(tId, downloadUrl, downloadMap)
-				return false
+				return nil, false
 			}
 			totalBytes += int64(n)
 			if totalSize > 0 {
@@ -436,13 +460,13 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 				_ = file.Close()
 				r.logger.Debug().Msg("debrid: Download cancelled")
 				r.sendDownloadCancelledEvent(tId, downloadUrl, downloadMap)
-				return false
+				return nil, false
 			}
 			_ = file.Close()
 			r.logger.Err(err).Str("downloadUrl", downloadUrl).Msg("debrid: Failed to read from response body")
 			r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Download failed / Failed to read from response body: %v", err))
 			r.sendDownloadCancelledEvent(tId, downloadUrl, downloadMap)
-			return false
+			return nil, false
 		}
 	}
 
@@ -482,20 +506,20 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 		// No extraction needed which means we downloaded a file
 		//	/path/to/destination/.tmp-123456789/Episode.mkv -> /path/to/destination/Episode.mkv
 		r.logger.Debug().Str("tmpDownloadedFilePath", tmpDownloadedFilePath).Str("destination", destination).Msg("debrid: No extraction needed, moving file directly")
-		err = moveContentsTo(filepath.Dir(tmpDownloadedFilePath), destination)
+		createdPaths, err = moveContentsToTracked(filepath.Dir(tmpDownloadedFilePath), destination)
 		if err != nil {
 			r.logger.Err(err).Str("tmpDownloadedFilePath", tmpDownloadedFilePath).Str("destination", destination).Msg("debrid: Failed to move downloaded file")
 			r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Failed to move downloaded file: %v", err))
 			r.sendDownloadCancelledEvent(tId, downloadUrl, downloadMap)
-			return false
+			return nil, false
 		}
-		return true
+		return createdPaths, true
 	}
 	if err != nil {
 		r.logger.Err(err).Str("tmpDownloadedFilePath", tmpDownloadedFilePath).Msg("debrid: Failed to extract downloaded file")
 		r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Failed to extract downloaded file: %v", err))
 		r.sendDownloadCancelledEvent(tId, downloadUrl, downloadMap)
-		return false
+		return nil, false
 	}
 
 	r.logger.Debug().Msg("debrid: Extraction completed, deleting temporary files")
@@ -511,15 +535,15 @@ func (r *Repository) downloadFile(ctx context.Context, tId string, downloadUrl s
 
 	// Move the extracted files to the destination
 	// /path/to/destination/.tmp-123456789/extracted-1234/{files} -> /path/to/destination/{files}
-	err = moveContentsTo(extractedDir, destination)
+	createdPaths, err = moveContentsToTracked(extractedDir, destination)
 	if err != nil {
 		r.logger.Err(err).Str("extractedDir", extractedDir).Str("destination", destination).Msg("debrid: Failed to move downloaded files")
 		r.wsEventManager.SendEvent(events.ErrorToast, fmt.Sprintf("debrid: Failed to move downloaded files: %v", err))
 		r.sendDownloadCancelledEvent(tId, downloadUrl, downloadMap)
-		return false
+		return nil, false
 	}
 
-	return true
+	return createdPaths, true
 }
 
 func (r *Repository) sendDownloadCancelledEvent(tId string, url string, downloadMap *result.Map[string, downloadStatus]) {

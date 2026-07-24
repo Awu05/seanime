@@ -570,6 +570,10 @@ type DebridLocalDownload struct {
 	TorrentName   string `gorm:"column:torrent_name" json:"torrentName"`
 	TorrentHash   string `gorm:"column:torrent_hash" json:"torrentHash"`
 	LocalPath     string `gorm:"column:local_path" json:"localPath"`
+	// LocalPaths is a JSON array of the exact top-level paths the download
+	// created. Deletion targets these, never LocalPath when it is a directory
+	// that could be (or contain) a library root.
+	LocalPaths string `gorm:"column:local_paths" json:"localPaths"`
 }
 
 // +---------------------+
