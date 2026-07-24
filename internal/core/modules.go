@@ -451,7 +451,6 @@ func (a *App) InitOrRefreshModules(profileID string) {
 		// Refresh auto scanner settings (thread safe)
 		if a.AutoScanner != nil {
 			go a.AutoScanner.SetSettings(*settings.Library)
-			a.AutoScanner.SetProfileID(profileID)
 		}
 
 		// Update the torrent manager settings (thread safe)
@@ -619,7 +618,6 @@ func (a *App) InitOrRefreshModules(profileID string) {
 	// Update Auto Downloader
 	if settings.AutoDownloader != nil {
 		go a.AutoDownloader.SetSettings(settings.AutoDownloader)
-		a.AutoDownloader.SetProfileID(profileID)
 	}
 
 	// +---------------------+

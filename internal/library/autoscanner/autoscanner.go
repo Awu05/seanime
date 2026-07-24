@@ -42,7 +42,6 @@ type (
 		scanning            atomic.Bool
 		onRefreshCollection func()
 		animeCollection     *anilist.AnimeCollection
-		profileID           string
 	}
 	NewAutoScannerOptions struct {
 		Database            *db.Database
@@ -85,10 +84,6 @@ func New(opts *NewAutoScannerOptions) *AutoScanner {
 
 func (as *AutoScanner) SetAnimeCollection(ac *anilist.AnimeCollection) {
 	as.animeCollection = ac
-}
-
-func (as *AutoScanner) SetProfileID(profileID string) {
-	as.profileID = profileID
 }
 
 // Notify is used to notify the AutoScanner that a file action has occurred.
@@ -189,7 +184,9 @@ func (as *AutoScanner) RunNow() {
 	as.scan()
 }
 
-// scan is used to trigger a scan.
+// scan runs the scanner for every profile so each profile's library stays
+// up to date with its own locked/ignored flags preserved. When no profiles
+// exist (multi-user never enabled), it scans the legacy unowned bucket.
 func (as *AutoScanner) scan() {
 	defer util.HandlePanicInModuleThen("scanner/autoscanner/scan", func() {
 		as.logger.Error().Msg("autoscanner: Recovered from panic")
@@ -201,9 +198,6 @@ func (as *AutoScanner) scan() {
 		return
 	}
 	defer as.scanning.Store(false)
-
-	// Create scan summary logger
-	scanSummaryLogger := summary.NewScanSummaryLogger()
 
 	as.logger.Trace().Msg("autoscanner: Starting scanner")
 	as.wsEventManager.SendEvent(events.AutoScanStarted, nil)
@@ -220,17 +214,56 @@ func (as *AutoScanner) scan() {
 		return
 	}
 
+	profileIDs := []string{""}
+	if profiles, err := as.db.GetAllProfiles(); err == nil && len(profiles) > 0 {
+		profileIDs = make([]string, 0, len(profiles))
+		for _, p := range profiles {
+			profileIDs = append(profileIDs, p.ID)
+		}
+	}
+
+	scannedAny := false
+	for _, profileID := range profileIDs {
+		if as.scanForProfile(profileID, settings) {
+			scannedAny = true
+		}
+	}
+
+	// Refresh the queue
+	go as.autoDownloader.CleanUpDownloadedItems()
+
+	if as.onRefreshCollection != nil {
+		go as.onRefreshCollection()
+	}
+
+	if scannedAny {
+		notifier.GlobalNotifier.Notify(notifier.AutoScanner, "Your library has been scanned.")
+	}
+}
+
+// scanForProfile runs one scan for a single profile's library view.
+// The disk walk is repeated per profile, but matching/metadata results come
+// from caches after the first profile, and each profile's existing locked and
+// ignored flags are merged by the scanner via ExistingLocalFiles.
+func (as *AutoScanner) scanForProfile(profileID string, settings *models.Settings) (ok bool) {
+	defer util.HandlePanicInModuleThen("scanner/autoscanner/scanForProfile", func() {
+		as.logger.Error().Str("profileId", profileID).Msg("autoscanner: Recovered from panic")
+	})
+
+	// Create scan summary logger
+	scanSummaryLogger := summary.NewScanSummaryLogger()
+
 	// Get existing local files
-	existingLfs, _, err := db_bridge.GetLocalFiles(as.db, as.profileID)
+	existingLfs, _, err := db_bridge.GetLocalFiles(as.db, profileID)
 	if err != nil {
-		as.logger.Error().Err(err).Msg("autoscanner: Failed to get existing local files")
-		return
+		as.logger.Error().Err(err).Str("profileId", profileID).Msg("autoscanner: Failed to get existing local files")
+		return false
 	}
 
 	// Get the latest shelved local files
-	existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(as.db, as.profileID)
+	existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(as.db, profileID)
 	if err != nil {
-		as.logger.Error().Err(err).Msg("autoscanner: Failed to get existing shelved local files")
+		as.logger.Error().Err(err).Str("profileId", profileID).Msg("autoscanner: Failed to get existing shelved local files")
 	}
 
 	// Create a new scan logger
@@ -239,7 +272,7 @@ func (as *AutoScanner) scan() {
 		scanLogger, err = scanner.NewScanLogger(as.logsDir)
 		if err != nil {
 			as.logger.Error().Err(err).Msg("autoscanner: Failed to create scan logger")
-			return
+			return false
 		}
 		defer scanLogger.Done()
 	}
@@ -269,30 +302,30 @@ func (as *AutoScanner) scan() {
 	allLfs, err := sc.Scan(context.Background())
 	if err != nil {
 		if errors.Is(err, scanner.ErrNoLocalFiles) {
-			return
+			return false
 		}
 
-		as.logger.Error().Err(err).Msg("autoscanner: Failed to scan library")
-		return
+		as.logger.Error().Err(err).Str("profileId", profileID).Msg("autoscanner: Failed to scan library")
+		return false
 	}
 
 	if as.db != nil && len(allLfs) > 0 {
-		as.logger.Trace().Msg("autoscanner: Updating local files")
+		as.logger.Trace().Str("profileId", profileID).Msg("autoscanner: Updating local files")
 
 		// Insert the local files
-		_, err = db_bridge.InsertLocalFiles(as.db, as.profileID, allLfs)
+		_, err = db_bridge.InsertLocalFiles(as.db, profileID, allLfs)
 		if err != nil {
-			as.logger.Error().Err(err).Msg("autoscanner: failed to insert local files")
-			return
+			as.logger.Error().Err(err).Str("profileId", profileID).Msg("autoscanner: failed to insert local files")
+			return false
 		}
 	}
 
 	if as.db != nil {
-		as.logger.Trace().Msg("autoscanner: Updating shelved local files")
+		as.logger.Trace().Str("profileId", profileID).Msg("autoscanner: Updating shelved local files")
 		// Save the shelved local files
-		err = db_bridge.SaveShelvedLocalFiles(as.db, as.profileID, sc.GetShelvedLocalFiles())
+		err = db_bridge.SaveShelvedLocalFiles(as.db, profileID, sc.GetShelvedLocalFiles())
 		if err != nil {
-			as.logger.Error().Err(err).Msg("autoscanner: failed to save shelved local files")
+			as.logger.Error().Err(err).Str("profileId", profileID).Msg("autoscanner: failed to save shelved local files")
 		}
 	}
 
@@ -302,14 +335,5 @@ func (as *AutoScanner) scan() {
 		as.logger.Error().Err(err).Msg("autoscanner: failed to insert scan summary")
 	}
 
-	// Refresh the queue
-	go as.autoDownloader.CleanUpDownloadedItems()
-
-	if as.onRefreshCollection != nil {
-		go as.onRefreshCollection()
-	}
-
-	notifier.GlobalNotifier.Notify(notifier.AutoScanner, "Your library has been scanned.")
-
-	return
+	return true
 }

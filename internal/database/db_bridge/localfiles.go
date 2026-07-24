@@ -117,6 +117,37 @@ func InsertLocalFiles(db *db.Database, profileID string, lfs []*anime.LocalFile)
 	return lfs, nil
 }
 
+// GetAllLocalFilesAcrossProfiles returns the union of every profile's local files
+// plus the legacy/unowned bucket, deduplicated by normalized path.
+// Used by global modules (e.g. the autodownloader) that need the on-disk
+// inventory rather than a single profile's view of it.
+func GetAllLocalFilesAcrossProfiles(db *db.Database) []*anime.LocalFile {
+	profileIDs := []string{""}
+	if profiles, err := db.GetAllProfiles(); err == nil {
+		for _, p := range profiles {
+			profileIDs = append(profileIDs, p.ID)
+		}
+	}
+
+	seen := make(map[string]struct{})
+	out := make([]*anime.LocalFile, 0)
+	for _, pid := range profileIDs {
+		lfs, _, err := GetLocalFiles(db, pid)
+		if err != nil {
+			continue
+		}
+		for _, lf := range lfs {
+			key := lf.GetNormalizedPath()
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, lf)
+		}
+	}
+	return out
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func GetShelvedLocalFiles(db *db.Database, profileID string) ([]*anime.LocalFile, error) {
