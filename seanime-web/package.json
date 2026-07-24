@@ -103,6 +103,7 @@
         "next-themes": "^0.4.6",
         "normalize-path": "^3.0.0",
         "ora": "^8.2.0",
+        "pascal-case": "^3.1.2",
         "path-browserify": "^1.0.1",
         "react": "^18",
         "react-colorful": "^5.6.1",
@@ -136,7 +137,6 @@
         "zod": "^3.25.67"
     },
     "devDependencies": {
-        "@graphql-codegen/client-preset": "4.8.2",
         "@rsbuild/core": "^1.7.3",
         "@rsbuild/plugin-babel": "^1.1.0",
         "@rsbuild/plugin-node-polyfill": "^1.4.4",
