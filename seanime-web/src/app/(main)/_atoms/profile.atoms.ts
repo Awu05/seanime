@@ -1,4 +1,3 @@
-import { atom } from "jotai"
 import { atomWithStorage } from "jotai/utils"
 
 export type ProfileInfo = {
@@ -12,5 +11,3 @@ export const currentProfileAtom = atomWithStorage<ProfileInfo | null>(
     "sea-current-profile",
     null,
 )
-
-export const multiUserEnabledAtom = atom<boolean>(false)

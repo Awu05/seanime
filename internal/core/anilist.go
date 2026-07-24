@@ -92,17 +92,6 @@ func (a *App) LogoutFromAnilist() {
 	a.InitOrRefreshAnilistData()
 }
 
-// GetAnimeCollection returns the user's Anilist collection if it in the cache, otherwise it queries Anilist for the user's collection.
-// When bypassCache is true, it will always query Anilist for the user's collection
-func (a *App) GetAnimeCollection(bypassCache bool) (*anilist.AnimeCollection, error) {
-	return a.AnilistPlatformRef.Get().GetAnimeCollection(context.Background(), bypassCache)
-}
-
-// GetRawAnimeCollection is the same as GetAnimeCollection but returns the raw collection that includes custom lists
-func (a *App) GetRawAnimeCollection(bypassCache bool) (*anilist.AnimeCollection, error) {
-	return a.AnilistPlatformRef.Get().GetRawAnimeCollection(context.Background(), bypassCache)
-}
-
 func (a *App) SyncAnilistToSimulatedCollection() {
 	if a.LocalManager != nil &&
 		!a.GetUser().IsSimulated &&

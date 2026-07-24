@@ -8,8 +8,6 @@ import (
 )
 
 func TestUpdater_GetLatestUpdateShouldFallback(t *testing.T) {
-	websiteUrl = "https://seanime.app/api/releases" // simulate dead endpoint
-
 	u := New("2.0.2", util.NewLogger(), nil)
 	// update channel is "github"
 
@@ -21,8 +19,6 @@ func TestUpdater_GetLatestUpdateShouldFallback(t *testing.T) {
 }
 
 func TestUpdater_GetLatestUpdateSeanime(t *testing.T) {
-	websiteUrl = "https://seanime.app/api/releases" // simulate dead endpoint
-
 	u := New("2.0.2", util.NewLogger(), nil)
 
 	update, err := u.GetLatestUpdate()

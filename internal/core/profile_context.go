@@ -2,51 +2,9 @@ package core
 
 import (
 	"seanime/internal/database/models"
-	"seanime/internal/user"
 
 	"github.com/goccy/go-json"
 )
-
-type ProfileContext struct {
-	ProfileID string
-	Account   *models.Account
-	User      *user.User
-	Token     string
-}
-
-func (a *App) GetProfileContext(profileID string) *ProfileContext {
-	if profileID == "" {
-		return &ProfileContext{
-			User:  a.GetUser(),
-			Token: a.GetUserAnilistToken(),
-		}
-	}
-
-	acc, err := a.Database.GetAccountByProfileID(profileID)
-	if err != nil || acc.Token == "" {
-		return &ProfileContext{
-			ProfileID: profileID,
-			User:      user.NewSimulatedUser(),
-		}
-	}
-
-	u, err := user.NewUser(acc)
-	if err != nil {
-		return &ProfileContext{
-			ProfileID: profileID,
-			Account:   acc,
-			User:      user.NewSimulatedUser(),
-			Token:     acc.Token,
-		}
-	}
-
-	return &ProfileContext{
-		ProfileID: profileID,
-		Account:   acc,
-		User:      u,
-		Token:     acc.Token,
-	}
-}
 
 type OverridableSettings struct {
 	TorrentProvider          *string `json:"torrentProvider,omitempty"`

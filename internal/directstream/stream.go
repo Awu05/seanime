@@ -280,18 +280,6 @@ func (m *Manager) listenToPlayerEvents() {
 	}()
 }
 
-// unloadStreamByClientId removes and terminates a specific client's stream.
-func (m *Manager) unloadStreamByClientId(clientId string) {
-	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Unloading stream for client")
-
-	if stream, ok := m.streams.Get(clientId); ok {
-		stream.Terminate()
-		m.streams.Delete(clientId)
-	}
-
-	m.Logger.Debug().Str("clientId", clientId).Msg("directstream: Stream unloaded successfully")
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type BaseStream struct {
@@ -326,11 +314,6 @@ type BaseStream struct {
 
 	manager        *Manager
 	updateProgress sync.Once
-}
-
-// StreamCtx returns this stream's context. Use this instead of manager.playbackCtx.
-func (s *BaseStream) StreamCtx() context.Context {
-	return s.streamCtx
 }
 
 var _ Stream = (*BaseStream)(nil)

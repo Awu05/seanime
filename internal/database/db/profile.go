@@ -29,15 +29,6 @@ func (db *Database) GetProfileByID(id string) (*models.Profile, error) {
 	return &profile, nil
 }
 
-func (db *Database) GetProfileByName(name string) (*models.Profile, error) {
-	var profile models.Profile
-	err := db.gormdb.Where("name = ?", name).First(&profile).Error
-	if err != nil {
-		return nil, err
-	}
-	profile.HasPin = profile.PinHash != ""
-	return &profile, nil
-}
 
 func (db *Database) GetAllProfiles() ([]*models.Profile, error) {
 	var profiles []*models.Profile
