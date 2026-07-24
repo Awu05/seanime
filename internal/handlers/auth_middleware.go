@@ -26,7 +26,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 			path := c.Request().URL.Path
 			isPublic := false
 			for _, p := range publicPaths {
-				if path == p || strings.HasPrefix(path, p) {
+				if path == p {
 					isPublic = true
 					break
 				}
@@ -44,16 +44,15 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 
 		path := c.Request().URL.Path
 		for _, p := range publicPaths {
-			if path == p || strings.HasPrefix(path, p) {
+			if path == p {
 				// For public paths, still try to extract profile from JWT if present
 				// This allows status endpoint to return per-profile settings
-				h.tryExtractProfile(c)
+				if authenticated := h.tryExtractProfile(c); !authenticated && h.App.MultiUserEnabled {
+					// No valid profile/admin token: strip secrets from responses (e.g. /status)
+					c.Set("unauthenticated", true)
+				}
 				return next(c)
 			}
-		}
-
-		if path == "/events" || strings.HasPrefix(path, "/_next") || strings.HasPrefix(path, "/icons") {
-			return next(c)
 		}
 
 		var tokenString string
@@ -106,7 +105,8 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 
 // tryExtractProfile attempts to read the JWT from the request and set profile context.
 // Used on public paths so endpoints like /status can return per-profile data when authenticated.
-func (h *Handler) tryExtractProfile(c echo.Context) {
+// Returns true only when a valid profile/admin-scoped token was found.
+func (h *Handler) tryExtractProfile(c echo.Context) bool {
 	var tokenString string
 	cookie, err := c.Cookie("seanime-auth")
 	if err == nil && cookie.Value != "" {
@@ -118,16 +118,18 @@ func (h *Handler) tryExtractProfile(c echo.Context) {
 		}
 	}
 	if tokenString == "" {
-		return
+		return false
 	}
 	claims, err := core.ParseToken(h.App.JWTSecret, tokenString)
 	if err != nil {
-		return
+		return false
 	}
 	if claims.Scope == "profile" || claims.Scope == "admin" {
 		c.Set("profileId", claims.ProfileID)
 		c.Set("isAdmin", claims.IsAdmin)
 		c.Set("authScope", claims.Scope)
 		c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
+		return true
 	}
+	return false
 }

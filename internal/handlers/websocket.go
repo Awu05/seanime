@@ -28,6 +28,34 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 		}
 	}
 
+	// Extract profile identity before upgrading.
+	// Browsers send the session cookie on same-origin upgrade requests; query params are a fallback.
+	profileID := ""
+	authenticated := false
+	tokenString := ""
+	if cookie, err := c.Cookie("seanime-auth"); err == nil && cookie.Value != "" {
+		tokenString = cookie.Value
+	}
+	if tokenString == "" {
+		tokenString = c.QueryParam("auth_token")
+	}
+	if tokenString == "" {
+		tokenString = c.QueryParam("token")
+	}
+	if tokenString != "" && h.App.JWTSecret != "" {
+		claims, err := core.ParseToken(h.App.JWTSecret, tokenString)
+		if err == nil && (claims.Scope == "profile" || claims.Scope == "admin") {
+			profileID = claims.ProfileID
+			authenticated = true
+		}
+	}
+
+	// In multi-user mode, only authenticated profiles may connect:
+	// broadcasts carry playback/scan/notification data and client events feed plugin handlers.
+	if h.App.MultiUserEnabled && !authenticated {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
 	ws, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		return err
@@ -38,19 +66,6 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 	id := c.QueryParam("id")
 	if id == "" {
 		id = "0"
-	}
-
-	// Extract profile from auth token
-	profileID := ""
-	authToken := c.QueryParam("auth_token")
-	if authToken == "" {
-		authToken = c.QueryParam("token")
-	}
-	if authToken != "" && h.App.JWTSecret != "" {
-		claims, err := core.ParseToken(h.App.JWTSecret, authToken)
-		if err == nil {
-			profileID = claims.ProfileID
-		}
 	}
 
 	// Add connection to manager

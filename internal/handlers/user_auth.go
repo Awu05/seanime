@@ -248,7 +248,9 @@ func (h *Handler) HandleSelectProfile(c echo.Context) error {
 		}
 	}
 
-	isAdmin := core.GetIsAdminFromContext(c) || profile.IsAdmin
+	// Admin capability comes exclusively from admin-login (password-verified).
+	// Selecting the admin's profile with an access-code token must not grant admin scope.
+	isAdmin := core.GetIsAdminFromContext(c)
 
 	scope := "profile"
 	if isAdmin {
