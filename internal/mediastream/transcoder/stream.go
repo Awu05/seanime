@@ -375,8 +375,8 @@ func (ts *Stream) run(start int32) error {
 		startSeg = start - 1
 		if ts.handle.getFlags()&AudioF != 0 || ts.file.Keyframes.IsEstimated {
 			// For audio: need context before the starting point to avoid ~100ms silence gap.
-			// For estimated keyframes: skip the midpoint hack since the 4-second intervals would
-			// create a ~2 second offset between audio and video seek positions, causing desync.
+			// For estimated keyframes: skip the midpoint hack since the 10-second intervals would
+			// create a ~5 second offset between audio and video seek positions, causing desync.
 			startRef = ts.file.Keyframes.Get(startSeg)
 		} else {
 			// the param for the -ss takes the keyframe before the specified time

@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -25,7 +26,8 @@ type (
 		baseUrl     string
 		storeName   string
 		storeApiKey string
-		apiKey      mo.Option[string]
+		apiKeyMu    sync.RWMutex
+		apiKey      mo.Option[string] // guarded by apiKeyMu: written by Authenticate, read by every request
 		client      *http.Client
 		logger      *zerolog.Logger
 	}
@@ -134,7 +136,9 @@ func (s *StremThru) doQuery(method, uri string, body io.Reader, contentType stri
 }
 
 func (s *StremThru) doQueryCtx(ctx context.Context, method, uri string, body io.Reader, contentType string) (*Response, error) {
+	s.apiKeyMu.RLock()
 	apiKey, found := s.apiKey.Get()
+	s.apiKeyMu.RUnlock()
 	if !found {
 		return nil, debrid.ErrNotAuthenticated
 	}
@@ -197,7 +201,9 @@ func (s *StremThru) Authenticate(apiKey string) error {
 	if strings.Contains(apiKey, ":") {
 		apiKey = base64.StdEncoding.EncodeToString([]byte(apiKey))
 	}
+	s.apiKeyMu.Lock()
 	s.apiKey = mo.Some(apiKey)
+	s.apiKeyMu.Unlock()
 	s.logger.Info().Str("baseUrl", s.baseUrl).Msg("stremthru: Credentials set")
 	return nil
 }
@@ -376,8 +382,13 @@ func (s *StremThru) GetTorrentDownloadUrl(opts debrid.DownloadTorrentOptions) (d
 		}
 	}
 
-	// Fallback to first file
+	// Fallback to first file. In a batch torrent this can stream the wrong
+	// episode, so make the fallback visible in logs rather than silent.
 	if fileLink == "" && len(magnet.Files) > 0 {
+		if opts.FileId != "" {
+			s.logger.Warn().Str("magnetId", opts.ID).Str("requestedFileId", opts.FileId).
+				Msg("stremthru: Requested file not found in magnet, falling back to first file")
+		}
 		fileLink = magnet.Files[0].Link
 	}
 
