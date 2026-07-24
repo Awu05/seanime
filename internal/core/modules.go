@@ -5,14 +5,11 @@ import (
 	"seanime/internal/api/anilist"
 	"time"
 	"seanime/internal/continuity"
-	"seanime/internal/database/db"
-	"seanime/internal/database/db_bridge"
 	"seanime/internal/database/models"
 	debrid_client "seanime/internal/debrid/client"
 	"seanime/internal/directstream"
 	discordrpc_presence "seanime/internal/discordrpc/presence"
 	"seanime/internal/events"
-	"seanime/internal/library/anime"
 	"seanime/internal/library/autodownloader"
 	"seanime/internal/library/autoscanner"
 	"seanime/internal/library/fillermanager"
@@ -41,7 +38,6 @@ import (
 
 	"github.com/cli/browser"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -349,20 +345,6 @@ func (a *App) initModulesOnce() {
 		Logger:      a.Logger,
 		Database:    a.Database,
 	})
-
-}
-
-// HandleNewDatabaseEntries initializes essential database collections.
-// It creates an empty local files collection if one does not already exist.
-func HandleNewDatabaseEntries(database *db.Database, logger *zerolog.Logger) {
-
-	// Create initial empty local files collection if none exists
-	if _, _, err := db_bridge.GetLocalFiles(database, ""); err != nil {
-		_, err := db_bridge.InsertLocalFiles(database, "", make([]*anime.LocalFile, 0))
-		if err != nil {
-			logger.Fatal().Err(err).Msgf("app: Failed to initialize local files in the database")
-		}
-	}
 
 }
 
