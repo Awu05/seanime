@@ -59,6 +59,7 @@ export default function Page() {
                                     side="left"
                                     value={showAll}
                                     onValueChange={setShowAll}
+                                    disabled={!isAuthenticated}
                                 />
                             </div>
                             <div className="lg:hidden flex items-center justify-between">
@@ -67,6 +68,7 @@ export default function Page() {
                                     side="left"
                                     value={showAll}
                                     onValueChange={setShowAll}
+                                    disabled={!isAuthenticated}
                                 />
                             </div>
 
