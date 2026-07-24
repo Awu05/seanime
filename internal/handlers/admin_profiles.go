@@ -135,10 +135,7 @@ func (h *Handler) HandleSetAccessCode(c echo.Context) error {
 		accessCodeHash = string(hash)
 	}
 
-	_, err := h.App.Database.UpsertInstanceConfig(&models.InstanceConfig{
-		AccessCodeHash: accessCodeHash,
-	})
-	if err != nil {
+	if err := h.App.Database.SetInstanceAccessCodeHash(accessCodeHash); err != nil {
 		return h.RespondWithError(c, err)
 	}
 

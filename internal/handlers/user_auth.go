@@ -108,10 +108,7 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
-		_, err = h.App.Database.UpsertInstanceConfig(&models.InstanceConfig{
-			AccessCodeHash: string(accessCodeHash),
-		})
-		if err != nil {
+		if err := h.App.Database.SetInstanceAccessCodeHash(string(accessCodeHash)); err != nil {
 			return h.RespondWithError(c, err)
 		}
 	}

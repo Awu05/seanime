@@ -419,12 +419,7 @@ func (a *App) InitOrRefreshModules(profileID string) {
 				a.Logger.Error().Err(genErr).Msg("app: Failed to generate JWT secret")
 			} else {
 				a.JWTSecret = secret
-				// Persist to DB — load existing config to avoid overwriting other fields
-				if config == nil {
-					config = &models.InstanceConfig{}
-				}
-				config.JWTSecret = secret
-				_, _ = a.Database.UpsertInstanceConfig(config)
+				_ = a.Database.SetInstanceJWTSecret(secret)
 			}
 		}
 	}
@@ -968,9 +963,7 @@ func (a *App) bootstrapAdminFromEnv(username, password, accessCode string) {
 	if accessCode != "" {
 		codeHash, err := bcrypt.GenerateFromPassword([]byte(accessCode), bcrypt.DefaultCost)
 		if err == nil {
-			_, _ = a.Database.UpsertInstanceConfig(&models.InstanceConfig{
-				AccessCodeHash: string(codeHash),
-			})
+			_ = a.Database.SetInstanceAccessCodeHash(string(codeHash))
 		}
 	}
 
