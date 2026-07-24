@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"seanime/internal/security"
 	"seanime/internal/util"
 	"strings"
 	"sync/atomic"
@@ -45,6 +47,7 @@ type Fetch struct {
 	allowedDomains []string // empty = allow all domains
 	rules          []accessRule
 	anilistToken   string
+	extensionId    string
 }
 
 func (f *Fetch) SetAnilistToken(token string) {
@@ -80,12 +83,13 @@ var whitelistedDomains = []string{
 	"*.googleapis.com",
 }
 
-func NewFetch(vm *goja.Runtime, allowedDomains []string) *Fetch {
+func NewFetch(extensionId string, vm *goja.Runtime, allowedDomains []string) *Fetch {
 	f := &Fetch{
 		vm:             vm,
 		fetchSem:       make(chan struct{}, maxConcurrentRequests),
 		vmResponseCh:   make(chan func(), maxConcurrentRequests),
 		allowedDomains: allowedDomains,
+		extensionId:    extensionId,
 	}
 	f.allowedDomains = lo.Uniq(append(f.allowedDomains, whitelistedDomains...))
 	f.compileRules()
@@ -161,18 +165,20 @@ type fetchOptions struct {
 	Headers            map[string]string
 	Timeout            int // seconds
 	NoCloudFlareBypass bool
+	Redirect           string
 	Signal             *goja.Object // AbortSignal
 }
 
 type fetchResult struct {
-	body     []byte
-	request  *req.Request
-	response *req.Response
-	json     interface{}
+	body        []byte
+	request     *req.Request
+	response    *req.Response
+	originalURL string
+	json        interface{}
 }
 
 // BindFetch binds the fetch function to the VM
-func BindFetch(vm *goja.Runtime, allowedDomains ...[]string) *Fetch {
+func BindFetch(extensionId string, vm *goja.Runtime, allowedDomains ...[]string) *Fetch {
 
 	ad := []string{"*"}
 	if len(allowedDomains) > 0 {
@@ -180,7 +186,7 @@ func BindFetch(vm *goja.Runtime, allowedDomains ...[]string) *Fetch {
 	}
 
 	// Create a new Fetch instance
-	f := NewFetch(vm, ad)
+	f := NewFetch(extensionId, vm, ad)
 	_ = vm.Set("fetch", f.Fetch)
 
 	go func() {
@@ -273,7 +279,7 @@ func (f *Fetch) isURLAllowed(urlStr string) bool {
 func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Warn().Msgf("extension: fetch panic: %v", r)
+			log.Warn().Str("id", f.extensionId).Msgf("extension: fetch panic: %v", r)
 		}
 	}()
 
@@ -294,6 +300,7 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 		Method:             "GET",
 		Timeout:            int(defaultTimeout.Seconds()),
 		NoCloudFlareBypass: false,
+		Redirect:           "follow",
 	}
 
 	var reqBody interface{}
@@ -334,6 +341,12 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 				}
 			}
 
+			if o := rawOpts.Get("redirect"); o != nil && !goja.IsUndefined(o) {
+				if v, ok := o.Export().(string); ok {
+					options.Redirect = v
+				}
+			}
+
 			if o := rawOpts.Get("signal"); o != nil && !goja.IsUndefined(o) {
 				if signalObj := o.ToObject(f.vm); signalObj != nil {
 					options.Signal = signalObj
@@ -342,33 +355,47 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 		}
 	}
 
+	switch options.Redirect {
+	case "follow", "manual", "error":
+	default:
+		reject(NewError(f.vm, fmt.Errorf("invalid redirect option: %s", options.Redirect)))
+		return f.vm.ToValue(promise)
+	}
+
 	// Check if URL is allowed based on domain restrictions
 	if !f.isURLAllowed(url) {
 		reject(NewError(f.vm, fmt.Errorf("network access denied: URL '%s' does not match any allowed domain patterns", url)))
 		return f.vm.ToValue(promise)
 	}
 
+	if err := security.ValidateOutboundUrl(url); err != nil {
+		reject(NewError(f.vm, err))
+		return f.vm.ToValue(promise)
+	}
+
 	if options.Body != nil && !goja.IsUndefined(options.Body) {
-		switch v := options.Body.Export().(type) {
-		case string:
-			reqBody = v
-		case io.Reader:
-			reqBody = v
-		case []byte:
-			reqBody = v
-		case *goja.ArrayBuffer:
-			reqBody = v.Bytes()
-		case goja.ArrayBuffer:
-			reqBody = v.Bytes()
-		case *formData:
-			body, mp := v.GetBuffer()
+		if fd, ok := getFormDataFromValue(f.vm, options.Body); ok {
+			body, mp := fd.GetBuffer()
 			reqBody = body
 			reqContentType = mp.FormDataContentType()
-		case map[string]interface{}:
-			reqBody = v
-			reqContentType = "application/json"
-		default:
-			reqBody = options.Body.String()
+		} else {
+			switch v := options.Body.Export().(type) {
+			case string:
+				reqBody = v
+			case io.Reader:
+				reqBody = v
+			case []byte:
+				reqBody = v
+			case *goja.ArrayBuffer:
+				reqBody = v.Bytes()
+			case goja.ArrayBuffer:
+				reqBody = v.Bytes()
+			case map[string]interface{}:
+				reqBody = v
+				reqContentType = "application/json"
+			default:
+				reqBody = options.Body.String()
+			}
 		}
 	}
 
@@ -397,7 +424,7 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 			}
 		}
 
-		log.Trace().Str("url", url).Str("method", options.Method).Msgf("extension: Network request")
+		log.Trace().Str("id", f.extensionId).Str("url", url).Str("method", options.Method).Msgf("extension: Network request")
 
 		var client *req.Client
 		if options.NoCloudFlareBypass {
@@ -408,6 +435,14 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 
 		// Create request with timeout
 		reqClient := client.Clone().SetTimeout(time.Duration(options.Timeout) * time.Second)
+		switch options.Redirect {
+		case "manual":
+			reqClient.SetRedirectPolicy(req.NoRedirectPolicy())
+		case "error":
+			reqClient.SetRedirectPolicy(func(req *http.Request, via []*http.Request) error {
+				return fmt.Errorf("redirect mode error: received redirect to %s", req.URL.String())
+			})
+		}
 
 		request := reqClient.R()
 
@@ -473,6 +508,7 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 		result.body = rawBody
 		result.response = resp
 		result.request = request
+		result.originalURL = url
 
 		if len(rawBody) > 0 {
 			var data interface{}
@@ -515,7 +551,7 @@ func (f *fetchResult) toGojaObject(vm *goja.Runtime) *goja.Object {
 		cookies[cookie.Name] = cookie.Value
 	}
 	_ = obj.Set("cookies", cookies)
-	_ = obj.Set("redirected", f.response.Request.URL != f.response.Request.URL) // req handles redirects automatically
+	_ = obj.Set("redirected", f.originalURL != "" && f.response.Request != nil && f.response.Request.URL.String() != f.originalURL)
 	_ = obj.Set("contentType", f.response.Header.Get("Content-Type"))
 	_ = obj.Set("contentLength", f.response.ContentLength)
 

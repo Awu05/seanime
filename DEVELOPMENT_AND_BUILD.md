@@ -83,9 +83,9 @@ For development, you should be familiar with both Go and React.
    ```bash
    go run main.go --datadir="path/to/datadir"
    ```
-   
+
 	- This will generate all the files needed in the `path/to/datadir` directory.
-   
+
 3. **Configure the development server**:
    - Change the port in the `config.toml` located in the development data directory to `43000`. The web interface will connect to this port during development. Change the host to `0.0.0.0` to allow connections from other devices.
    - Re-run the server with the updated configuration.
@@ -120,7 +120,7 @@ The Next.js development environment is configured such that all requests are mad
 
 The backend follows a well-defined structure:
 
-1. **Routes Declaration**: 
+1. **Routes Declaration**:
    - All routes are registered in `internal/handlers/routes.go`
    - Each route is associated with a specific handler method
 
@@ -188,23 +188,44 @@ go mod tidy
 
 #### Writing Tests
 
-Tests use the `test_utils` package which provides:
-- `InitTestProvider` method to initialize the test configuration
-- Flags to enable/disable specific test categories
+Tests use the `internal/testutil` package which provides:
+
+- `InitTestProvider` to load test configuration and apply feature-flag skips
+- `NewTestEnv` to create an isolated temp root, app data dir, cache dir, and database for tests
+- `FixtureRelPath` and fixture helpers
+- `RequireSampleVideoPath` for media-player tests that need a real sample file
 
 Example:
 ```go
 func TestSomething(t *testing.T) {
-    test_utils.InitTestProvider(t, test_utils.Anilist())
-    // Test code here
+       env := testutil.NewTestEnv(t, testutil.Anilist())
+       database := env.MustNewDatabase(util.NewLogger())
+       _ = database
 }
 ```
+
+AniList mock fixtures are read-only during normal test runs. Set `SEANIME_TEST_RECORD_ANILIST_FIXTURES=true` when you intentionally want missing or refreshed fixtures written back to the repository.
+
+To avoid remembering the environment variable and basic auth checks, use the refresh wrapper:
+
+```bash
+go run ./codegen/record_anilist_fixtures
+```
+
+Notes:
+
+- It validates that `test/config.toml` exists, `flags.enable_anilist_tests=true`, and `provider.anilist_jwt` is set.
+- It defaults to refreshing `./internal/api/anilist` and sets `SEANIME_TEST_RECORD_ANILIST_FIXTURES=true` for the test process.
+- Pass packages to widen the refresh scope, for example `go run ./codegen/record_anilist_fixtures ./internal/api/anilist ./internal/library/scanner`.
+- Pass `-run` to target specific live refresh tests, for example `go run ./codegen/record_anilist_fixtures -run 'TestGetAnimeByIdLive|TestBaseAnime_FetchMediaTree_BaseAnimeLive'`.
 
 #### Testing with Third-Party Apps
 
 Some tests interact with applications like Transmission and qBittorrent:
 - Ensure these applications are installed and running
 - Configure `test/config.toml` with appropriate connection details
+
+Media-player tests that open a file also require `path.sampleVideoPath` in `test/config.toml`, or `TEST_SAMPLE_VIDEO_PATH` in the environment.
 
 ## Notes and Warnings
 

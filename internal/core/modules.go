@@ -820,6 +820,25 @@ func (a *App) InitOrRefreshDebridSettings() {
 	}
 }
 
+// InitOrRefreshDummyDebridSettings initializes the settings row for the dummy (test) debrid provider.
+func (a *App) InitOrRefreshDummyDebridSettings() {
+	settings, found := a.Database.GetDummyDebridSettings()
+	if !found {
+		var err error
+		settings, err = a.Database.UpsertDummyDebridSettings(&models.DummyDebridSettings{
+			BaseModel: models.BaseModel{
+				ID: 1,
+			},
+		})
+		if err != nil {
+			a.Logger.Error().Err(err).Msg("app: Failed to initialize dummy debrid module")
+			return
+		}
+	}
+
+	a.SecondarySettings.DummyDebrid = settings
+}
+
 // InitOrRefreshAnilistData will initialize the Anilist anime collection and the account.
 // This function should be called after App.Database is initialized and after settings are updated.
 func (a *App) InitOrRefreshAnilistData() {

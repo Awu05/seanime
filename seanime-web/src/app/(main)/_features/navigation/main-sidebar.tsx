@@ -11,7 +11,7 @@ import { UpdateModal } from "@/app/(main)/_features/update/update-modal"
 import { useAutoDownloaderQueueCount } from "@/app/(main)/_hooks/autodownloader-queue-count"
 import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets"
 import { useMissingEpisodeCount } from "@/app/(main)/_hooks/missing-episodes-loader"
-import { useCurrentUser, useServerStatus, useSetServerStatus } from "@/app/(main)/_hooks/use-server-status"
+import { useCurrentUser, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { ConfirmationDialog, useConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { SeaLink } from "@/components/shared/sea-link"
 import { AppSidebar, useAppSidebarContext } from "@/components/ui/app-layout"
@@ -38,15 +38,65 @@ import { FiLogIn, FiSearch } from "react-icons/fi"
 import { HiOutlineServerStack } from "react-icons/hi2"
 import { IoCloudOfflineOutline, IoHomeOutline } from "react-icons/io5"
 import { LuBookOpen, LuCalendar, LuCompass, LuRefreshCw, LuRss, LuSettings } from "react-icons/lu"
+import { MdArrowForward } from "react-icons/md"
+import { MdArrowBack } from "react-icons/md"
 import { MdOutlineConnectWithoutContact } from "react-icons/md"
-import { PiArrowCircleLeftDuotone, PiArrowCircleRightDuotone } from "react-icons/pi"
 import { RiListCheck3 } from "react-icons/ri"
-import { SiQbittorrent, SiTransmission } from "react-icons/si"
+import { SiBittorrent, SiQbittorrent, SiTransmission } from "react-icons/si"
 import { TbReportSearch } from "react-icons/tb"
 import { nakamaModalOpenAtom, useNakamaStatus } from "../nakama/nakama-manager"
 import { PluginSidebarTray } from "../plugin/tray/plugin-sidebar-tray"
 import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { ProfileIndicator } from "./profile-indicator"
+
+function getAnilistGifAvatarCandidate(avatar?: { large?: string, medium?: string }) {
+    const source = avatar?.large || avatar?.medium
+    if (!source || source.endsWith(".gif")) return undefined
+
+    try {
+        const url = new URL(source)
+        if (!url.hostname.endsWith(".anilist.co")) return undefined
+        if (!url.pathname.includes("/file/anilistcdn/user/avatar/")) return undefined
+
+        const gifPath = url.pathname
+            .replace("/medium/", "/large/")
+            .replace(/\.(jpe?g|png|webp)$/i, ".gif")
+
+        if (gifPath === url.pathname) return undefined
+        url.pathname = gifPath
+        return url.toString()
+    }
+    catch {
+        return undefined
+    }
+}
+
+function useResolvedAnilistAvatarSrc(avatar?: { large?: string, medium?: string }) {
+    const fallbackSrc = avatar?.medium || avatar?.large
+    const gifCandidate = React.useMemo(() => getAnilistGifAvatarCandidate(avatar), [avatar?.large, avatar?.medium])
+    const [src, setSrc] = React.useState(fallbackSrc)
+
+    React.useEffect(() => {
+        setSrc(fallbackSrc)
+        if (!gifCandidate) return
+
+        let cancelled = false
+        const image = new Image()
+        image.onload = () => {
+            if (!cancelled) setSrc(gifCandidate)
+        }
+        image.onerror = () => {
+            if (!cancelled) setSrc(fallbackSrc)
+        }
+        image.src = gifCandidate
+
+        return () => {
+            cancelled = true
+        }
+    }, [fallbackSrc, gifCandidate])
+
+    return src
+}
 
 export function MainSidebar() {
 
@@ -60,14 +110,7 @@ export function MainSidebar() {
     const containerRef = React.useRef<HTMLDivElement>(null)
 
     // Logout
-    const setServerStatus = useSetServerStatus()
-    const { mutate: logout, data, isPending } = useLogout()
-
-    React.useEffect(() => {
-        if (!isPending) {
-            setServerStatus(data)
-        }
-    }, [isPending, data])
+    const { mutate: logout } = useLogout()
 
 
     const handleExpandSidebar = () => {
@@ -120,7 +163,7 @@ export function MainSidebar() {
 }
 
 
-function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean, containerRef: React.RefObject<HTMLDivElement> }) {
+function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean, containerRef: React.RefObject<HTMLDivElement | null> }) {
     const ctx = useAppSidebarContext()
     const ts = useThemeSettings()
     const router = useRouter()
@@ -169,7 +212,7 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
             href: "/schedule",
             isCurrent: pathname === "/schedule",
             addon: missingEpisodeCount > 0 ? <Badge
-                className="absolute right-0 top-0" size="sm"
+                className="absolute right-0 top-0 bg-red-400" size="sm"
                 intent="alert-solid"
             >{missingEpisodeCount}</Badge> : undefined,
         },
@@ -210,12 +253,14 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
             && serverStatus?.settings?.torrent?.defaultTorrentClient !== TORRENT_CLIENT.NONE)
             ? [{
                 id: "torrent-list",
-                iconType: serverStatus?.settings?.torrent?.defaultTorrentClient === TORRENT_CLIENT.QBITTORRENT ? SiQbittorrent : SiTransmission,
+                iconType: serverStatus?.settings?.torrent?.defaultTorrentClient === TORRENT_CLIENT.QBITTORRENT
+                    ? SiQbittorrent
+                    : serverStatus?.settings?.torrent?.defaultTorrentClient === TORRENT_CLIENT.SEANIME ? SiBittorrent : SiTransmission,
                 name: (activeTorrentCount.seeding === 0 || !serverStatus?.settings?.torrent?.showActiveTorrentCount)
                     ? "Torrent list"
                     : `Torrent list (${activeTorrentCount.seeding} seeding)`,
-                href: "/torrent-list",
-                isCurrent: pathname === "/torrent-list",
+                href: serverStatus?.settings?.torrent?.defaultTorrentClient === TORRENT_CLIENT.SEANIME ? "/torrent-client" : "/torrent-list",
+                isCurrent: pathname === "/torrent-list" || pathname === "/torrent-client",
                 addon: ((activeTorrentCount.downloading + activeTorrentCount.paused) > 0 && serverStatus?.settings?.torrent?.showActiveTorrentCount)
                     ? <Badge
                         className="absolute right-0 top-0 bg-green-500" size="sm"
@@ -244,7 +289,7 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
             href: "/auto-downloader",
             isCurrent: pathname === "/auto-downloader",
             addon: autoDownloaderQueueCount > 0 ? <Badge
-                className="absolute right-0 top-0" size="sm"
+                className="absolute right-0 top-0 bg-red-400" size="sm"
                 intent="alert-solid"
             >{autoDownloaderQueueCount}</Badge> : undefined,
         }] : [],
@@ -269,7 +314,7 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
 
     // Overflow logic
     const [autoUnpinnedIds, setAutoUnpinnedIds] = React.useState<string[]>([])
-    const overflowCheckTimeoutRef = React.useRef<NodeJS.Timeout>()
+    const overflowCheckTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
     React.useEffect(() => {
         const handleResize = () => setAutoUnpinnedIds([])
@@ -410,17 +455,17 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
                     className="bg-transparent border-none"
                     trigger={<IconButton
                         intent="gray-basic"
-                        className="!text-[--muted] hover:!text-[--foreground]"
-                        icon={<PiArrowCircleLeftDuotone />}
+                        className="!text-[--muted] hover:!text-[--foreground] rounded-full"
+                        icon={<MdArrowBack />}
                         onClick={() => {
                             router.back()
                         }}
                     />}
                 >
                     <IconButton
-                        icon={<PiArrowCircleRightDuotone />}
+                        icon={<MdArrowForward />}
                         intent="gray-subtle"
-                        className="opacity-50 hover:opacity-100"
+                        className="opacity-50 hover:opacity-100 rounded-full"
                         onClick={() => {
                             router.forward()
                         }}
@@ -515,7 +560,7 @@ function SidebarFooter({ isCollapsed, onLogout }: { isCollapsed: boolean, onLogo
                         isCurrent: pathname.includes("/extensions"),
                         addon: (!!updateData?.length || !!pluginWithIssuesCount)
                             ? <Badge
-                                className="absolute right-0 top-0 bg-red-500 animate-pulse" size="sm"
+                                className="absolute right-0 top-0 bg-red-400 animate-pulse" size="sm"
                                 intent="alert-solid"
                             >
                                 {updateData?.length || pluginWithIssuesCount || 1}
@@ -561,6 +606,7 @@ function SidebarUser({ isCollapsed, expandedSidebar, onLogout }: { isCollapsed: 
     const ctx = useAppSidebarContext()
     const user = useCurrentUser()
     const router = useRouter()
+    const avatarSrc = useResolvedAnilistAvatarSrc(user?.viewer?.avatar)
 
     const [dropdownOpen, setDropdownOpen] = React.useState(false)
     const [loginModal, setLoginModal] = useAtom(isLoginModalOpenAtom)
@@ -602,7 +648,7 @@ function SidebarUser({ isCollapsed, expandedSidebar, onLogout }: { isCollapsed: 
                             { "hidden": ctx.isBelowBreakpoint },
                         )}
                     >
-                        <Avatar size="sm" className="cursor-pointer" src={user?.viewer?.avatar?.medium || undefined} />
+                        <Avatar size="sm" className="cursor-pointer" src={avatarSrc || undefined} />
                         {expandedSidebar && <p className="truncate text-sm text-[--muted]">{user?.viewer?.name}</p>}
                     </div>}
                     open={dropdownOpen}

@@ -9,6 +9,7 @@ import {
     DebridGetTorrentInfo_Variables,
     DebridStartStream_Variables,
     SaveDebridSettings_Variables,
+    SaveDummyDebridSettings_Variables,
 } from "@/api/generated/endpoint.types"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import {
@@ -17,6 +18,7 @@ import {
     DebridClient_FilePreview,
     Models_DebridLocalDownload,
     Models_DebridSettings,
+    Models_DummyDebridSettings,
 } from "@/api/generated/types"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -43,6 +45,28 @@ export function useSaveDebridSettings() {
     })
 }
 
+export function useGetDummyDebridSettings(enabled: boolean) {
+    return useServerQuery<Models_DummyDebridSettings>({
+        endpoint: API_ENDPOINTS.DEBRID.GetDummyDebridSettings.endpoint,
+        method: API_ENDPOINTS.DEBRID.GetDummyDebridSettings.methods[0],
+        queryKey: [API_ENDPOINTS.DEBRID.GetDummyDebridSettings.key],
+        enabled: enabled,
+    })
+}
+
+export function useSaveDummyDebridSettings() {
+    const qc = useQueryClient()
+    return useServerMutation<Models_DummyDebridSettings, SaveDummyDebridSettings_Variables>({
+        endpoint: API_ENDPOINTS.DEBRID.SaveDummyDebridSettings.endpoint,
+        method: API_ENDPOINTS.DEBRID.SaveDummyDebridSettings.methods[0],
+        mutationKey: [API_ENDPOINTS.DEBRID.SaveDummyDebridSettings.key],
+        onSuccess: async () => {
+            await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.DEBRID.GetDummyDebridSettings.key] })
+            await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.STATUS.GetStatus.key] })
+        },
+    })
+}
+
 export function useDebridAddTorrents(onSuccess: () => void) {
     const qc = useQueryClient()
     return useServerMutation<boolean, DebridAddTorrents_Variables>({
@@ -58,12 +82,14 @@ export function useDebridAddTorrents(onSuccess: () => void) {
 }
 
 export function useDebridDownloadTorrent() {
+    const qc = useQueryClient()
     return useServerMutation<boolean, DebridDownloadTorrent_Variables>({
         endpoint: API_ENDPOINTS.DEBRID.DebridDownloadTorrent.endpoint,
         method: API_ENDPOINTS.DEBRID.DebridDownloadTorrent.methods[0],
         mutationKey: [API_ENDPOINTS.DEBRID.DebridDownloadTorrent.key],
         onSuccess: async () => {
             toast.info("Download started")
+            await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.DEBRID.DebridGetTorrents.key] })
         },
     })
 }
@@ -73,12 +99,14 @@ export function useDebridDownloadTorrent() {
 // local-downloads query so the "downloaded" badge appears without a manual refresh.
 
 export function useDebridCancelDownload() {
+    const qc = useQueryClient()
     return useServerMutation<boolean, DebridCancelDownload_Variables>({
         endpoint: API_ENDPOINTS.DEBRID.DebridCancelDownload.endpoint,
         method: API_ENDPOINTS.DEBRID.DebridCancelDownload.methods[0],
         mutationKey: [API_ENDPOINTS.DEBRID.DebridCancelDownload.key],
         onSuccess: async () => {
             toast.info("Download cancelled")
+            await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.DEBRID.DebridGetTorrents.key] })
         },
     })
 }

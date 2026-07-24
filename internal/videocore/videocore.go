@@ -114,9 +114,16 @@ func (vc *VideoCore) SetSettings(settings *models.Settings) {
 		vc.translatorService.Shutdown()
 	}
 	vc.translatorService = nil
-	if settings.GetMediaPlayer().VcTranslate {
-		vc.logger.Trace().Msgf("videocore: Setting up translator service %s", settings.GetMediaPlayer().VcTranslateProvider)
-		vc.translatorService = NewTranslatorService(vc, settings.GetMediaPlayer().VcTranslateApiKey, settings.GetMediaPlayer().VcTranslateProvider, settings.GetMediaPlayer().VcTranslateTargetLanguage)
+	mediaPlayer := settings.GetMediaPlayer()
+	if mediaPlayer.VcTranslate {
+		vc.logger.Trace().Msgf("videocore: Setting up translator service %s", mediaPlayer.VcTranslateProvider)
+		vc.translatorService = newTranslatorService(vc, translationSettings{
+			apiKey:     mediaPlayer.VcTranslateApiKey,
+			provider:   mediaPlayer.VcTranslateProvider,
+			targetLang: mediaPlayer.VcTranslateTargetLanguage,
+			baseUrl:    mediaPlayer.VcTranslateBaseUrl,
+			model:      mediaPlayer.VcTranslateModel,
+		})
 	}
 }
 
@@ -341,6 +348,81 @@ func (vc *VideoCore) GetCurrentPlaybackType() (PlaybackType, bool) {
 	return info.PlaybackType, true
 }
 
+////////////////// Skip data
+
+func cloneSkipData(skipData *SkipData) *SkipData {
+	if skipData == nil {
+		return nil
+	}
+
+	clone := &SkipData{}
+	if skipData.Op != nil {
+		op := *skipData.Op
+		clone.Op = &op
+	}
+	if skipData.Ed != nil {
+		ed := *skipData.Ed
+		clone.Ed = &ed
+	}
+
+	return clone
+}
+
+func normalizeSkipDataEntry(entry *SkipDataEntry) *SkipDataEntry {
+	if entry == nil {
+		return nil
+	}
+
+	startTime := entry.Interval.StartTime
+	endTime := entry.Interval.EndTime
+	if startTime < 0 || endTime < 0 || endTime <= startTime {
+		return nil
+	}
+
+	return new(*entry)
+}
+
+func normalizeSkipData(skipData *SkipData) *SkipData {
+	if skipData == nil {
+		return nil
+	}
+
+	normalized := &SkipData{
+		Op: normalizeSkipDataEntry(skipData.Op),
+		Ed: normalizeSkipDataEntry(skipData.Ed),
+	}
+
+	if normalized.Op != nil && normalized.Ed != nil && normalized.Ed.Interval.StartTime <= normalized.Op.Interval.EndTime {
+		normalized.Ed = nil
+	}
+
+	return normalized
+}
+func (vc *VideoCore) SetSkipData(skipData *SkipData) {
+	if skipData == nil {
+		vc.ClearSkipData()
+		return
+	}
+
+	normalized := normalizeSkipData(skipData)
+
+	state, ok := vc.GetPlaybackState()
+	if !ok {
+		return
+	}
+
+	vc.sendPlayerEventTo(state.ClientId, string(ServerEventSetSkipData), cloneSkipData(normalized))
+}
+
+func (vc *VideoCore) ClearSkipData() {
+	state, ok := vc.GetPlaybackState()
+	if !ok {
+		return
+	}
+
+	vc.sendPlayerEventTo(state.ClientId, string(ServerEventSetSkipData), nil)
+}
+
 func (vc *VideoCore) clearPlayback() {
 	vc.setPlaybackStatus(nil)
 	vc.setPlaybackState(nil)
@@ -386,7 +468,7 @@ func (vc *VideoCore) setPlaybackStatusFn(status *PlaybackStatus) {
 // and notifies all subscribers of the change.
 func (vc *VideoCore) updatePlaybackStatusFn(do func()) {
 	vc.playbackStatusMu.Lock()
-	if vc.playbackStatus == nil || len(vc.playbackStatus.Id) == 0 || vc.playbackStatus.Duration <= 0 {
+	if vc.playbackStatus == nil || len(vc.playbackStatus.Id) == 0 {
 		vc.playbackStatusMu.Unlock()
 		return
 	}
@@ -394,7 +476,12 @@ func (vc *VideoCore) updatePlaybackStatusFn(do func()) {
 	currentTime := vc.playbackStatus.CurrentTime
 	duration := vc.playbackStatus.Duration
 	paused := vc.playbackStatus.Paused
+	shouldNotify := duration > 0
 	vc.playbackStatusMu.Unlock()
+
+	if !shouldNotify {
+		return
+	}
 
 	vc.PushEvent(&VideoStatusEvent{
 		CurrentTime: currentTime,
@@ -649,6 +736,17 @@ func (vc *VideoCore) SendGetPlaybackState() {
 	vc.sendPlayerEventTo(state.ClientId, string(ServerEventGetPlaybackState), nil)
 }
 
+var playerEventResponseTimeout = 5 * time.Second
+
+func waitPlayerEventResp(done <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	case <-time.After(playerEventResponseTimeout):
+		return false
+	}
+}
+
 // GetPlaylist sends a get-text-tracks request to the video player and returns the text tracks.
 func (vc *VideoCore) GetTextTracks() (ret []*VideoTextTrack, ok bool) {
 	state, ok := vc.GetPlaybackState()
@@ -665,12 +763,12 @@ func (vc *VideoCore) GetTextTracks() (ret []*VideoTextTrack, ok bool) {
 		}
 		return true // keep listening
 	})
-	go func(cancel func()) {
-		defer cancel()
-		<-time.After(5 * time.Second)
-	}(cancel)
+	defer cancel()
+
 	vc.sendPlayerEventTo(state.ClientId, string(ServerEventGetTextTracks), nil)
-	<-done
+	if !waitPlayerEventResp(done) {
+		return nil, false
+	}
 	return ret, ret != nil
 }
 
@@ -690,13 +788,39 @@ func (vc *VideoCore) GetPlaylist() (ret *VideoPlaylistState, ok bool) {
 		}
 		return true // keep listening
 	})
-	go func(cancel func()) {
-		defer cancel()
-		<-time.After(5 * time.Second)
-	}(cancel)
+	defer cancel()
+
 	vc.sendPlayerEventTo(state.ClientId, string(ServerEventGetPlaylist), nil)
-	<-done
+	if !waitPlayerEventResp(done) {
+		return nil, false
+	}
 	return ret, ret != nil
+}
+
+// GetSkipData sends a get-skip-data request to the video player and returns the current skip data.
+func (vc *VideoCore) GetSkipData() (ret *SkipData, ok bool) {
+	state, ok := vc.GetPlaybackState()
+	if !ok {
+		return nil, false
+	}
+
+	done := make(chan struct{})
+	cancel := vc.RegisterEventCallback(func(e VideoEvent) bool {
+		switch event := e.(type) {
+		case *VideoSkipDataEvent:
+			ret = event.SkipData
+			close(done)
+			return false // stop
+		}
+		return true // keep listening
+	})
+	defer cancel()
+
+	vc.sendPlayerEventTo(state.ClientId, string(ServerEventGetSkipData), nil)
+	if waitPlayerEventResp(done) {
+		return ret, true
+	}
+	return nil, false
 }
 
 // PullStatus pulls the current playback status from the video player.
@@ -715,12 +839,12 @@ func (vc *VideoCore) PullStatus() (ret VideoStatusEvent, ok bool) {
 		}
 		return true // keep listening
 	})
-	go func(cancel func()) {
-		defer cancel()
-		<-time.After(5 * time.Second)
-	}(cancel)
+	defer cancel()
+
 	vc.sendPlayerEventTo(state.ClientId, string(ServerEventGetStatus), nil, true)
-	<-done
+	if !waitPlayerEventResp(done) {
+		return VideoStatusEvent{}, false
+	}
 	return ret, true
 }
 
@@ -746,10 +870,26 @@ func (vc *VideoCore) listenToClientEvents() {
 			marshaled, _ := json.Marshal(clientEvent.Payload)
 			// Unmarshal the player event
 			if err := json.Unmarshal(marshaled, &playerEvent); err == nil {
+				eventClientID := playerEvent.ClientId
+				if eventClientID == "" {
+					eventClientID = clientEvent.ClientID
+				}
+
 				// Validate that the event is from the current client
+				takeover := false
 				currentState, hasState := vc.GetPlaybackState()
-				if hasState && clientEvent.ClientID != "" && clientEvent.ClientID != currentState.ClientId {
-					continue
+				if hasState && eventClientID != "" && eventClientID != currentState.ClientId {
+					ownerConnected := false
+					for _, clientID := range vc.wsEventManager.GetClientIds() {
+						if clientID == currentState.ClientId {
+							ownerConnected = true
+							break
+						}
+					}
+					if ownerConnected || playerEvent.Type != PlayerEventVideoLoaded {
+						continue
+					}
+					takeover = true
 				}
 
 				// Handle events
@@ -757,6 +897,9 @@ func (vc *VideoCore) listenToClientEvents() {
 				case PlayerEventVideoLoaded:
 					payload := &clientVideoLoadedPayload{}
 					if err := playerEvent.UnmarshalAs(&payload); err == nil {
+						if takeover {
+							vc.clearPlayback()
+						}
 						vc.setPlaybackState(&payload.State)
 						vc.PushEvent(&VideoLoadedEvent{
 							State: payload.State,
@@ -939,8 +1082,43 @@ func (vc *VideoCore) listenToClientEvents() {
 						})
 					}
 				case PlayerEventVideoTerminated:
-					// No payload
-					vc.PushEvent(&VideoTerminatedEvent{})
+					payload := &clientVideoTerminatedPayload{}
+					_ = playerEvent.UnmarshalAs(payload)
+					if payload.ClientId != "" {
+						eventClientID = payload.ClientId
+					}
+
+					event := &VideoTerminatedEvent{}
+					if state, ok := vc.GetPlaybackState(); ok {
+						playbackID := state.PlaybackInfo.Id
+						if payload.ID != "" {
+							playbackID = payload.ID
+						}
+						clientID := state.ClientId
+						if eventClientID != "" {
+							clientID = eventClientID
+						}
+						playerType := state.PlayerType
+						if payload.PlayerType != "" {
+							playerType = payload.PlayerType
+						}
+						playbackType := state.PlaybackInfo.PlaybackType
+						if payload.PlaybackType != "" {
+							playbackType = payload.PlaybackType
+						}
+						event.identify(playbackID, clientID, playerType, playbackType)
+					} else if eventClientID != "" {
+						playerType := payload.PlayerType
+						if playerType == "" {
+							playerType = NativePlayer
+						}
+						event.identify(payload.ID, eventClientID, playerType, payload.PlaybackType)
+					}
+					select {
+					case vc.eventBus <- event:
+					default:
+						vc.logger.Warn().Msg("videcore: Event bus full, dropping video terminated event")
+					}
 					vc.clearPlayback()
 				case PlayerEventSubtitleFileUploaded:
 					payload := &clientSubtitleFileUploadedPayload{}
@@ -962,6 +1140,13 @@ func (vc *VideoCore) listenToClientEvents() {
 					if err := playerEvent.UnmarshalAs(payload); err == nil {
 						vc.PushEvent(&VideoTextTracksEvent{
 							TextTracks: payload.TextTracks,
+						})
+					}
+				case PlayerEventVideoSkipData:
+					payload := &clientVideoSkipDataPayload{}
+					if err := playerEvent.UnmarshalAs(payload); err == nil {
+						vc.PushEvent(&VideoSkipDataEvent{
+							SkipData: payload.SkipData,
 						})
 					}
 				case PlayerEventTranslateText:

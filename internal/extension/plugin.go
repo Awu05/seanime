@@ -15,13 +15,18 @@ var (
 	PluginPermissionStorage       PluginPermissionScope = "storage"        // Allows the plugin to store its own data
 	PluginPermissionDatabase      PluginPermissionScope = "database"       // Allows the plugin to read non-auth data from the database and write to it
 	PluginPermissionPlayback      PluginPermissionScope = "playback"       // Allows the plugin to use the playback manager
+	PluginPermissionDebrid        PluginPermissionScope = "debrid"         // Allows the plugin to manage debrid providers and torrents
 	PluginPermissionAnilist       PluginPermissionScope = "anilist"        // Allows the plugin to use the Anilist client
 	PluginPermissionAnilistToken  PluginPermissionScope = "anilist-token"  // Allows the plugin to see and use the Anilist token
+	PluginPermissionCustomClient  PluginPermissionScope = "custom-client"  // Allows the plugin to swap app clients after prompting
 	PluginPermissionSystem        PluginPermissionScope = "system"         // Allows the plugin to use the OS/Filesystem/Filepath functions. SystemPermissions must be granted additionally.
 	PluginPermissionCron          PluginPermissionScope = "cron"           // Allows the plugin to use the cron manager
 	PluginPermissionNotification  PluginPermissionScope = "notification"   // Allows the plugin to use the notification manager
 	PluginPermissionDiscord       PluginPermissionScope = "discord"        // Allows the plugin to use the discord rpc
 	PluginPermissionTorrentClient PluginPermissionScope = "torrent-client" // Allows the plugin to use the torrent client
+	PluginPermissionAuth          PluginPermissionScope = "auth"           // Allows the plugin to perform auth actions after prompting
+	PluginPermissionExtensions    PluginPermissionScope = "extensions"     // Allows the plugin to enable or disable extensions after prompting
+	PluginPermissionSettings      PluginPermissionScope = "settings"       // Allows the plugin to view and edit settings after prompting
 )
 
 type PluginManifest struct {
@@ -272,10 +277,14 @@ func (p *PluginPermissions) GetDescription() string {
 				desc.WriteString("Database: Read and write non-auth data\n")
 			case PluginPermissionPlayback:
 				desc.WriteString("Playback: Control media playback and media players\n")
+			case PluginPermissionDebrid:
+				desc.WriteString("Debrid: Manage debrid providers, torrents, and stream selection\n")
 			case PluginPermissionAnilist:
 				desc.WriteString("AniList: View and edit your AniList lists\n")
 			case PluginPermissionAnilistToken:
 				desc.WriteString("AniList Token: View and use your AniList token\n")
+			case PluginPermissionCustomClient:
+				desc.WriteString("Custom Client: Swap app clients after approval\n")
 			case PluginPermissionSystem:
 				desc.WriteString("System: Access OS functions (detailed below)\n")
 			case PluginPermissionCron:
@@ -286,6 +295,12 @@ func (p *PluginPermissions) GetDescription() string {
 				desc.WriteString("Discord: Set Discord Rich Presence\n")
 			case PluginPermissionTorrentClient:
 				desc.WriteString("Torrent Client: Control torrent clients\n")
+			case PluginPermissionAuth:
+				desc.WriteString("Auth: Log in or log out after approval\n")
+			case PluginPermissionExtensions:
+				desc.WriteString("Extensions: Enable or disable extensions after approval\n")
+			case PluginPermissionSettings:
+				desc.WriteString("Settings: View or edit app settings after approval\n")
 			default:
 				desc.WriteString(string(scope) + "\n")
 			}

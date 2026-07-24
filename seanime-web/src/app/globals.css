@@ -66,8 +66,8 @@
         --color-gray-400: 143 143 143;
         --color-gray-500: 90 90 90;
         --color-gray-600: 72 72 72;
-        --color-gray-700: 54 54 54;
-        --color-gray-800: 28 28 28;
+        --color-gray-700: 40 40 40;
+        --color-gray-800: 20 20 20;
         --color-gray-900: 16 16 16;
         --color-gray-950: 11 11 11;
         --color-gray-default: 105 105 105;
@@ -113,6 +113,7 @@
         --muted-highlight: theme('colors.gray.700');
 
         --paper: theme('colors.gray.950');
+        --paper-lighter: theme('colors.gray.900');
         --subtle: rgba(0, 0, 0, 0.04);
         --subtle-highlight: rgba(0, 0, 0, 0.06);
 
@@ -159,8 +160,8 @@
         --muted: rgba(255, 255, 255, 0.4);
         --muted-highlight: rgba(255, 255, 255, 0.6);
 
-        --paper: theme('colors.gray.950');
-        --paper-highlighter: theme('colors.gray.950');
+        --paper: rgb(11 11 11);
+        --paper-lighter: rgb(13 13 13);
         --subtle: rgba(255, 255, 255, 0.06);
         --subtle-highlight: rgba(255, 255, 255, 0.08);
 
@@ -174,6 +175,177 @@ html {
 
 body {
     background-color: transparent !important;
+}
+
+/* denshi route view transitions */
+html[data-denshi-view-transitions] {
+    --sea-denshi-vt-ease: ease;
+    --sea-denshi-vt: 200ms;
+}
+
+html[data-denshi-view-transitions]::view-transition {
+    pointer-events: none;
+}
+
+html[data-denshi-view-transitions]::view-transition-group(*),
+html[data-denshi-view-transitions]::view-transition-image-pair(*),
+html[data-denshi-view-transitions]::view-transition-old(*),
+html[data-denshi-view-transitions]::view-transition-new(*) {
+    pointer-events: none;
+}
+
+html[data-denshi-view-transitions] .UI-AppLayoutContent__root {
+    view-transition-name: denshi-main;
+}
+
+html[data-denshi-view-transitions] .UI-AppLayoutSidebar__root {
+    view-transition-name: denshi-sidebar;
+}
+
+html[data-denshi-view-transitions] .__electron-window-title-bar {
+    view-transition-name: denshi-titlebar;
+}
+
+html[data-denshi-view-transitions]::view-transition-group(root),
+html[data-denshi-view-transitions]::view-transition-old(root),
+html[data-denshi-view-transitions]::view-transition-new(root) {
+    animation: none;
+    opacity: 0;
+}
+
+html[data-denshi-view-transitions]::view-transition-group(denshi-sidebar),
+html[data-denshi-view-transitions]::view-transition-group(denshi-titlebar) {
+    animation: none;
+    z-index: 2;
+}
+
+html[data-denshi-view-transitions]::view-transition-group(denshi-main) {
+    animation-duration: var(--sea-denshi-vt);
+    animation-timing-function: var(--sea-denshi-vt-ease);
+}
+
+html[data-denshi-view-transitions]::view-transition-old(denshi-main),
+html[data-denshi-view-transitions]::view-transition-new(denshi-main),
+html[data-denshi-view-transitions]::view-transition-old(denshi-sidebar),
+html[data-denshi-view-transitions]::view-transition-new(denshi-sidebar),
+html[data-denshi-view-transitions]::view-transition-old(denshi-titlebar),
+html[data-denshi-view-transitions]::view-transition-new(denshi-titlebar) {
+    mix-blend-mode: normal;
+    backface-visibility: hidden;
+}
+
+html[data-denshi-view-transitions]::view-transition-old(denshi-sidebar),
+html[data-denshi-view-transitions]::view-transition-old(denshi-titlebar) {
+    animation: none;
+    opacity: 0;
+}
+
+html[data-denshi-view-transitions]::view-transition-new(denshi-sidebar),
+html[data-denshi-view-transitions]::view-transition-new(denshi-titlebar) {
+    animation: none;
+    opacity: 1;
+}
+
+@supports selector(:active-view-transition-type(sea-denshi-route)) {
+    html[data-denshi-view-transitions]:active-view-transition-type(sea-denshi-route) [data-vc-element="drawer-content"][data-vc-miniplayer-state="true"] {
+        view-transition-name: denshi-vc-player;
+    }
+
+    html[data-denshi-view-transitions]:active-view-transition-type(sea-denshi-route)::view-transition-group(denshi-vc-player) {
+        animation: none;
+        z-index: 999999;
+    }
+
+    html[data-denshi-view-transitions]:active-view-transition-type(sea-denshi-route)::view-transition-old(denshi-vc-player),
+    html[data-denshi-view-transitions]:active-view-transition-type(sea-denshi-route)::view-transition-new(denshi-vc-player) {
+        animation: none;
+        mix-blend-mode: normal;
+        backface-visibility: hidden;
+    }
+
+    html[data-denshi-view-transitions]:active-view-transition-type(sea-denshi-route)::view-transition-old(denshi-vc-player) {
+        opacity: 0;
+    }
+
+    html[data-denshi-view-transitions]:active-view-transition-type(sea-denshi-route)::view-transition-new(denshi-vc-player) {
+        opacity: 1;
+    }
+}
+
+html[data-denshi-view-transitions]::view-transition-old(denshi-main) {
+    animation: sea-denshi-fade-out var(--sea-denshi-vt) var(--sea-denshi-vt-ease) both;
+}
+
+html[data-denshi-view-transitions]::view-transition-new(denshi-main) {
+    animation: sea-denshi-fade-in var(--sea-denshi-vt) var(--sea-denshi-vt-ease) both;
+}
+
+@keyframes sea-denshi-fade-out {
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes sea-denshi-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    html[data-denshi-view-transitions]::view-transition-old(denshi-main),
+    html[data-denshi-view-transitions]::view-transition-new(denshi-main) {
+        animation: none;
+    }
+}
+
+/* video-core full player -> mini-player view transition */
+html[data-vc-miniplayer-view-transition] [data-vc-element="drawer-content"] {
+    view-transition-name: vc-player;
+}
+
+html[data-vc-miniplayer-view-transition]::view-transition {
+    pointer-events: none;
+}
+
+html[data-vc-miniplayer-view-transition]::view-transition-group(root),
+html[data-vc-miniplayer-view-transition]::view-transition-old(root),
+html[data-vc-miniplayer-view-transition]::view-transition-new(root) {
+    animation: none;
+}
+
+html[data-vc-miniplayer-view-transition]::view-transition-old(root) {
+    opacity: 0;
+}
+
+html[data-vc-miniplayer-view-transition]::view-transition-new(root) {
+    opacity: 1;
+}
+
+html[data-vc-miniplayer-view-transition]::view-transition-group(vc-player) {
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    z-index: 999999;
+}
+
+html[data-vc-miniplayer-view-transition]::view-transition-old(vc-player),
+html[data-vc-miniplayer-view-transition]::view-transition-new(vc-player) {
+    mix-blend-mode: normal;
+    backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    html[data-vc-miniplayer-view-transition]::view-transition-group(vc-player),
+    html[data-vc-miniplayer-view-transition]::view-transition-old(vc-player),
+    html[data-vc-miniplayer-view-transition]::view-transition-new(vc-player) {
+        animation: none;
+    }
 }
 
 html * {
@@ -220,7 +392,11 @@ h6 {
 
 ::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.2);
-    @apply rounded-full border-2 border-transparent bg-clip-padding transition-colors duration-300
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 2px solid transparent;
+    border-right: 2px solid transparent;
+    @apply rounded-full bg-clip-padding transition-colors duration-300
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -296,6 +472,22 @@ pre {
 .discrete-controls[data-media-player][data-buffering][data-controls]:not(:has(.vds-controls-group:hover)) .vds-controls {
     @apply lg:opacity-0
 }
+
+/* radio selector card hover pulse
+@keyframes sea-pulse-ring {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(97, 82, 223, 0.07); }
+    50% { box-shadow: 0 0 0 2px rgba(97, 82, 223, 0.18), 0 0 8px rgba(97, 82, 223, 0.05); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .sea-selector-card:hover:not([data-state="checked"]) {
+        animation: sea-pulse-ring 1.8s ease-in-out infinite;
+    }
+}
+
+.sea-selector-card[data-state="checked"] {
+    box-shadow: 0 0 0 1px rgba(97, 82, 223, 0.35) !important;
+} */
 
 
 .discrete-controls[data-media-player][data-playing][data-seeking][data-controls]:not(:has(.vds-controls-group:hover)) {
@@ -1028,4 +1220,12 @@ media-preview-chapter-display {
     border-top-color: black !important;
     border-bottom-color: black !important;
     background: #3a3a3a !important;
+}
+
+[data-mpv-prism-video-host] {
+    background: #000000 !important;
+}
+
+[data-mpv-prism-video-canvas] {
+    background: #000000 !important;
 }

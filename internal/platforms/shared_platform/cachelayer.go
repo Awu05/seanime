@@ -9,6 +9,7 @@ import (
 	"seanime/internal/util"
 	"seanime/internal/util/filecache"
 	"seanime/internal/util/result"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -71,6 +72,7 @@ func init() {
 			if err != nil {
 				IsWorking.Store(false)
 			} else {
+				clearFailureTracking()
 				events.GlobalWSEventManager.SendEvent(events.InfoToast, "The AniList API is back online")
 				IsWorking.Store(true)
 			}
@@ -91,25 +93,28 @@ type (
 	// CacheLayer is a "network-first" wrapper around an AniList client that caches fetched data in cache files.
 	// It detects when the API client is not working and falls back to the cached data instead.
 	// When the API client not working, it will still send the requests in the background and transition back to working state when the API client is working again.
-	// Mutations will always return an error if the API client is not working.
+	// Entry/progress updates are queued when the API client is not working; other mutations return an error.
 	// Caching strategy:
 	// - All queries to a specific media that IS in the anime collection or manga collection will be always cached/updated without limit
 	// - Media that are NOT in the anime or manga collection will be bounded to a maximum of 10 entries
 	CacheLayer struct {
-		anilistClientRef     *util.Ref[anilist.AnilistClient]
-		fileCacher           *filecache.Cacher
-		buckets              map[string]filecache.PermanentBucket
-		logger               *zerolog.Logger
-		collectionMediaIDs   *result.Map[int, struct{}] // Track which media IDs are in collections
-		lastCollectionUpdate time.Time                  // When collections were last fetched
-		logoutFunc           func()                     // called when an invalid token is detected
+		anilistClientRef       *util.Ref[anilist.AnilistClient]
+		fileCacher             *filecache.Cacher
+		buckets                map[string]filecache.PermanentBucket
+		logger                 *zerolog.Logger
+		collectionMediaIDs     *result.Map[int, struct{}] // Track which media IDs are in collections
+		lastCollectionUpdate   time.Time                  // When collections were last fetched
+		logoutFunc             func()                     // called when an invalid token is detected
+		pendingUpdateSyncMutex sync.Mutex
 	}
 )
 
 const (
 	AnimeCollectionBucket          = "anime-collection"
+	AnimeCollectionTagsBucket      = "anime-collection-tags"
 	AnimeCollectionRelationsBucket = "anime-collection-relations"
 	MangaCollectionBucket          = "manga-collection"
+	MangaCollectionTagsBucket      = "manga-collection-tags"
 	BaseAnimeBucket                = "base-anime"
 	BaseAnimeMalBucket             = "base-anime-mal"
 	CompleteAnimeBucket            = "complete-anime"
@@ -127,6 +132,7 @@ const (
 	ListMangaBucket                = "list-manga"
 	SearchBaseAnimeByIdsBucket     = "search-base-anime-by-ids"
 	CustomQueryBucket              = "custom-query"
+	PendingMediaListUpdatesBucket  = "pending-media-list-updates"
 
 	maxNonCollectionCacheEntries      = 10
 	maxNonCollectionMediaCacheEntries = 50
@@ -204,8 +210,10 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 
 	buckets := make(map[string]filecache.PermanentBucket)
 	buckets[AnimeCollectionBucket] = filecache.NewPermanentBucket(AnimeCollectionBucket)
+	buckets[AnimeCollectionTagsBucket] = filecache.NewPermanentBucket(AnimeCollectionTagsBucket)
 	buckets[AnimeCollectionRelationsBucket] = filecache.NewPermanentBucket(AnimeCollectionRelationsBucket)
 	buckets[MangaCollectionBucket] = filecache.NewPermanentBucket(MangaCollectionBucket)
+	buckets[MangaCollectionTagsBucket] = filecache.NewPermanentBucket(MangaCollectionTagsBucket)
 	buckets[BaseAnimeBucket] = filecache.NewPermanentBucket(BaseAnimeBucket)
 	buckets[BaseAnimeMalBucket] = filecache.NewPermanentBucket(BaseAnimeMalBucket)
 	buckets[CompleteAnimeBucket] = filecache.NewPermanentBucket(CompleteAnimeBucket)
@@ -223,6 +231,7 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	buckets[ListMangaBucket] = filecache.NewPermanentBucket(ListMangaBucket)
 	buckets[SearchBaseAnimeByIdsBucket] = filecache.NewPermanentBucket(SearchBaseAnimeByIdsBucket)
 	buckets[CustomQueryBucket] = filecache.NewPermanentBucket(CustomQueryBucket)
+	buckets[PendingMediaListUpdatesBucket] = filecache.NewPermanentBucket(PendingMediaListUpdatesBucket)
 
 	logger := util.NewLogger()
 
@@ -241,6 +250,7 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	}
 
 	AnilistClient.Store(anilistClientRef.Get())
+	cl.startQueuedUpdateSync()
 
 	return cl
 }
@@ -326,9 +336,13 @@ func (c *CacheLayer) checkAndUpdateWorkingState(err error) {
 		if strings.Contains(err.Error(), "404") {
 			return
 		}
+		// skip 429 errors
+		if strings.Contains(err.Error(), "429") {
+			return
+		}
 
 		// handle invalid token
-		if strings.Contains(err.Error(), "Invalid token") {
+		if isAnilistAuthError(err) {
 			events.GlobalWSEventManager.SendEvent(events.ServerLoggedOutAnilist, "Your AniList session has expired. Please log in again.")
 			if c.logoutFunc != nil {
 				go c.logoutFunc()
@@ -371,6 +385,15 @@ func (c *CacheLayer) checkAndUpdateWorkingState(err error) {
 	}
 }
 
+func isAnilistAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "invalid token") || strings.Contains(errStr, "user not found")
+}
+
 // generateCacheKey generates a cache key from the given parameters
 func (c *CacheLayer) generateCacheKey(params ...interface{}) string {
 	var keyParts []string
@@ -399,17 +422,25 @@ func (c *CacheLayer) generateCacheKey(params ...interface{}) string {
 				keyParts = append(keyParts, "nil")
 			}
 		case []*int:
+			tmp := make([]int, 0, len(v))
 			for _, id := range v {
 				if id != nil {
-					keyParts = append(keyParts, strconv.Itoa(*id))
+					tmp = append(tmp, *id)
 				}
+			}
+			slices.Sort(tmp)
+			for _, id := range tmp {
+				keyParts = append(keyParts, strconv.Itoa(id))
 			}
 		case []*string:
+			tmp := make([]string, 0, len(v))
 			for _, s := range v {
 				if s != nil {
-					keyParts = append(keyParts, *s)
+					tmp = append(tmp, *s)
 				}
 			}
+			slices.Sort(tmp)
+			keyParts = append(keyParts, tmp...)
 		default:
 			keyParts = append(keyParts, fmt.Sprintf("%v", param))
 		}
@@ -646,8 +677,10 @@ func (c *CacheLayer) invalidateCollectionCaches() {
 
 	collectionBuckets := []string{
 		AnimeCollectionBucket,
+		AnimeCollectionTagsBucket,
 		AnimeCollectionRelationsBucket,
 		MangaCollectionBucket,
+		MangaCollectionTagsBucket,
 		CustomQueryBucket,
 	}
 
@@ -795,12 +828,25 @@ func (c *CacheLayer) AnimeCollection(ctx context.Context, userName *string, inte
 		return c.anilistClientRef.Get().AnimeCollection(ctx, userName, interceptors...)
 	})
 
+	if err == nil && res != nil && c.applyQueuedUpdatesToAnimeCollection(res) {
+		if err := c.fileCacher.SetPerm(c.buckets[AnimeCollectionBucket], cacheKey, res); err != nil {
+			c.logger.Warn().Err(err).Msg("anilist cache: Failed to apply queued updates to anime collection cache")
+		}
+	}
+
 	// Update collection tracking with the fetched data
 	if err == nil && res != nil {
 		go c.updateCollectionTrackingFromAnimeCollection(res)
 	}
 
 	return res, err
+}
+
+func (c *CacheLayer) AnimeCollectionTags(ctx context.Context, userName *string, interceptors ...clientv2.RequestInterceptor) (*anilist.AnimeCollectionTags, error) {
+	cacheKey := c.generateCacheKey("collection-tags", userName)
+	return networkFirstGet(c, AnimeCollectionTagsBucket, cacheKey, func() (*anilist.AnimeCollectionTags, error) {
+		return c.anilistClientRef.Get().AnimeCollectionTags(ctx, userName, interceptors...)
+	})
 }
 
 func (c *CacheLayer) AnimeCollectionWithRelations(ctx context.Context, userName *string, interceptors ...clientv2.RequestInterceptor) (*anilist.AnimeCollectionWithRelations, error) {
@@ -909,15 +955,16 @@ func (c *CacheLayer) AnimeDetailsByID(ctx context.Context, id *int, interceptors
 	return res, err
 }
 
-func (c *CacheLayer) ListAnime(ctx context.Context, page *int, search *string, perPage *int, sort []*anilist.MediaSort, status []*anilist.MediaStatus, genres []*string, averageScoreGreater *int, season *anilist.MediaSeason, seasonYear *int, format *anilist.MediaFormat, isAdult *bool, interceptors ...clientv2.RequestInterceptor) (*anilist.ListAnime, error) {
+func (c *CacheLayer) ListAnime(ctx context.Context, page *int, search *string, perPage *int, sort []*anilist.MediaSort, status []*anilist.MediaStatus, genres []*string, tags []*string, averageScoreGreater *int, season *anilist.MediaSeason, seasonYear *int, format *anilist.MediaFormat, isAdult *bool, interceptors ...clientv2.RequestInterceptor) (*anilist.ListAnime, error) {
 	cacheKey := c.generateCacheKey(page, search, perPage, sort, status, genres, averageScoreGreater, season, seasonYear, format, isAdult)
 	return networkFirstGetWithBoundedCache(c, ListAnimeBucket, cacheKey, func() (*anilist.ListAnime, error) {
-		return c.anilistClientRef.Get().ListAnime(ctx, page, search, perPage, sort, status, genres, averageScoreGreater, season, seasonYear, format, isAdult, interceptors...)
+		return c.anilistClientRef.Get().ListAnime(ctx, page, search, perPage, sort, status, genres, tags, averageScoreGreater, season, seasonYear, format, isAdult, interceptors...)
 	})
 }
 
 func (c *CacheLayer) ListRecentAnime(ctx context.Context, page *int, perPage *int, airingAtGreater *int, airingAtLesser *int, notYetAired *bool, interceptors ...clientv2.RequestInterceptor) (*anilist.ListRecentAnime, error) {
-	cacheKey := c.generateCacheKey(page, perPage, airingAtGreater, airingAtLesser, notYetAired)
+	// devnote: don't include airingAt params since they're unique for each requests, just return from the other params
+	cacheKey := c.generateCacheKey(page, perPage, notYetAired)
 	return networkFirstGetWithBoundedCache(c, ListRecentAnimeBucket, cacheKey, func() (*anilist.ListRecentAnime, error) {
 		return c.anilistClientRef.Get().ListRecentAnime(ctx, page, perPage, airingAtGreater, airingAtLesser, notYetAired, interceptors...)
 	})
@@ -926,11 +973,22 @@ func (c *CacheLayer) ListRecentAnime(ctx context.Context, page *int, perPage *in
 func (c *CacheLayer) UpdateMediaListEntry(ctx context.Context, mediaID *int, status *anilist.MediaListStatus, scoreRaw *int, progress *int, startedAt *anilist.FuzzyDateInput, completedAt *anilist.FuzzyDateInput, interceptors ...clientv2.RequestInterceptor) (*anilist.UpdateMediaListEntry, error) {
 	// Mutations require the API to be working
 	if !IsWorking.Load() {
-		return nil, fmt.Errorf("anilist cache: API client is not working, mutation operations are not available")
+		entryID, err := c.queueMediaListEntryUpdate(mediaID, status, scoreRaw, progress, startedAt, completedAt)
+		if err != nil {
+			return nil, err
+		}
+		return &anilist.UpdateMediaListEntry{SaveMediaListEntry: &anilist.UpdateMediaListEntry_SaveMediaListEntry{ID: entryID}}, nil
 	}
 
-	res, err := c.anilistClientRef.Get().UpdateMediaListEntry(ctx, mediaID, status, scoreRaw, progress, startedAt, completedAt, interceptors...)
+	res, err := c.sendMediaListEntryUpdate(ctx, mediaID, status, scoreRaw, progress, startedAt, completedAt, interceptors...)
 	c.checkAndUpdateWorkingState(err)
+	if err != nil && shouldQueueMediaListUpdate(err) {
+		entryID, queueErr := c.queueMediaListEntryUpdate(mediaID, status, scoreRaw, progress, startedAt, completedAt)
+		if queueErr != nil {
+			return nil, queueErr
+		}
+		return &anilist.UpdateMediaListEntry{SaveMediaListEntry: &anilist.UpdateMediaListEntry_SaveMediaListEntry{ID: entryID}}, nil
+	}
 
 	// Invalidate relevant caches on successful mutation
 	if err == nil && mediaID != nil {
@@ -944,11 +1002,22 @@ func (c *CacheLayer) UpdateMediaListEntry(ctx context.Context, mediaID *int, sta
 func (c *CacheLayer) UpdateMediaListEntryProgress(ctx context.Context, mediaID *int, progress *int, status *anilist.MediaListStatus, interceptors ...clientv2.RequestInterceptor) (*anilist.UpdateMediaListEntryProgress, error) {
 	// Mutations require the API to be working
 	if !IsWorking.Load() {
-		return nil, fmt.Errorf("anilist cache: API client is not working, mutation operations are not available")
+		entryID, err := c.queueMediaListEntryProgressUpdate(mediaID, progress, status)
+		if err != nil {
+			return nil, err
+		}
+		return &anilist.UpdateMediaListEntryProgress{SaveMediaListEntry: &anilist.UpdateMediaListEntryProgress_SaveMediaListEntry{ID: entryID}}, nil
 	}
 
-	res, err := c.anilistClientRef.Get().UpdateMediaListEntryProgress(ctx, mediaID, progress, status, interceptors...)
+	res, err := c.sendMediaListEntryProgressUpdate(ctx, mediaID, progress, status, interceptors...)
 	c.checkAndUpdateWorkingState(err)
+	if err != nil && shouldQueueMediaListUpdate(err) {
+		entryID, queueErr := c.queueMediaListEntryProgressUpdate(mediaID, progress, status)
+		if queueErr != nil {
+			return nil, queueErr
+		}
+		return &anilist.UpdateMediaListEntryProgress{SaveMediaListEntry: &anilist.UpdateMediaListEntryProgress_SaveMediaListEntry{ID: entryID}}, nil
+	}
 
 	// Invalidate relevant caches on successful mutation
 	if err == nil && mediaID != nil {
@@ -1000,12 +1069,25 @@ func (c *CacheLayer) MangaCollection(ctx context.Context, userName *string, inte
 		return c.anilistClientRef.Get().MangaCollection(ctx, userName, interceptors...)
 	})
 
+	if err == nil && res != nil && c.applyQueuedUpdatesToMangaCollection(res) {
+		if err := c.fileCacher.SetPerm(c.buckets[MangaCollectionBucket], cacheKey, res); err != nil {
+			c.logger.Warn().Err(err).Msg("anilist cache: Failed to apply queued updates to manga collection cache")
+		}
+	}
+
 	// Update collection tracking with the fetched data
 	if err == nil && res != nil {
 		go c.updateCollectionTrackingFromMangaCollection(res)
 	}
 
 	return res, err
+}
+
+func (c *CacheLayer) MangaCollectionTags(ctx context.Context, userName *string, interceptors ...clientv2.RequestInterceptor) (*anilist.MangaCollectionTags, error) {
+	cacheKey := c.generateCacheKey("collection-tags", userName)
+	return networkFirstGet(c, MangaCollectionTagsBucket, cacheKey, func() (*anilist.MangaCollectionTags, error) {
+		return c.anilistClientRef.Get().MangaCollectionTags(ctx, userName, interceptors...)
+	})
 }
 
 func (c *CacheLayer) SearchBaseManga(ctx context.Context, page *int, perPage *int, sort []*anilist.MediaSort, search *string, status []*anilist.MediaStatus, interceptors ...clientv2.RequestInterceptor) (*anilist.SearchBaseManga, error) {
@@ -1067,10 +1149,10 @@ func (c *CacheLayer) MangaDetailsByID(ctx context.Context, id *int, interceptors
 	return res, err
 }
 
-func (c *CacheLayer) ListManga(ctx context.Context, page *int, search *string, perPage *int, sort []*anilist.MediaSort, status []*anilist.MediaStatus, genres []*string, averageScoreGreater *int, startDateGreater *string, startDateLesser *string, format *anilist.MediaFormat, countryOfOrigin *string, isAdult *bool, interceptors ...clientv2.RequestInterceptor) (*anilist.ListManga, error) {
-	cacheKey := c.generateCacheKey(page, search, perPage, sort, status, genres, averageScoreGreater, startDateGreater, startDateLesser, format, countryOfOrigin, isAdult)
+func (c *CacheLayer) ListManga(ctx context.Context, page *int, search *string, perPage *int, sort []*anilist.MediaSort, status []*anilist.MediaStatus, genres []*string, tags []*string, averageScoreGreater *int, startDateGreater *string, startDateLesser *string, format *anilist.MediaFormat, countryOfOrigin *string, isAdult *bool, interceptors ...clientv2.RequestInterceptor) (*anilist.ListManga, error) {
+	cacheKey := c.generateCacheKey(page, search, perPage, sort, status, genres, tags, averageScoreGreater, startDateGreater, startDateLesser, format, countryOfOrigin, isAdult)
 	return networkFirstGetWithBoundedCache(c, ListMangaBucket, cacheKey, func() (*anilist.ListManga, error) {
-		return c.anilistClientRef.Get().ListManga(ctx, page, search, perPage, sort, status, genres, averageScoreGreater, startDateGreater, startDateLesser, format, countryOfOrigin, isAdult, interceptors...)
+		return c.anilistClientRef.Get().ListManga(ctx, page, search, perPage, sort, status, genres, tags, averageScoreGreater, startDateGreater, startDateLesser, format, countryOfOrigin, isAdult, interceptors...)
 	})
 }
 

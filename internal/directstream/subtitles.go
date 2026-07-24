@@ -79,7 +79,7 @@ func (s *BaseStream) StartSubtitleStreamP(stream Stream, playbackCtx context.Con
 	subtitleStreamId := uuid.New().String()
 	s.activeSubtitleStreams.Set(subtitleStreamId, subtitleStream)
 
-	subtitleCh, errCh, _ := subtitleStream.parser.ExtractSubtitles(ctx, newReader, offset, backoffBytes)
+	subtitleCh, errCh, _ := subtitleStream.parser.ExtractSubtitles(ctx, newReader, offset, backoffBytes, 0)
 
 	firstEventSentCh := make(chan struct{}) // no-op
 	closeFirstEventSentOnce := sync.Once{}

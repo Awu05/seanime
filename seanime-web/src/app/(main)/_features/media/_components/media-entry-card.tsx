@@ -3,10 +3,12 @@ import {
     AL_BaseManga,
     Anime_EntryLibraryData,
     Anime_EntryListData,
+    Anime_LibraryCollectionEntry,
     Anime_NakamaEntryLibraryData,
     Manga_EntryListData,
 } from "@/api/generated/types"
-import { getAtomicLibraryEntryAtom } from "@/app/(main)/_atoms/anime-library-collection.atoms"
+import { getAnimeLibraryEntryAtom } from "@/app/(main)/_atoms/anime-library-collection.atoms"
+import { getMangaCollectionEntryAtom } from "@/app/(main)/_atoms/manga-collection.atoms"
 import { usePlayNext } from "@/app/(main)/_atoms/playback.atoms"
 import { ToggleLockFilesButton } from "@/app/(main)/_features/anime-library/_containers/toggle-lock-files-button"
 import { AnimeEntryCardUnwatchedBadge } from "@/app/(main)/_features/anime/_containers/anime-entry-card-unwatched-badge"
@@ -33,17 +35,18 @@ import { AnilistMediaEntryModal } from "@/app/(main)/_features/media/_containers
 import { useMediaPreviewModal } from "@/app/(main)/_features/media/_containers/media-preview-modal"
 import { usePlaylistEditorManager } from "@/app/(main)/_features/playlists/lib/playlist-editor-manager"
 import { useAnilistUserAnimeListData } from "@/app/(main)/_hooks/anilist-collection-loader"
-import { useMissingEpisodes } from "@/app/(main)/_hooks/missing-episodes-loader"
-import { useHasTorrentOrDebridInclusion, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
+import { useHasMissingEpisodes } from "@/app/(main)/_hooks/missing-episodes-loader"
+import { useHasTorrentOrDebridInclusion, useIsSimulatedUser, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { MangaEntryCardUnreadBadge } from "@/app/(main)/manga/_containers/manga-entry-card-unread-badge"
 import { SeaLink } from "@/components/shared/sea-link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { preloadMediaEntry } from "@/lib/entry-preloader"
 import { stripHtml } from "@/lib/helpers/string"
 import { useRouter } from "@/lib/navigation"
-import { useAtom } from "jotai"
-import { useSetAtom } from "jotai/react"
+import { __navigationPreloadModeAtom, shouldWarmEntryOnIntent } from "@/lib/navigation-preload-settings"
+import { useAtomValue, useSetAtom } from "jotai/react"
 import capitalize from "lodash/capitalize"
 import React, { useState } from "react"
 import { BiAddToQueue, BiPlay } from "react-icons/bi"
@@ -58,6 +61,9 @@ type MediaEntryCardBaseProps = {
     containerClassName?: string
     showListDataButton?: boolean
 }
+
+
+type MediaEntryCardListData = Anime_EntryListData | Manga_EntryListData
 
 type MediaEntryCardProps<T extends "anime" | "manga"> = {
     type: T
@@ -96,6 +102,14 @@ function formatAiringDateRange(
     return null
 }
 
+function useMediaCollectionEntry(type: "anime" | "manga", mediaId: number) {
+    const entryAtom = React.useMemo(() => {
+        return type === "anime" ? getAnimeLibraryEntryAtom(mediaId) : getMangaCollectionEntryAtom(mediaId)
+    }, [mediaId, type])
+
+    return useAtomValue(entryAtom)
+}
+
 export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCardProps<T>) {
 
     const {
@@ -104,7 +118,6 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
         libraryData: _libraryData,
         nakamaLibraryData,
         overlay,
-        showListDataButton,
         showTrailer: _showTrailer,
         showExpandedHoverContent = false,
         type,
@@ -117,26 +130,48 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
 
     const router = useRouter()
     const serverStatus = useServerStatus()
+    const isSimulatedUser = useIsSimulatedUser()
     const { hasStreamingEnabled } = useHasTorrentOrDebridInclusion()
-    const missingEpisodes = useMissingEpisodes()
-
-    const prevListDataRef = React.useRef(_listData)
-    const prevLibraryDataRef = React.useRef(_libraryData)
-
-    const [listData, setListData] = useState<Anime_EntryListData | undefined>(_listData)
-    const [libraryData, setLibraryData] = useState<Anime_EntryLibraryData | undefined>(_libraryData)
+    const navigationPreloadMode = useAtomValue(__navigationPreloadModeAtom)
     const setActionPopupHover = useSetAtom(__mediaEntryCard_hoveredPopupId)
 
     const { selectMediaAndOpenEditor } = usePlaylistEditorManager()
-
-    const [__atomicLibraryCollection, getAtomicLibraryEntry] = useAtom(getAtomicLibraryEntryAtom)
-
-    const showLibraryBadge = !!libraryData && !!props.showLibraryBadge
 
     const mediaId = media.id
     const mediaEpisodes = (media as AL_BaseAnime)?.episodes
     const mediaChapters = (media as AL_BaseManga)?.chapters
     const mediaIsAdult = media?.isAdult
+    const collectionEntry = useMediaCollectionEntry(type, mediaId)
+    const animeListDataFromCollection = useAnilistUserAnimeListData(mediaId, type === "anime" && !_listData)
+    const animeCollectionEntry = type === "anime" ? collectionEntry as Anime_LibraryCollectionEntry | undefined : undefined
+
+    const listData = React.useMemo<MediaEntryCardListData | undefined>(() => {
+        if (_listData) {
+            return _listData
+        }
+
+        if (type === "anime") {
+            return animeListDataFromCollection ?? animeCollectionEntry?.listData
+        }
+
+        return collectionEntry?.listData
+    }, [_listData, type, animeListDataFromCollection, animeCollectionEntry, collectionEntry])
+
+    const libraryData = React.useMemo(() => {
+        if (_libraryData) {
+            return _libraryData
+        }
+
+        if (type !== "anime") {
+            return undefined
+        }
+
+        return animeCollectionEntry?.libraryData
+    }, [_libraryData, type, animeCollectionEntry])
+
+    const hasMissingEpisodes = useHasMissingEpisodes(mediaId, type === "anime" && !!libraryData)
+
+    const showLibraryBadge = !!libraryData && !!props.showLibraryBadge
 
     const showProgressBar = React.useMemo(() => {
         return !!listData?.progress
@@ -159,47 +194,17 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
         return type === "anime" ? ANIME_LINK : MANGA_LINK
     }, [ANIME_LINK, MANGA_LINK, type])
 
+    const shouldWarmCollectionEntryOnViewport = !!collectionEntry || !!animeListDataFromCollection
+    const shouldBypassPreloadBudget = !!collectionEntry || !!animeListDataFromCollection || !!_listData
+
     const progressTotal = type === "anime" ? (media as AL_BaseAnime)?.episodes : (media as AL_BaseManga)?.chapters
-
-    React.useEffect(() => {
-        if (_listData !== prevListDataRef.current) {
-            prevListDataRef.current = _listData
-            setListData(_listData)
-        }
-    }, [_listData])
-
-    React.useEffect(() => {
-        if (_libraryData !== prevLibraryDataRef.current) {
-            prevLibraryDataRef.current = _libraryData
-            setLibraryData(_libraryData)
-        }
-    }, [_libraryData])
-
-    // Dynamically refresh data when LibraryCollection is updated
-    React.useEffect(() => {
-        const entry = getAtomicLibraryEntry(mediaId)
-        if (!_listData) {
-            setListData(entry?.listData)
-        }
-        if (!_libraryData) {
-            setLibraryData(entry?.libraryData)
-        }
-    }, [__atomicLibraryCollection, mediaId, _listData, _libraryData])
-
-    const listDataFromCollection = useAnilistUserAnimeListData(mediaId)
-
-    React.useEffect(() => {
-        if (listDataFromCollection && !_listData && listDataFromCollection !== listData) {
-            setListData(listDataFromCollection)
-        }
-    }, [listDataFromCollection, _listData, listData])
 
     const { setPlayNext } = usePlayNext()
     const handleWatchButtonClicked = React.useCallback(() => {
         setPlayNext(mediaId, () => {
             router.push(ANIME_LINK)
         })
-    }, [listData?.progress, listData?.status, mediaId, ANIME_LINK, setPlayNext, router])
+    }, [mediaId, ANIME_LINK, setPlayNext, router])
 
     const onPopupMouseEnter = React.useCallback(() => {
         setActionPopupHover(mediaId)
@@ -212,22 +217,40 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
     const { setPreviewModalMediaId } = useMediaPreviewModal()
     const { openDirInLibraryExplorer } = useLibraryExplorer()
 
-    const [isHoveringCard, setIsHoveringCard] = useState(false)
     const [shouldRenderPopup, setShouldRenderPopup] = useState(false)
+    const closePopupTimerRef = React.useRef<number | undefined>(undefined)
 
-    // Handle delayed unmount for exit animation
-    React.useEffect(() => {
-        if (isHoveringCard) {
-            setShouldRenderPopup(true)
-            return
-        } else {
-            // Delay unmount to allow exit animation
-            const timer = setTimeout(() => {
-                setShouldRenderPopup(false)
-            }, 35) // Match animation duration
-            return () => clearTimeout(timer)
+    const warmCardEntry = React.useCallback(() => {
+        if (onClick || !shouldWarmEntryOnIntent(navigationPreloadMode, isSimulatedUser)) return
+        preloadMediaEntry(link, { bypassBudget: shouldBypassPreloadBudget })
+    }, [isSimulatedUser, link, navigationPreloadMode, onClick, shouldBypassPreloadBudget])
+
+    const handleCardMouseEnter = React.useCallback(() => {
+        if (closePopupTimerRef.current) {
+            window.clearTimeout(closePopupTimerRef.current)
+            closePopupTimerRef.current = undefined
         }
-    }, [isHoveringCard])
+        setShouldRenderPopup(true)
+        warmCardEntry()
+    }, [warmCardEntry])
+
+    const handleCardMouseLeave = React.useCallback(() => {
+        if (closePopupTimerRef.current) {
+            window.clearTimeout(closePopupTimerRef.current)
+        }
+        closePopupTimerRef.current = window.setTimeout(() => {
+            setShouldRenderPopup(false)
+            closePopupTimerRef.current = undefined
+        }, 35)
+    }, [])
+
+    React.useEffect(() => {
+        return () => {
+            if (closePopupTimerRef.current) {
+                window.clearTimeout(closePopupTimerRef.current)
+            }
+        }
+    }, [])
 
     const handlePreviewClick = React.useCallback(() => {
         setPreviewModalMediaId(mediaId, type)
@@ -262,9 +285,8 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
             data-media-type={type}
             className={props.containerClassName}
             data-list-data={stringifiedListData}
-            onMouseEnter={() => setIsHoveringCard(true)}
-            onMouseOver={() => setIsHoveringCard(true)}
-            onMouseLeave={() => setIsHoveringCard(false)}
+            onPointerEnter={handleCardMouseEnter}
+            onPointerLeave={handleCardMouseLeave}
         >
 
             <MediaEntryCardOverlay overlay={overlay} />
@@ -279,12 +301,12 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                     >
                         <LuEye /> Preview
                     </ContextMenuItem>}
-                    {(libraryData || nakamaLibraryData || (listData && hasStreamingEnabled)) && <ContextMenuItem
+                    {((libraryData || nakamaLibraryData || (listData && hasStreamingEnabled)) && type === "anime") && <ContextMenuItem
                         onClick={handleAddToPlaylistClick}
                     >
                         <BiAddToQueue /> Add to Playlist
                     </ContextMenuItem>}
-                    {(!!libraryData) && <ContextMenuItem
+                    {(!!libraryData && type === "anime") && <ContextMenuItem
                         onClick={handleOpenInExplorerClick}
                     >
                         <LuFolderTree /> Open in Library Explorer
@@ -318,6 +340,7 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                                 isAdult={media.isAdult}
                                 blurAdultContent={serverStatus?.settings?.anilist?.blurAdultContent}
                                 link={link}
+                                bypassEntryPreloadBudget={shouldBypassPreloadBudget}
                                 listStatus={listData?.status}
                                 status={media.status}
                                 onClick={onClick}
@@ -330,6 +353,7 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                                 season={media.season}
                                 format={media.format}
                                 link={link}
+                                bypassEntryPreloadBudget={shouldBypassPreloadBudget}
                                 onClick={onClick}
                                 // onHover={() => setHoveringTitle(true)}
                                 // onHoverLeave={() => setHoveringTitle(false)}
@@ -351,6 +375,7 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
 
                                 {type === "manga" && <SeaLink
                                     href={!onClick ? MANGA_LINK : undefined}
+                                    bypassEntryPreloadBudget={shouldBypassPreloadBudget}
                                     onClick={onClick}
                                     className="block w-full"
                                 >
@@ -417,6 +442,8 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
 
             <MediaEntryCardBody
                 link={link}
+                bypassEntryPreloadBudget={shouldBypassPreloadBudget}
+                warmEntryOnViewport={shouldWarmCollectionEntryOnViewport}
                 type={type}
                 title={media.title?.userPreferred || ""}
                 season={media.season}
@@ -465,7 +492,7 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                         score={listData?.score}
                     />
                 </div>
-                {(type === "anime" && !!libraryData && missingEpisodes.find(n => n.baseAnime?.id === media.id)) && (
+                {(type === "anime" && !!libraryData && hasMissingEpisodes) && (
                     <div
                         data-media-entry-card-body-missing-episodes-badge-container
                         className="absolute z-[10] w-full flex justify-center left-1 bottom-0"
@@ -490,5 +517,3 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
         </MediaEntryCardContainer>
     )
 }
-
-

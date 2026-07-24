@@ -12,10 +12,15 @@ import (
 	"github.com/samber/lo"
 )
 
+// ClearScheduleCache is kept as a no-op for plugin API compatibility.
+// The actual schedule cache is per-profile and lives in the handlers package.
+func ClearScheduleCache() {}
+
 type ScheduleItem struct {
 	MediaId int    `json:"mediaId"`
 	Title   string `json:"title"`
-	// Time is in 15:04 format
+	// Time is in 15:04 format, UTC.
+	// The frontend should derive local time from DateTime instead.
 	Time string `json:"time"`
 	// DateTime is in UTC
 	DateTime       time.Time `json:"dateTime"`
@@ -27,6 +32,10 @@ type ScheduleItem struct {
 }
 
 func GetScheduleItems(ctx context.Context, animeSchedule *anilist.AnimeAiringSchedule, animeCollection *anilist.AnimeCollection) []*ScheduleItem {
+	if animeSchedule == nil || animeCollection == nil || animeCollection.MediaListCollection == nil {
+		return []*ScheduleItem{}
+	}
+
 	animeEntryMap := make(map[int]*anilist.AnimeListEntry)
 	for _, list := range animeCollection.MediaListCollection.GetLists() {
 		for _, entry := range list.GetEntries() {
@@ -51,7 +60,7 @@ func GetScheduleItems(ctx context.Context, animeSchedule *anilist.AnimeAiringSch
 		t := time.Unix(int64(node.GetAiringAt()), 0)
 		item := &ScheduleItem{
 			MediaId:        entry.GetMedia().GetID(),
-			Title:          *entry.GetMedia().GetTitle().GetUserPreferred(),
+			Title:          entry.GetMedia().GetPreferredTitle(),
 			Time:           t.UTC().Format("15:04"),
 			DateTime:       t.UTC(),
 			Image:          entry.GetMedia().GetCoverImageSafe(),

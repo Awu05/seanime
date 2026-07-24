@@ -16,6 +16,7 @@ import { normalizeDate } from "@/lib/helpers/date"
 import { getImageUrl } from "@/lib/server/assets"
 import { useWindowSize } from "@uidotdev/usehooks"
 import React, { Fragment } from "react"
+import { useFormContext } from "react-hook-form"
 import { BiListPlus, BiPlus, BiStar, BiTrash } from "react-icons/bi"
 import { TbEdit } from "react-icons/tb"
 import { useToggle } from "react-use"
@@ -45,7 +46,7 @@ function IsomorphicPopover(props: PopoverProps & ModalProps & { media?: AL_BaseA
     if ((width && width > 1024) && !forceModal) {
         return <Popover
             {...rest}
-            className="max-w-5xl !w-full overflow-hidden bg-gray-950/95 backdrop-blur-sm rounded-xl"
+            className="max-w-5xl !w-full overflow-hidden rounded-2xl"
         >
             <p className="mb-4 font-semibold text-center px-6 line-clamp-1">
                 {media?.title?.userPreferred}
@@ -85,7 +86,7 @@ function IsomorphicPopover(props: PopoverProps & ModalProps & { media?: AL_BaseA
 
 export const AnilistMediaEntryModal = (props: AnilistMediaEntryModalProps) => {
     const [open, toggle] = useToggle(false)
-    const [repeat, setRepeat] = React.useState(0)
+    const [repeat, setRepeat] = React.useState<number | "">(0)
 
     const { children, media, listData, hideButton, type = "anime", forceModal, ...rest } = props
 
@@ -102,10 +103,11 @@ export const AnilistMediaEntryModal = (props: AnilistMediaEntryModalProps) => {
     }, [listData])
 
     const handleSubmit = React.useCallback((data: z.infer<typeof mediaListDataSchema>) => {
-        if (repeat !== (listData?.repeat ?? 0)) {
+        const normalizedRepeat = repeat === "" ? 0 : repeat
+        if (normalizedRepeat !== (listData?.repeat ?? 0)) {
             mutateRepeat({
                 mediaId: media?.id || 0,
-                repeat: repeat,
+                repeat: normalizedRepeat,
             })
         }
         mutate({
@@ -201,8 +203,8 @@ export const AnilistMediaEntryModal = (props: AnilistMediaEntryModalProps) => {
 function Content(props: AnilistMediaEntryModalProps & {
     open: boolean
     onToggle: (open: boolean) => void
-    repeat: number
-    setRepeat: (repeat: number) => void
+    repeat: number | ""
+    setRepeat: (repeat: number | "") => void
     handleSubmit: (data: z.infer<typeof mediaListDataSchema>) => void
     deleteEntry: any
     isEditing: boolean
@@ -247,33 +249,7 @@ function Content(props: AnilistMediaEntryModalProps & {
                 }}
             >
                 <div className="flex flex-col sm:flex-row gap-4">
-                    <Field.Select
-                        label="Status"
-                        name="status"
-                        options={[
-                            media?.status !== "NOT_YET_RELEASED" ? {
-                                value: "CURRENT",
-                                label: type === "anime" ? "Watching" : "Reading",
-                            } : undefined,
-                            { value: "PLANNING", label: "Planning" },
-                            media?.status !== "NOT_YET_RELEASED" ? {
-                                value: "PAUSED",
-                                label: "Paused",
-                            } : undefined,
-                            media?.status !== "NOT_YET_RELEASED" ? {
-                                value: "COMPLETED",
-                                label: "Completed",
-                            } : undefined,
-                            media?.status !== "NOT_YET_RELEASED" ? {
-                                value: "DROPPED",
-                                label: "Dropped",
-                            } : undefined,
-                            media?.status !== "NOT_YET_RELEASED" ? {
-                                value: "REPEATING",
-                                label: "Repeating",
-                            } : undefined,
-                        ].filter(Boolean)}
-                    />
+                    <StatusField media={media} type={type} />
                     {media?.status !== "NOT_YET_RELEASED" && <>
                         <Field.Number
                             label="Score"
@@ -325,7 +301,7 @@ function Content(props: AnilistMediaEntryModalProps & {
                         min={0}
                         max={1000}
                         value={repeat}
-                        onValueChange={setRepeat}
+                        onValueChange={(value, valueAsString) => setRepeat(valueAsString === "" ? "" : value)}
                         formatOptions={{
                             maximumFractionDigits: 0,
                             minimumFractionDigits: 0,
@@ -371,4 +347,49 @@ function Content(props: AnilistMediaEntryModalProps & {
             </Form>}
         </>
     )
+}
+
+function StatusField({ media, type }: {
+    media?: AL_BaseAnime | AL_BaseManga
+    type: "anime" | "manga"
+}) {
+    const { setValue } = useFormContext<z.infer<typeof mediaListDataSchema>>()
+
+    const handleChange = (status: AL_MediaListStatus) => {
+        setValue("status", status, { shouldDirty: true })
+
+        const episodes = (media as AL_BaseAnime)?.episodes
+        if (type === "anime" && status === "COMPLETED" && episodes) {
+            setValue("progress", episodes, { shouldDirty: true })
+        }
+    }
+
+    return <Field.Select
+        label="Status"
+        name="status"
+        onChange={handleChange}
+        options={[
+            media?.status !== "NOT_YET_RELEASED" ? {
+                value: "CURRENT",
+                label: type === "anime" ? "Watching" : "Reading",
+            } : undefined,
+            { value: "PLANNING", label: "Planning" },
+            media?.status !== "NOT_YET_RELEASED" ? {
+                value: "PAUSED",
+                label: "Paused",
+            } : undefined,
+            media?.status !== "NOT_YET_RELEASED" ? {
+                value: "COMPLETED",
+                label: "Completed",
+            } : undefined,
+            media?.status !== "NOT_YET_RELEASED" ? {
+                value: "DROPPED",
+                label: "Dropped",
+            } : undefined,
+            media?.status !== "NOT_YET_RELEASED" ? {
+                value: "REPEATING",
+                label: "Repeating",
+            } : undefined,
+        ].filter(Boolean)}
+    />
 }

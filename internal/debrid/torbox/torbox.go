@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"seanime/internal/constants"
 	"seanime/internal/debrid/debrid"
 	"seanime/internal/util"
@@ -238,7 +239,7 @@ func (t *TorBox) AddTorrent(opts debrid.AddTorrentOptions) (string, error) {
 		torrents, err := t.getTorrents()
 		if err == nil {
 			for _, torrent := range torrents {
-				if torrent.Hash == opts.InfoHash {
+				if strings.EqualFold(torrent.Hash, opts.InfoHash) {
 					return strconv.Itoa(torrent.ID), nil
 				}
 			}
@@ -303,34 +304,67 @@ func (t *TorBox) GetTorrentStreamUrl(ctx context.Context, opts debrid.StreamTorr
 			close(doneCh)
 		}()
 
+		var errRetries int
+
+		checkTorrentReady := func() (string, bool, bool, error) {
+			torrent, _err := t.GetTorrent(opts.ID)
+			if _err != nil {
+				errRetries++
+				if errRetries >= 5 {
+					return "", false, false, fmt.Errorf("torbox: Failed to get torrent: %w", _err)
+				}
+				t.logger.Warn().Err(_err).Msg("torbox: Failed to get torrent status, retrying...")
+				return "", false, false, nil
+			}
+			errRetries = 0
+
+			select {
+			case itemCh <- *torrent:
+			default:
+			}
+
+			if torrent.IsReady {
+				downloadUrl, dErr := t.GetTorrentDownloadUrl(debrid.DownloadTorrentOptions{
+					ID:     opts.ID,
+					FileId: opts.FileId,
+				})
+				if dErr != nil {
+					t.logger.Warn().Err(dErr).Msg("torbox: Failed to get download URL, retrying...")
+					return "", true, false, nil
+				}
+
+				return downloadUrl, true, true, nil
+			}
+
+			return "", false, false, nil
+		}
+
+		sUrl, _, ok, checkErr := checkTorrentReady()
+		if checkErr != nil {
+			err = checkErr
+			return
+		}
+		if ok {
+			streamUrl = sUrl
+			return
+		}
+
+		ticker := time.NewTicker(1500 * time.Millisecond)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
 				err = ctx.Err()
 				return
-			case <-time.After(4 * time.Second):
-				torrent, _err := t.GetTorrent(opts.ID)
-				if _err != nil {
-					t.logger.Error().Err(_err).Msg("torbox: Failed to get torrent")
-					err = fmt.Errorf("torbox: Failed to get torrent: %w", _err)
+			case <-ticker.C:
+				sUrl, _, ok, checkErr = checkTorrentReady()
+				if checkErr != nil {
+					err = checkErr
 					return
 				}
-
-				itemCh <- *torrent
-
-				// Check if the torrent is ready
-				if torrent.IsReady {
-					time.Sleep(1 * time.Second)
-					downloadUrl, err := t.GetTorrentDownloadUrl(debrid.DownloadTorrentOptions{
-						ID:     opts.ID,
-						FileId: opts.FileId, // Filename
-					})
-					if err != nil {
-						t.logger.Error().Err(err).Msg("torbox: Failed to get download URL")
-						return
-					}
-
-					streamUrl = downloadUrl
+				if ok {
+					streamUrl = sUrl
 					return
 				}
 			}
@@ -351,7 +385,7 @@ func (t *TorBox) GetTorrentDownloadUrl(opts debrid.DownloadTorrentOptions) (down
 		return "", fmt.Errorf("torbox: Failed to get download URL: %w", debrid.ErrNotAuthenticated)
 	}
 
-	url := t.baseUrl + fmt.Sprintf("/torrents/requestdl?token=%s&torrent_id=%s&zip_link=true", apiKey, opts.ID)
+	requestUrl := t.baseUrl + fmt.Sprintf("/torrents/requestdl?token=%s&torrent_id=%s&zip_link=true&append_name=true", apiKey, opts.ID)
 	if opts.FileId != "" {
 		// Get the actual file ID
 		torrent, err := t.getTorrent(opts.ID)
@@ -368,10 +402,10 @@ func (t *TorBox) GetTorrentDownloadUrl(opts debrid.DownloadTorrentOptions) (down
 		if fId == "" {
 			return "", fmt.Errorf("torbox: Failed to get download URL, file not found")
 		}
-		url = t.baseUrl + fmt.Sprintf("/torrents/requestdl?token=%s&torrent_id=%s&file_id=%s", apiKey, opts.ID, fId)
+		requestUrl = t.baseUrl + fmt.Sprintf("/torrents/requestdl?token=%s&torrent_id=%s&file_id=%s&append_name=true", apiKey, opts.ID, fId)
 	}
 
-	resp, err := t.doQuery("GET", url, nil, "application/json")
+	resp, err := t.doQuery("GET", requestUrl, nil, "application/json")
 	if err != nil {
 		return "", fmt.Errorf("torbox: Failed to get download URL: %w", err)
 	}
@@ -383,10 +417,71 @@ func (t *TorBox) GetTorrentDownloadUrl(opts debrid.DownloadTorrentOptions) (down
 	if err != nil {
 		return "", fmt.Errorf("torbox: Failed to get download URL: %w", err)
 	}
+	d, err = normalizeDownloadUrl(d)
+	if err != nil {
+		return "", fmt.Errorf("torbox: Failed to get download URL: %w", err)
+	}
 
 	t.logger.Debug().Str("downloadUrl", d).Msg("torbox: Download link retrieved")
 
 	return d, nil
+}
+
+func normalizeDownloadUrl(downloadUrl string) (string, error) {
+	downloadUrl = encodeFilename(downloadUrl)
+
+	parsedUrl, err := url.Parse(downloadUrl)
+	if err != nil {
+		return "", err
+	}
+
+	return parsedUrl.String(), nil
+}
+
+func encodeFilename(downloadUrl string) string {
+	key := "&filename="
+	idx := strings.LastIndex(downloadUrl, key)
+	if idx == -1 {
+		key = "?filename="
+		idx = strings.LastIndex(downloadUrl, key)
+	}
+	if idx == -1 {
+		return downloadUrl
+	}
+
+	start := idx + len(key)
+	filename := downloadUrl[start:]
+
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	b.Grow(len(filename))
+
+	for i := 0; i < len(filename); i++ {
+		c := filename[i]
+		if c == '%' && i+2 < len(filename) && isHex(filename[i+1]) && isHex(filename[i+2]) {
+			b.WriteString(filename[i : i+3])
+			i += 2
+			continue
+		}
+		if c >= 'a' && c <= 'z' ||
+			c >= 'A' && c <= 'Z' ||
+			c >= '0' && c <= '9' ||
+			c == '-' || c == '.' || c == '_' || c == '~' {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[c>>4])
+		b.WriteByte(hex[c&15])
+	}
+
+	return downloadUrl[:start] + b.String()
+}
+
+func isHex(c byte) bool {
+	return c >= '0' && c <= '9' ||
+		c >= 'a' && c <= 'f' ||
+		c >= 'A' && c <= 'F'
 }
 
 func (t *TorBox) GetTorrent(id string) (ret *debrid.TorrentItem, err error) {

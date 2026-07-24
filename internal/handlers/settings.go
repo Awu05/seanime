@@ -7,9 +7,11 @@ import (
 	"runtime"
 	"seanime/internal/api/anilist"
 	"seanime/internal/core"
+	"seanime/internal/database/db"
 	"seanime/internal/database/models"
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/util"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -31,7 +33,10 @@ func (h *Handler) HandleGetSettings(c echo.Context) error {
 		return h.RespondWithError(c, errors.New(runtime.GOOS))
 	}
 
-	return h.RespondWithData(c, settings)
+	clientSettings := db.CloneSettings(settings)
+	db.VirtualizeSettingsPaths(clientSettings)
+
+	return h.RespondWithData(c, clientSettings)
 }
 
 // HandleGettingStarted
@@ -64,6 +69,25 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	// Resolve incoming virtual paths to physical paths on iOS
+	if b.Library.LibraryPath != "" {
+		b.Library.LibraryPath = util.ResolvePhysicalPath(b.Library.LibraryPath)
+	}
+	for i, p := range b.Library.LibraryPaths {
+		b.Library.LibraryPaths[i] = util.ResolvePhysicalPath(p)
+	}
+	if b.Manga.LocalSourceDirectory != "" {
+		b.Manga.LocalSourceDirectory = util.ResolvePhysicalPath(b.Manga.LocalSourceDirectory)
+	}
+
+	prevSettings, _ := h.getSettings(c)
+	if err := h.guardStrictSettingsMutation(c, prevSettings, &b.Library, &b.Manga); err != nil {
+		return err
+	}
+	if err := h.guardPrivilegedSettingsMutation(c, prevSettings, &b.MediaPlayer, &b.Torrent); err != nil {
+		return err
 	}
 
 	// Check settings
@@ -188,6 +212,35 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// Resolve incoming virtual paths to physical paths on iOS
+	if util.IsIOS() {
+		if b.Library.LibraryPath != "" {
+			b.Library.LibraryPath = util.ResolvePhysicalPath(b.Library.LibraryPath)
+		}
+		for i, p := range b.Library.LibraryPaths {
+			b.Library.LibraryPaths[i] = util.ResolvePhysicalPath(p)
+		}
+		if b.Manga.LocalSourceDirectory != "" {
+			b.Manga.LocalSourceDirectory = util.ResolvePhysicalPath(b.Manga.LocalSourceDirectory)
+		}
+	}
+
+	prevSettings, err := h.getSettings(c)
+	if err := h.guardStrictSettingsMutation(c, prevSettings, &b.Library, &b.Manga); err != nil {
+		return err
+	}
+	if err := h.guardPrivilegedSettingsMutation(c, prevSettings, &b.MediaPlayer, &b.Torrent); err != nil {
+		return err
+	}
+
+	b.MediaPlayer.VlcPath = strings.TrimSpace(strings.Trim(b.MediaPlayer.VlcPath, "\""))
+	b.MediaPlayer.MpcPath = strings.TrimSpace(strings.Trim(b.MediaPlayer.MpcPath, "\""))
+	b.MediaPlayer.MpvPath = strings.TrimSpace(strings.Trim(b.MediaPlayer.MpvPath, "\""))
+	b.MediaPlayer.IinaPath = strings.TrimSpace(strings.Trim(b.MediaPlayer.IinaPath, "\""))
+
+	b.Torrent.QBittorrentPath = strings.TrimSpace(strings.Trim(b.Torrent.QBittorrentPath, "\""))
+	b.Torrent.TransmissionPath = strings.TrimSpace(strings.Trim(b.Torrent.TransmissionPath, "\""))
+
 	if b.Library.LibraryPath != "" {
 		b.Library.LibraryPath = filepath.ToSlash(filepath.Clean(b.Library.LibraryPath))
 	}
@@ -204,7 +257,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		if s == "" || util.IsSameDir(s, b.Library.LibraryPath) {
 			return false
 		}
-		info, err := os.Stat(s)
+		info, err := os.Stat(util.ResolvePhysicalPath(s))
 		if err != nil {
 			return false
 		}
@@ -224,8 +277,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	}
 
 	autoDownloaderSettings := models.AutoDownloaderSettings{}
-	prevSettings, err := h.getSettings(c)
-	if err == nil && prevSettings.AutoDownloader != nil {
+	if prevSettings != nil && prevSettings.AutoDownloader != nil {
 		autoDownloaderSettings = *prevSettings.AutoDownloader
 	}
 	// Disable auto-downloader if the torrent provider is set to none
@@ -288,6 +340,64 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 
 	// Refresh modules that depend on the settings
 	h.App.InitOrRefreshModules(profileID)
+
+	return h.RespondWithData(c, status)
+}
+
+// HandlePatchSetting
+//
+//	@summary patches a specific app setting.
+//	@desc This updates a single setting path and refreshes the server status.
+//	@route /api/v1/settings/path [PATCH]
+//	@returns handlers.Status
+func (h *Handler) HandlePatchSetting(c echo.Context) error {
+	type body struct {
+		Path  string      `json:"path"`
+		Value interface{} `json:"value"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	b.Path = strings.TrimSpace(b.Path)
+	if b.Path == "" {
+		return h.RespondWithError(c, errors.New("settings path is empty"))
+	}
+
+	prevSettings, err := h.App.Database.GetSettings()
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	nextSettings, err := models.SetSettingsPath(prevSettings, b.Path, b.Value)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	if err := h.guardStrictSettingsMutation(c, prevSettings, nextSettings.Library, nextSettings.Manga); err != nil {
+		return err
+	}
+	if err := h.guardPrivilegedSettingsMutation(c, prevSettings, nextSettings.MediaPlayer, nextSettings.Torrent); err != nil {
+		return err
+	}
+
+	nextSettings.BaseModel = models.BaseModel{
+		ID:        1,
+		UpdatedAt: time.Now(),
+	}
+
+	settings, err := h.App.Database.UpsertSettings(nextSettings)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	h.App.WSEventManager.SendEvent("settings", settings)
+
+	status := h.NewStatus(c)
+
+	h.App.InitOrRefreshModules("")
 
 	return h.RespondWithData(c, status)
 }
@@ -381,6 +491,10 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 	currSettings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	if err := h.guardPrivilegedSettingsMutation(c, currSettings, b.MediaPlayer, nil); err != nil {
+		return err
 	}
 
 	profileID := core.GetProfileIDFromContext(c)

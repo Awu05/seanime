@@ -1,8 +1,13 @@
 (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropNames = Object.getOwnPropertyNames;
-  var __esm = (fn, res) => function __init() {
-    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  var __esm = (fn, res, err) => function __init() {
+    if (err) throw err[0];
+    try {
+      return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+    } catch (e) {
+      throw err = [e], e;
+    }
   };
   var __export = (target, all) => {
     for (var name in all)
@@ -22,21 +27,19 @@
   });
 
   // node_modules/abslink/src/types.js
-  var WireValueType;
-  (function(WireValueType2) {
-    WireValueType2["RAW"] = "RAW";
-    WireValueType2["PROXY"] = "PROXY";
-    WireValueType2["THROW"] = "THROW";
-    WireValueType2["HANDLER"] = "HANDLER";
-  })(WireValueType || (WireValueType = {}));
-  var MessageType;
-  (function(MessageType2) {
-    MessageType2["GET"] = "GET";
-    MessageType2["SET"] = "SET";
-    MessageType2["APPLY"] = "APPLY";
-    MessageType2["CONSTRUCT"] = "CONSTRUCT";
-    MessageType2["RELEASE"] = "RELEASE";
-  })(MessageType || (MessageType = {}));
+  var WireValueType = {
+    RAW: "RAW",
+    PROXY: "PROXY",
+    THROW: "THROW",
+    HANDLER: "HANDLER"
+  };
+  var MessageType = {
+    GET: "GET",
+    SET: "SET",
+    APPLY: "APPLY",
+    CONSTRUCT: "CONSTRUCT",
+    RELEASE: "RELEASE"
+  };
 
   // node_modules/abslink/src/abslink.js
   var proxyMarker = /* @__PURE__ */ Symbol("Abslink.proxy");
@@ -49,16 +52,12 @@
     serialize(obj, ep) {
       const markerID = obj[proxyMarker];
       expose(obj, ep, markerID);
-      return markerID;
+      return [markerID, []];
     },
     deserialize(markerID, ep) {
-      return wrap(ep, void 0, markerID);
+      return wrap(ep, markerID);
     }
   };
-  function closeEndPoint(endpoint) {
-    if ("close" in endpoint && typeof endpoint.close === "function")
-      endpoint.close();
-  }
   var throwTransferHandler = {
     canHandle: (value) => isObject(value) && throwMarker in value,
     serialize({ value }) {
@@ -75,7 +74,7 @@
       } else {
         serialized = { isError: false, value };
       }
-      return serialized;
+      return [serialized, []];
     },
     deserialize(serialized) {
       if (serialized.isError) {
@@ -126,10 +125,7 @@
             returnValue = RawValue.apply(parent, argumentList);
             break;
           case MessageType.CONSTRUCT:
-            {
-              const value = new RawValue(...argumentList);
-              returnValue = proxy(value);
-            }
+            returnValue = new RawValue(...argumentList);
             break;
           case MessageType.RELEASE:
             returnValue = void 0;
@@ -143,27 +139,28 @@
       Promise.resolve(returnValue).catch((value) => {
         return { value, [throwMarker]: 0 };
       }).then((returnValue2) => {
-        const wireValue = toWireValue(returnValue2, ep);
-        ep.postMessage({ ...wireValue, id, markerID: rootMarkerID });
+        if (type === MessageType.CONSTRUCT)
+          returnValue2 = proxy(returnValue2);
+        const [wireValue, transfer] = toWireValue(returnValue2, ep);
+        ep.postMessage({ ...wireValue, id, markerID: rootMarkerID }, transfer);
         if (type === MessageType.RELEASE) {
           ep.off("message", callback);
-          if (finalizer in obj && typeof obj[finalizer] === "function") {
-            obj[finalizer]();
-          }
+          obj[finalizer]?.();
+          ep.close?.();
         }
       }).catch((_) => {
-        const wireValue = toWireValue({
+        const [wireValue, transfer] = toWireValue({
           value: new TypeError("Unserializable return value"),
           [throwMarker]: 0
         }, ep);
-        ep.postMessage({ ...wireValue, id, markerID: rootMarkerID });
+        ep.postMessage({ ...wireValue, id, markerID: rootMarkerID }, transfer);
       });
     });
     return obj;
   }
-  function wrap(ep, target, rootMarkerID) {
+  function wrap(endpoint, rootMarkerID) {
     const pendingListeners = /* @__PURE__ */ new Map();
-    ep.on("message", (data) => {
+    endpoint.on("message", (data) => {
       if (!data?.id) {
         return;
       }
@@ -177,7 +174,7 @@
         pendingListeners.delete(data.id);
       }
     });
-    return createProxy({ endpoint: ep, pendingListeners, nextRequestId: 1 }, [], target, rootMarkerID);
+    return createProxy({ endpoint, pendingListeners, rootMarkerID });
   }
   function throwIfProxyReleased(isReleased) {
     if (isReleased) {
@@ -186,7 +183,7 @@
   }
   async function releaseEndpoint(epWithPendingListeners) {
     await requestResponseMessage(epWithPendingListeners, { type: MessageType.RELEASE });
-    closeEndPoint(epWithPendingListeners.endpoint);
+    epWithPendingListeners.endpoint.close?.();
   }
   var proxyCounter = /* @__PURE__ */ new WeakMap();
   var proxyFinalizers = "FinalizationRegistry" in globalThis && new FinalizationRegistry((epWithPendingListeners) => {
@@ -210,11 +207,11 @@
       proxyFinalizers.unregister(proxy2);
     }
   }
-  function createProxy(epWithPendingListeners, path = [], target = function() {
-  }, rootMarkerID) {
+  function createProxy(epWithPendingListeners, path = []) {
     let isProxyReleased = false;
     const propProxyCache = /* @__PURE__ */ new Map();
-    const proxy2 = new Proxy(target, {
+    const proxy2 = new Proxy(function() {
+    }, {
       get(_target, prop) {
         throwIfProxyReleased(isProxyReleased);
         if (prop === releaseProxy) {
@@ -236,7 +233,6 @@
           }
           const r = requestResponseMessage(epWithPendingListeners, {
             type: MessageType.GET,
-            markerID: rootMarkerID,
             path: path.map((p) => p.toString())
           }).then((v) => fromWireValue(v, epWithPendingListeners.endpoint));
           return r.then.bind(r);
@@ -245,50 +241,55 @@
         if (cachedProxy) {
           return cachedProxy;
         }
-        const propProxy = createProxy(epWithPendingListeners, [...path, prop], void 0, rootMarkerID);
+        const propProxy = createProxy(epWithPendingListeners, [...path, prop]);
         propProxyCache.set(prop, propProxy);
         return propProxy;
       },
       set(_target, prop, rawValue) {
         throwIfProxyReleased(isProxyReleased);
-        const value = toWireValue(rawValue, epWithPendingListeners.endpoint);
+        const [value, transfer] = toWireValue(rawValue, epWithPendingListeners.endpoint);
         return requestResponseMessage(epWithPendingListeners, {
           type: MessageType.SET,
-          markerID: rootMarkerID,
           path: [...path, prop].map((p) => p.toString()),
           value
-        }).then((v) => fromWireValue(v, epWithPendingListeners.endpoint));
+        }, transfer).then((v) => fromWireValue(v, epWithPendingListeners.endpoint));
       },
       apply(_target, _thisArg, rawArgumentList) {
         throwIfProxyReleased(isProxyReleased);
         const last = path[path.length - 1];
         if (last === "bind") {
-          return createProxy(epWithPendingListeners, path.slice(0, -1), void 0, rootMarkerID);
+          return createProxy(epWithPendingListeners, path.slice(0, -1));
         }
-        const argumentList = processArguments(rawArgumentList, epWithPendingListeners);
+        const [argumentList, transfer] = processArguments(rawArgumentList, epWithPendingListeners);
         return requestResponseMessage(epWithPendingListeners, {
           type: MessageType.APPLY,
-          markerID: rootMarkerID,
           path: path.map((p) => p.toString()),
           argumentList
-        }).then((v) => fromWireValue(v, epWithPendingListeners.endpoint));
+        }, transfer).then((v) => fromWireValue(v, epWithPendingListeners.endpoint));
       },
       construct(_target, rawArgumentList) {
         throwIfProxyReleased(isProxyReleased);
-        const argumentList = processArguments(rawArgumentList, epWithPendingListeners);
+        const [argumentList, transfer] = processArguments(rawArgumentList, epWithPendingListeners);
         return requestResponseMessage(epWithPendingListeners, {
           type: MessageType.CONSTRUCT,
-          markerID: rootMarkerID,
           path: path.map((p) => p.toString()),
           argumentList
-        }).then((v) => fromWireValue(v, epWithPendingListeners.endpoint));
+        }, transfer).then((v) => fromWireValue(v, epWithPendingListeners.endpoint));
       }
     });
     registerProxy(proxy2, epWithPendingListeners);
     return proxy2;
   }
+  var transferCache = /* @__PURE__ */ new WeakMap();
   function processArguments(argumentList, epWithPendingListeners) {
-    return argumentList.map((v) => toWireValue(v, epWithPendingListeners.endpoint));
+    const wireValues = [];
+    const transferables = [];
+    for (const argument of argumentList) {
+      const [wireValue, transfer] = toWireValue(argument, epWithPendingListeners.endpoint);
+      wireValues.push(wireValue);
+      transferables.push(...transfer);
+    }
+    return [wireValues, transferables];
   }
   function proxy(obj) {
     return Object.assign(obj, { [proxyMarker]: randomId() });
@@ -296,18 +297,18 @@
   function toWireValue(value, ep) {
     for (const [name, handler] of transferHandlers) {
       if (handler.canHandle(value)) {
-        const serializedValue = handler.serialize(value, ep);
-        return {
+        const [serializedValue, transfer] = handler.serialize(value, ep);
+        return [{
           type: WireValueType.HANDLER,
           name,
           value: serializedValue
-        };
+        }, transfer];
       }
     }
-    return {
+    return [{
       type: WireValueType.RAW,
       value
-    };
+    }, transferCache.get(value) ?? []];
   }
   function fromWireValue(value, ep) {
     switch (value.type) {
@@ -317,20 +318,35 @@
         return value.value;
     }
   }
-  function requestResponseMessage(ep, msg) {
+  function requestResponseMessage(ep, msg, transfer) {
     return new Promise((resolve) => {
       const id = randomId();
       ep.pendingListeners.set(id, resolve);
-      ep.endpoint.postMessage({ id, ...msg });
+      ep.endpoint.postMessage({ id, ...msg, markerID: ep.rootMarkerID }, transfer);
     });
   }
+  var hex = [];
+  var alphabet = "0123456789abcdef";
+  for (let i = 0; i < 256; i++) {
+    hex[i] = alphabet[i >> 4 & 15] + alphabet[i & 15];
+  }
+  var step = 0;
+  var buffer = "";
   function randomId() {
-    return Math.trunc(Math.random() * Number.MAX_SAFE_INTEGER).toString();
+    let i = 0;
+    if (!buffer || step + 16 > 256 * 2) {
+      for (buffer = "", step = 0; i < 256; ++i) {
+        buffer += hex[Math.random() * 256 | 0];
+      }
+    }
+    return buffer.substring(step, ++step + 16);
   }
 
   // node_modules/abslink/adapters/w3c.js
   function createWrapper(channel, messageable) {
     const listeners = /* @__PURE__ */ new WeakMap();
+    channel.start?.();
+    messageable.start?.();
     return {
       on(event, listener) {
         const unwrapped = (event2) => listener(event2.data);
@@ -354,16 +370,18 @@
         }
         listeners.delete(listener);
       },
-      postMessage(message) {
-        messageable.postMessage(message);
+      postMessage(message, transfer) {
+        messageable.postMessage(message, transfer);
       },
-      [finalizer]: () => {
-        channel.terminate?.();
-        messageable.terminate?.();
+      close() {
+        if (channel !== globalThis)
+          channel.close?.();
+        if (messageable !== globalThis)
+          messageable.close?.();
       }
     };
   }
-  function expose2(obj, channel = self, messageable = channel) {
+  function expose2(obj, channel = globalThis, messageable = channel) {
     return expose(obj, createWrapper(channel, messageable));
   }
 
@@ -474,10 +492,17 @@
   }
 
   // node_modules/jassub/dist/wasm/jassub-worker.js
+  if (self.name.startsWith("em-pthread")) {
+    const url = self.name.split("-").slice(2).join("-");
+    const _fetch2 = globalThis.fetch;
+    globalThis.fetch = (_) => _fetch2(url);
+    self.name = "em-pthread";
+  }
   async function Module(moduleArg = {}) {
     var moduleRtn;
     var Module2 = moduleArg;
     var ENVIRONMENT_IS_WEB = true;
+    var ENVIRONMENT_IS_WORKER = !!globalThis.WorkerGlobalScope;
     var out = (...args) => console.log(...args);
     var err = (...args) => console.error(...args);
     function ready() {
@@ -486,8 +511,7 @@
         startWorker();
       }
     }
-    var ENVIRONMENT_IS_WORKER = !!globalThis.WorkerGlobalScope;
-    var ENVIRONMENT_IS_PTHREAD = ENVIRONMENT_IS_WORKER && self.name?.startsWith("em-pthread");
+    var ENVIRONMENT_IS_PTHREAD = ENVIRONMENT_IS_WORKER && globalThis.name == "em-pthread";
     if (ENVIRONMENT_IS_WORKER) {
       _scriptName = self.location.href;
     }
@@ -510,15 +534,11 @@
       self.HEAPU8RAW = new Uint8Array(b2);
       self.WASMMEMORY = wasmMemory;
     };
-    if (self.name.startsWith("em-pthread")) {
-      const url = self.name.split("-").slice(2).join("-");
-      const _fetch2 = globalThis.fetch;
-      globalThis.fetch = (_) => _fetch2(url);
-    } else {
-      if (moduleArg.__out)
-        out = moduleArg.__out;
-      if (moduleArg.__err)
-        err = moduleArg.__err;
+    if (moduleArg.__out)
+      out = moduleArg.__out;
+    if (moduleArg.__err)
+      err = moduleArg.__err;
+    if (!self.name.startsWith("em-pthread")) {
       const OriginalWorker = globalThis.Worker;
       globalThis.Worker = class extends OriginalWorker {
         constructor(scriptURL, options = {}) {
@@ -530,6 +550,10 @@
     }
     function abort(what) {
       throw what;
+    }
+    class EmscriptenEH {
+    }
+    class EmscriptenSjLj extends EmscriptenEH {
     }
     function growMemViews() {
       if (wasmMemory.buffer != HEAP8.buffer) {
@@ -604,8 +628,6 @@
       };
       self.onmessage = handleMessage;
     }
-    var HEAP8, HEAPU8, HEAP16, HEAPU16, HEAP32, HEAPU32, HEAPF32, HEAPF64;
-    var HEAP64, HEAPU64;
     var runtimeInitialized = false;
     function updateMemoryViews() {
       var b2 = wasmMemory.buffer;
@@ -625,12 +647,22 @@
         return;
       }
       {
-        var INITIAL_MEMORY = 62914560;
+        var INITIAL_MEMORY = 33554432;
         wasmMemory = new WebAssembly.Memory({ initial: INITIAL_MEMORY / 65536, maximum: 32768, shared: true });
       }
       updateMemoryViews();
     }
     initMemory();
+    var HEAP16;
+    var HEAP32;
+    var HEAP64;
+    var HEAP8;
+    var HEAPF32;
+    var HEAPF64;
+    var HEAPU16;
+    var HEAPU32;
+    var HEAPU64;
+    var HEAPU8;
     var terminateWorker = (worker) => {
       worker.terminate();
       worker.onmessage = (e) => {
@@ -661,22 +693,21 @@
     var stackSave = () => _emscripten_stack_get_current();
     var stackRestore = (val) => __emscripten_stack_restore(val);
     var stackAlloc = (sz) => __emscripten_stack_alloc(sz);
-    var proxyToMainThread = (funcIndex, emAsmAddr, sync, ...callArgs) => {
-      var serializedNumCallArgs = callArgs.length * 2;
+    var proxyToMainThread = (funcIndex, emAsmAddr, proxyMode, ...callArgs) => {
+      var bufSize = 8 * callArgs.length * 2;
       var sp = stackSave();
-      var args = stackAlloc(serializedNumCallArgs * 8);
+      var args = stackAlloc(bufSize);
       var b2 = args >> 3;
-      for (var i = 0; i < callArgs.length; i++) {
-        var arg = callArgs[i];
+      for (var arg of callArgs) {
         if (typeof arg == "bigint") {
-          (growMemViews(), HEAP64)[b2 + 2 * i] = 1n;
-          (growMemViews(), HEAP64)[b2 + 2 * i + 1] = arg;
+          (growMemViews(), HEAP64)[b2++] = 1n;
+          (growMemViews(), HEAP64)[b2++] = arg;
         } else {
-          (growMemViews(), HEAP64)[b2 + 2 * i] = 0n;
-          (growMemViews(), HEAPF64)[b2 + 2 * i + 1] = arg;
+          (growMemViews(), HEAP64)[b2++] = 0n;
+          (growMemViews(), HEAPF64)[b2++] = arg;
         }
       }
-      var rtn = __emscripten_run_js_on_main_thread(funcIndex, emAsmAddr, serializedNumCallArgs, args, sync);
+      var rtn = __emscripten_run_js_on_main_thread(funcIndex, emAsmAddr, bufSize, args, proxyMode);
       stackRestore(sp);
       return rtn;
     };
@@ -686,6 +717,7 @@
       throw `exit(${code})`;
     }
     var _exit = _proc_exit;
+    var waitAsyncPolyfilled = !Atomics.waitAsync || globalThis.navigator?.userAgent && Number((navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./) || [])[2]) < 91;
     var PThread = { unusedWorkers: [], runningWorkers: [], tlsInitFunctions: [], pthreads: {}, init() {
       if (!ENVIRONMENT_IS_PTHREAD) {
         PThread.initMainThread();
@@ -705,6 +737,13 @@
       PThread.unusedWorkers = [];
       PThread.runningWorkers = [];
       PThread.pthreads = {};
+    }, terminateRuntime: () => {
+      PThread.terminateAllThreads();
+      var pthread_ptr = _pthread_self();
+      ___set_thread_state(0, 0, 0, 1);
+      if (!waitAsyncPolyfilled) {
+        Atomics.notify((growMemViews(), HEAP32), pthread_ptr >> 2);
+      }
     }, returnWorkerToPool: (worker) => {
       var pthread_ptr = worker.pthread_ptr;
       delete PThread.pthreads[pthread_ptr];
@@ -723,7 +762,7 @@
           if (targetWorker) {
             targetWorker.postMessage(d2, d2.transferList);
           } else {
-            err(`Internal error! Worker sent a message "${cmd}" to target pthread ${d2.targetThread}, but that thread no longer exists!`);
+            err(`worker sent message (${cmd}) to pthread (${d2.targetThread}) that no longer exists`);
           }
           return;
         }
@@ -775,8 +814,8 @@
       return PThread.unusedWorkers.pop();
     } };
     function establishStackSpace(pthread_ptr) {
-      var stackHigh = (growMemViews(), HEAPU32)[pthread_ptr + 52 >> 2];
-      var stackSize = (growMemViews(), HEAPU32)[pthread_ptr + 56 >> 2];
+      var stackHigh = (growMemViews(), HEAPU32)[pthread_ptr + 48 >> 2];
+      var stackSize = (growMemViews(), HEAPU32)[pthread_ptr + 52 >> 2];
       var stackLow = stackHigh - stackSize;
       _emscripten_stack_set_limits(stackHigh, stackLow);
       stackRestore(stackHigh);
@@ -795,6 +834,66 @@
         __emscripten_thread_exit(result2);
       }
       finish(result);
+    };
+    var lengthBytesUTF8 = (str) => {
+      var len = 0;
+      for (var i = 0; i < str.length; ++i) {
+        var c2 = str.charCodeAt(i);
+        if (c2 <= 127) {
+          len++;
+        } else if (c2 <= 2047) {
+          len += 2;
+        } else if (c2 >= 55296 && c2 <= 57343) {
+          len += 4;
+          ++i;
+        } else {
+          len += 3;
+        }
+      }
+      return len;
+    };
+    var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
+      if (!(maxBytesToWrite > 0))
+        return 0;
+      var startIdx = outIdx;
+      var endIdx = outIdx + maxBytesToWrite - 1;
+      for (var i = 0; i < str.length; ++i) {
+        var u = str.codePointAt(i);
+        if (u <= 127) {
+          if (outIdx >= endIdx)
+            break;
+          heap[outIdx++] = u;
+        } else if (u <= 2047) {
+          if (outIdx + 1 >= endIdx)
+            break;
+          heap[outIdx++] = 192 | u >> 6;
+          heap[outIdx++] = 128 | u & 63;
+        } else if (u <= 65535) {
+          if (outIdx + 2 >= endIdx)
+            break;
+          heap[outIdx++] = 224 | u >> 12;
+          heap[outIdx++] = 128 | u >> 6 & 63;
+          heap[outIdx++] = 128 | u & 63;
+        } else {
+          if (outIdx + 3 >= endIdx)
+            break;
+          heap[outIdx++] = 240 | u >> 18;
+          heap[outIdx++] = 128 | u >> 12 & 63;
+          heap[outIdx++] = 128 | u >> 6 & 63;
+          heap[outIdx++] = 128 | u & 63;
+          i++;
+        }
+      }
+      heap[outIdx] = 0;
+      return outIdx - startIdx;
+    };
+    var stringToUTF8 = (str, outPtr, maxBytesToWrite) => stringToUTF8Array(str, (growMemViews(), HEAPU8), outPtr, maxBytesToWrite);
+    var stringToNewUTF8 = (str) => {
+      var size = lengthBytesUTF8(str) + 1;
+      var ret = _malloc(size);
+      if (ret)
+        stringToUTF8(str, ret, size);
+      return ret;
     };
     var wasmMemory;
     var UTF8Decoder = new TextDecoder();
@@ -1113,9 +1212,9 @@
       }
       return name;
     };
-    function RegisteredClass(name, constructor, instancePrototype, rawDestructor, baseClass, getActualType, upcast, downcast) {
+    function RegisteredClass(name, constructor2, instancePrototype, rawDestructor, baseClass, getActualType, upcast, downcast) {
       this.name = name;
-      this.constructor = constructor;
+      this.constructor = constructor2;
       this.instancePrototype = instancePrototype;
       this.rawDestructor = rawDestructor;
       this.baseClass = baseClass;
@@ -1216,7 +1315,7 @@
             }
             break;
           default:
-            throwBindingError("Unsupporting sharing policy");
+            throwBindingError("Unsupported sharing policy");
         }
       }
       return ptr;
@@ -1479,7 +1578,7 @@
         } else {
           basePrototype = ClassHandle.prototype;
         }
-        var constructor = createNamedFunction(name, function(...args) {
+        var constructor2 = createNamedFunction(name, function(...args) {
           if (Object.getPrototypeOf(this) !== instancePrototype) {
             throw new BindingError(`Use 'new' to construct ${name}`);
           }
@@ -1492,9 +1591,9 @@
           }
           return body.apply(this, args);
         });
-        var instancePrototype = Object.create(basePrototype, { constructor: { value: constructor } });
-        constructor.prototype = instancePrototype;
-        var registeredClass = new RegisteredClass(name, constructor, instancePrototype, rawDestructor, baseClass, getActualType, upcast, downcast);
+        var instancePrototype = Object.create(basePrototype, { constructor: { value: constructor2 } });
+        constructor2.prototype = instancePrototype;
+        var registeredClass = new RegisteredClass(name, constructor2, instancePrototype, rawDestructor, baseClass, getActualType, upcast, downcast);
         if (registeredClass.baseClass) {
           registeredClass.baseClass.__derivedClasses ??= [];
           registeredClass.baseClass.__derivedClasses.push(registeredClass);
@@ -1503,7 +1602,7 @@
         var pointerConverter = new RegisteredPointer(name + "*", registeredClass, false, false, false);
         var constPointerConverter = new RegisteredPointer(name + " const*", registeredClass, false, true, false);
         registeredPointers[rawType] = { pointerType: pointerConverter, constPointerType: constPointerConverter };
-        replacePublicSymbol(legalFunctionName, constructor);
+        replacePublicSymbol(legalFunctionName, constructor2);
         return [referenceConverter, pointerConverter, constPointerConverter];
       });
     };
@@ -1529,57 +1628,97 @@
       }
       return false;
     }
-    function createJsInvoker(argTypes, isClassMethodFunc, returns, isAsync) {
-      var needsDestructorStack = usesDestructorStack(argTypes);
-      var argCount = argTypes.length - 2;
-      var argsList = [];
-      var argsListWired = ["fn"];
-      if (isClassMethodFunc) {
-        argsListWired.push("thisWired");
-      }
-      for (var i = 0; i < argCount; ++i) {
-        argsList.push(`arg${i}`);
-        argsListWired.push(`arg${i}Wired`);
-      }
-      argsList = argsList.join(",");
-      argsListWired = argsListWired.join(",");
-      var invokerFnBody = `return function (${argsList}) {
-`;
-      if (needsDestructorStack) {
-        invokerFnBody += "var destructors = [];\n";
-      }
-      var dtorStack = needsDestructorStack ? "destructors" : "null";
-      var args1 = ["humanName", "throwBindingError", "invoker", "fn", "runDestructors", "fromRetWire", "toClassParamWire"];
-      if (isClassMethodFunc) {
-        invokerFnBody += `var thisWired = toClassParamWire(${dtorStack}, this);
-`;
-      }
-      for (var i = 0; i < argCount; ++i) {
-        var argName = `toArg${i}Wire`;
-        invokerFnBody += `var arg${i}Wired = ${argName}(${dtorStack}, arg${i});
-`;
-        args1.push(argName);
-      }
-      invokerFnBody += (returns || isAsync ? "var rv = " : "") + `invoker(${argsListWired});
-`;
-      if (needsDestructorStack) {
-        invokerFnBody += "runDestructors(destructors);\n";
-      } else {
-        for (var i = isClassMethodFunc ? 1 : 2; i < argTypes.length; ++i) {
-          var paramName = i === 1 ? "thisWired" : "arg" + (i - 2) + "Wired";
-          if (argTypes[i].destructorFunction !== null) {
-            invokerFnBody += `${paramName}_dtor(${paramName});
-`;
-            args1.push(`${paramName}_dtor`);
-          }
+    var InvokerFunctions = { ftfnnn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire, toArg1Wire, toArg2Wire) {
+      return function(arg0, arg1, arg2) {
+        var arg0Wired = toArg0Wire(null, arg0);
+        var arg1Wired = toArg1Wire(null, arg1);
+        var arg2Wired = toArg2Wire(null, arg2);
+        var rv = invoker(fn, arg0Wired, arg1Wired, arg2Wired);
+        var ret = fromRetWire(rv);
+        return ret;
+      };
+    }, tffn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire) {
+      return function() {
+        var thisWired = toClassParamWire(null, this);
+        invoker(fn, thisWired);
+      };
+    }, tffnn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire) {
+      return function(arg0) {
+        var thisWired = toClassParamWire(null, this);
+        var arg0Wired = toArg0Wire(null, arg0);
+        invoker(fn, thisWired, arg0Wired);
+      };
+    }, tffnnnnn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire, toArg1Wire, toArg2Wire, toArg3Wire) {
+      return function(arg0, arg1, arg2, arg3) {
+        var thisWired = toClassParamWire(null, this);
+        var arg0Wired = toArg0Wire(null, arg0);
+        var arg1Wired = toArg1Wire(null, arg1);
+        var arg2Wired = toArg2Wire(null, arg2);
+        var arg3Wired = toArg3Wire(null, arg3);
+        invoker(fn, thisWired, arg0Wired, arg1Wired, arg2Wired, arg3Wired);
+      };
+    }, tffnnn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire, toArg1Wire) {
+      return function(arg0, arg1) {
+        var thisWired = toClassParamWire(null, this);
+        var arg0Wired = toArg0Wire(null, arg0);
+        var arg1Wired = toArg1Wire(null, arg1);
+        invoker(fn, thisWired, arg0Wired, arg1Wired);
+      };
+    }, ttfnn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire) {
+      return function(arg0) {
+        var thisWired = toClassParamWire(null, this);
+        var arg0Wired = toArg0Wire(null, arg0);
+        var rv = invoker(fn, thisWired, arg0Wired);
+        var ret = fromRetWire(rv);
+        return ret;
+      };
+    }, tffnt: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire, arg0Wired_dtor) {
+      return function(arg0) {
+        var thisWired = toClassParamWire(null, this);
+        var arg0Wired = toArg0Wire(null, arg0);
+        invoker(fn, thisWired, arg0Wired);
+        arg0Wired_dtor(arg0Wired);
+      };
+    }, tffnnnn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire, toArg1Wire, toArg2Wire) {
+      return function(arg0, arg1, arg2) {
+        var thisWired = toClassParamWire(null, this);
+        var arg0Wired = toArg0Wire(null, arg0);
+        var arg1Wired = toArg1Wire(null, arg1);
+        var arg2Wired = toArg2Wire(null, arg2);
+        invoker(fn, thisWired, arg0Wired, arg1Wired, arg2Wired);
+      };
+    }, ttfn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire) {
+      return function() {
+        var thisWired = toClassParamWire(null, this);
+        var rv = invoker(fn, thisWired);
+        var ret = fromRetWire(rv);
+        return ret;
+      };
+    }, ttfnnn: function anonymous(humanName, throwBindingError2, invoker, fn, runDestructors2, fromRetWire, toClassParamWire, toArg0Wire, toArg1Wire) {
+      return function(arg0, arg1) {
+        var thisWired = toClassParamWire(null, this);
+        var arg0Wired = toArg0Wire(null, arg0);
+        var arg1Wired = toArg1Wire(null, arg1);
+        var rv = invoker(fn, thisWired, arg0Wired, arg1Wired);
+        var ret = fromRetWire(rv);
+        return ret;
+      };
+    } };
+    function createJsInvokerSignature(argTypes, isClassMethodFunc, returns, isAsync) {
+      const signature = [isClassMethodFunc ? "t" : "f", returns ? "t" : "f", isAsync ? "t" : "f"];
+      for (let i = isClassMethodFunc ? 1 : 2; i < argTypes.length; ++i) {
+        const arg = argTypes[i];
+        let destructorSig = "";
+        if (arg.destructorFunction === void 0) {
+          destructorSig = "u";
+        } else if (arg.destructorFunction === null) {
+          destructorSig = "n";
+        } else {
+          destructorSig = "t";
         }
+        signature.push(destructorSig);
       }
-      if (returns) {
-        invokerFnBody += "var ret = fromRetWire(rv);\nreturn ret;\n";
-      } else {
-      }
-      invokerFnBody += "}\n";
-      return new Function(args1, invokerFnBody);
+      return signature.join("");
     }
     function craftInvokerFunction(humanName, argTypes, classType, cppInvokerFunc, cppTargetFunc, isAsync) {
       var argCount = argTypes.length;
@@ -1603,8 +1742,8 @@
           }
         }
       }
-      let invokerFactory = createJsInvoker(argTypes, isClassMethodFunc, returns, isAsync);
-      var invokerFn = invokerFactory(...closureArgs);
+      var signature = createJsInvokerSignature(argTypes, isClassMethodFunc, returns, isAsync);
+      var invokerFn = InvokerFunctions[signature](...closureArgs);
       return createNamedFunction(humanName, invokerFn);
     }
     var __embind_register_class_constructor = (rawClassType, argCount, rawArgTypesAddr, invokerSignature, invoker, rawConstructor) => {
@@ -1730,6 +1869,7 @@
     var emval_handles = [0, 1, , 1, null, 1, true, 1, false, 1];
     var __emval_decref = (handle) => {
       if (handle > 9 && 0 === --emval_handles[handle + 1]) {
+        var value = emval_handles[handle];
         emval_handles[handle] = void 0;
         emval_freelist.push(handle);
       }
@@ -1802,59 +1942,6 @@
       }
       name = AsciiToString(name);
       registerType(rawType, { name, fromWireType: decodeMemoryView, readValueFromPointer: decodeMemoryView }, { ignoreDuplicateRegistrations: true });
-    };
-    var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
-      if (!(maxBytesToWrite > 0))
-        return 0;
-      var startIdx = outIdx;
-      var endIdx = outIdx + maxBytesToWrite - 1;
-      for (var i = 0; i < str.length; ++i) {
-        var u = str.codePointAt(i);
-        if (u <= 127) {
-          if (outIdx >= endIdx)
-            break;
-          heap[outIdx++] = u;
-        } else if (u <= 2047) {
-          if (outIdx + 1 >= endIdx)
-            break;
-          heap[outIdx++] = 192 | u >> 6;
-          heap[outIdx++] = 128 | u & 63;
-        } else if (u <= 65535) {
-          if (outIdx + 2 >= endIdx)
-            break;
-          heap[outIdx++] = 224 | u >> 12;
-          heap[outIdx++] = 128 | u >> 6 & 63;
-          heap[outIdx++] = 128 | u & 63;
-        } else {
-          if (outIdx + 3 >= endIdx)
-            break;
-          heap[outIdx++] = 240 | u >> 18;
-          heap[outIdx++] = 128 | u >> 12 & 63;
-          heap[outIdx++] = 128 | u >> 6 & 63;
-          heap[outIdx++] = 128 | u & 63;
-          i++;
-        }
-      }
-      heap[outIdx] = 0;
-      return outIdx - startIdx;
-    };
-    var stringToUTF8 = (str, outPtr, maxBytesToWrite) => stringToUTF8Array(str, (growMemViews(), HEAPU8), outPtr, maxBytesToWrite);
-    var lengthBytesUTF8 = (str) => {
-      var len = 0;
-      for (var i = 0; i < str.length; ++i) {
-        var c2 = str.charCodeAt(i);
-        if (c2 <= 127) {
-          len++;
-        } else if (c2 <= 2047) {
-          len += 2;
-        } else if (c2 >= 55296 && c2 <= 57343) {
-          len += 4;
-          ++i;
-        } else {
-          len += 3;
-        }
-      }
-      return len;
     };
     var __embind_register_std_string = (rawType, name) => {
       name = AsciiToString(name);
@@ -2015,28 +2102,29 @@
       registerType(rawType, { isVoid: true, name, fromWireType: () => void 0, toWireType: (destructors, o) => void 0 });
     };
     var __emscripten_init_main_thread_js = (tb) => {
-      __emscripten_thread_init(tb, !ENVIRONMENT_IS_WORKER, 1, !ENVIRONMENT_IS_WEB, 65536, false);
+      __emscripten_thread_init(tb, !ENVIRONMENT_IS_WORKER, 1, !ENVIRONMENT_IS_WEB, 262144, false);
       PThread.threadInitTLS();
     };
     var callUserCallback = (func) => {
       func();
     };
-    var waitAsyncPolyfilled = !Atomics.waitAsync || globalThis.navigator?.userAgent && Number((navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./) || [])[2]) < 91;
     var __emscripten_thread_mailbox_await = (pthread_ptr) => {
       if (!waitAsyncPolyfilled) {
         var wait = Atomics.waitAsync((growMemViews(), HEAP32), pthread_ptr >> 2, pthread_ptr);
         wait.value.then(checkMailbox);
-        var waitingAsync = pthread_ptr + 128;
+        var waitingAsync = pthread_ptr + 120;
         Atomics.store((growMemViews(), HEAP32), waitingAsync >> 2, 1);
       }
     };
-    var checkMailbox = () => callUserCallback(() => {
+    var checkMailbox = () => {
       var pthread_ptr = _pthread_self();
-      if (pthread_ptr) {
+      if (!pthread_ptr)
+        return;
+      callUserCallback(() => {
         __emscripten_thread_mailbox_await(pthread_ptr);
         __emscripten_check_mailbox();
-      }
-    });
+      });
+    };
     var __emscripten_notify_mailbox_postmessage = (targetThread, currThreadId) => {
       if (targetThread == currThreadId) {
         setTimeout(checkMailbox);
@@ -2051,21 +2139,27 @@
       }
     };
     var proxiedJSCallArgs = [];
-    var __emscripten_receive_on_main_thread_js = (funcIndex, emAsmAddr, callingThread, numCallArgs, args) => {
-      numCallArgs /= 2;
-      proxiedJSCallArgs.length = numCallArgs;
+    var __emscripten_receive_on_main_thread_js = (funcIndex, emAsmAddr, callingThread, bufSize, args, ctx, ctxArgs) => {
+      proxiedJSCallArgs.length = 0;
       var b2 = args >> 3;
-      for (var i = 0; i < numCallArgs; i++) {
-        if ((growMemViews(), HEAP64)[b2 + 2 * i]) {
-          proxiedJSCallArgs[i] = (growMemViews(), HEAP64)[b2 + 2 * i + 1];
+      var end = args + bufSize >> 3;
+      while (b2 < end) {
+        var arg;
+        if ((growMemViews(), HEAP64)[b2++]) {
+          arg = (growMemViews(), HEAP64)[b2++];
         } else {
-          proxiedJSCallArgs[i] = (growMemViews(), HEAPF64)[b2 + 2 * i + 1];
+          arg = (growMemViews(), HEAPF64)[b2++];
         }
+        proxiedJSCallArgs.push(arg);
       }
-      var func = proxiedFunctionTable[funcIndex];
+      var func = emAsmAddr ? ASM_CONSTS[emAsmAddr] : proxiedFunctionTable[funcIndex];
       PThread.currentProxiedOperationCallerThread = callingThread;
       var rtn = func(...proxiedJSCallArgs);
       PThread.currentProxiedOperationCallerThread = 0;
+      if (ctx) {
+        rtn.then((rtn2) => __emscripten_run_js_on_main_thread_done(ctx, ctxArgs, rtn2));
+        return;
+      }
       return rtn;
     };
     var __emscripten_runtime_keepalive_clear = () => {
@@ -2079,7 +2173,101 @@
     var __emscripten_thread_set_strongref = (thread) => {
     };
     var __emscripten_throw_longjmp = () => {
-      throw Infinity;
+      throw new EmscriptenSjLj();
+    };
+    var emval_methodCallers = [];
+    var emval_addMethodCaller = (caller) => {
+      var id = emval_methodCallers.length;
+      emval_methodCallers.push(caller);
+      return id;
+    };
+    var requireRegisteredType = (rawType, humanName) => {
+      var impl = registeredTypes[rawType];
+      if (void 0 === impl) {
+        throwBindingError(`${humanName} has unknown type ${getTypeName(rawType)}`);
+      }
+      return impl;
+    };
+    var emval_lookupTypes = (argCount, argTypes) => {
+      var a2 = new Array(argCount);
+      for (var i = 0; i < argCount; ++i) {
+        a2[i] = requireRegisteredType((growMemViews(), HEAPU32)[argTypes + i * 4 >> 2], `parameter ${i}`);
+      }
+      return a2;
+    };
+    var emval_returnValue = (toReturnWire, destructorsRef, handle) => {
+      var destructors = [];
+      var result = toReturnWire(destructors, handle);
+      if (destructors.length) {
+        (growMemViews(), HEAPU32)[destructorsRef >> 2] = Emval.toHandle(destructors);
+      }
+      return result;
+    };
+    var emval_symbols = {};
+    var getStringOrSymbol = (address) => {
+      var symbol = emval_symbols[address];
+      if (symbol === void 0) {
+        return AsciiToString(address);
+      }
+      return symbol;
+    };
+    var __emval_create_invoker = (argCount, argTypesPtr, kind) => {
+      var GenericWireTypeSize = 8;
+      var [retType, ...argTypes] = emval_lookupTypes(argCount, argTypesPtr);
+      var toReturnWire = retType.toWireType.bind(retType);
+      var argFromPtr = argTypes.map((type) => type.readValueFromPointer.bind(type));
+      argCount--;
+      var argN = new Array(argCount);
+      var invokerFunction = (handle, methodName, destructorsRef, args) => {
+        var offset = 0;
+        for (var i = 0; i < argCount; ++i) {
+          argN[i] = argFromPtr[i](args + offset);
+          offset += GenericWireTypeSize;
+        }
+        var rv;
+        switch (kind) {
+          case 0:
+            rv = Emval.toValue(handle).apply(null, argN);
+            break;
+          case 2:
+            rv = Reflect.construct(Emval.toValue(handle), argN);
+            break;
+          case 3:
+            rv = argN[0];
+            break;
+          case 1:
+            rv = Emval.toValue(handle)[getStringOrSymbol(methodName)](...argN);
+            break;
+        }
+        return emval_returnValue(toReturnWire, destructorsRef, rv);
+      };
+      var functionName = `methodCaller<(${argTypes.map((t) => t.name)}) => ${retType.name}>`;
+      return emval_addMethodCaller(createNamedFunction(functionName, invokerFunction));
+    };
+    var __emval_get_property = (handle, key) => {
+      handle = Emval.toValue(handle);
+      key = Emval.toValue(key);
+      return Emval.toHandle(handle[key]);
+    };
+    var __emval_incref = (handle) => {
+      if (handle > 9) {
+        emval_handles[handle + 1] += 1;
+      }
+    };
+    var __emval_invoke = (caller, handle, methodName, destructorsRef, args) => emval_methodCallers[caller](handle, methodName, destructorsRef, args);
+    var __emval_new_array = () => Emval.toHandle([]);
+    var __emval_new_cstring = (v) => Emval.toHandle(getStringOrSymbol(v));
+    var __emval_new_object = () => Emval.toHandle({});
+    var __emval_run_destructors = (handle) => {
+      var destructors = Emval.toValue(handle);
+      runDestructors(destructors);
+      __emval_decref(handle);
+    };
+    var __emval_set_property = (handle, key, value) => {
+      handle = Emval.toValue(handle);
+      key = Emval.toValue(key);
+      value = Emval.toValue(value);
+      handle[key] = value;
     };
     var timers = {};
     var _emscripten_get_now = () => performance.timeOrigin + performance.now();
@@ -2103,6 +2291,24 @@
     var INT53_MAX = 9007199254740992;
     var INT53_MIN = -9007199254740992;
     var bigintToI53Checked = (num) => num < INT53_MIN || num > INT53_MAX ? NaN : Number(num);
+    var readEmAsmArgsArray = [];
+    var readEmAsmArgs = (sigPtr, buf) => {
+      readEmAsmArgsArray.length = 0;
+      var ch;
+      while (ch = (growMemViews(), HEAPU8)[sigPtr++]) {
+        var wide = ch != 105;
+        wide &= ch != 112;
+        buf += wide && buf % 8 ? 4 : 0;
+        readEmAsmArgsArray.push(ch == 112 ? (growMemViews(), HEAPU32)[buf >> 2] : ch == 106 ? (growMemViews(), HEAP64)[buf >> 3] : ch == 105 ? (growMemViews(), HEAP32)[buf >> 2] : (growMemViews(), HEAPF64)[buf >> 3]);
+        buf += wide ? 8 : 4;
+      }
+      return readEmAsmArgsArray;
+    };
+    var runEmAsmFunction = (code, sigPtr, argbuf) => {
+      var args = readEmAsmArgs(sigPtr, argbuf);
+      return ASM_CONSTS[code](...args);
+    };
+    var _emscripten_asm_const_ptr = (code, sigPtr, argbuf) => runEmAsmFunction(code, sigPtr, argbuf);
     var _emscripten_check_blocking_allowed = () => {
     };
     var _emscripten_err = (str) => err(UTF8ToString(str));
@@ -2211,12 +2417,12 @@
       return UTF8Decoder.decode(heapOrArray.buffer ? heapOrArray.buffer instanceof ArrayBuffer ? heapOrArray.subarray(idx, endPtr) : heapOrArray.slice(idx, endPtr) : new Uint8Array(heapOrArray.slice(idx, endPtr)));
     };
     var printChar = (stream, curr) => {
-      var buffer = printCharBuffers[stream];
+      var buffer2 = printCharBuffers[stream];
       if (curr === 0 || curr === 10) {
-        (stream === 1 ? out : err)(UTF8ArrayToString(buffer));
-        buffer.length = 0;
+        (stream === 1 ? out : err)(UTF8ArrayToString(buffer2));
+        buffer2.length = 0;
       } else {
-        buffer.push(curr);
+        buffer2.push(curr);
       }
     };
     function _fd_write(fd, iov, iovcnt, pnum) {
@@ -2235,63 +2441,61 @@
       (growMemViews(), HEAPU32)[pnum >> 2] = num;
       return 0;
     }
-    var initRandomFill = () => (view) => view.set(crypto.getRandomValues(new Uint8Array(view.byteLength)));
-    var randomFill = (view) => {
-      (randomFill = initRandomFill())(view);
-    };
-    var _random_get = (buffer, size) => {
-      randomFill((growMemViews(), HEAPU8).subarray(buffer, buffer + size));
-      return 0;
-    };
+    var initRandomFill = () => (view) => (view.set(crypto.getRandomValues(new Uint8Array(view.byteLength))), 0);
+    var randomFill = (view) => (randomFill = initRandomFill())(view);
+    var _random_get = (buffer2, size) => randomFill((growMemViews(), HEAPU8).subarray(buffer2, buffer2 + size));
     PThread.init();
     init_ClassHandle();
     init_RegisteredPointer();
     var proxiedFunctionTable = [_proc_exit, pthreadCreateProxied, ___syscall_fcntl64, ___syscall_getdents64, ___syscall_ioctl, ___syscall_openat, __setitimer_js, _environ_get, _environ_sizes_get, _fd_close, _fd_read, _fd_seek, _fd_write];
-    var __ZdlPvm, _malloc, _free, _calloc, ___getTypeName, __embind_initialize_bindings, _pthread_self, _emscripten_builtin_free, __emscripten_tls_init, __emscripten_thread_init, __emscripten_thread_crashed, ___libc_free, _emscripten_builtin_malloc, ___libc_malloc, __emscripten_run_js_on_main_thread, __emscripten_thread_free_data, __emscripten_thread_exit, __emscripten_timeout, __emscripten_check_mailbox, __ZdaPv, __ZdaPvm, __ZdlPv, __Znaj, __ZnajSt11align_val_t, __Znwj, __ZnwjSt11align_val_t, ___libc_calloc, ___libc_realloc, _emscripten_builtin_calloc, _emscripten_builtin_realloc, _malloc_size, _malloc_usable_size, _reallocf, _setThrew, _emscripten_stack_set_limits, __emscripten_stack_restore, __emscripten_stack_alloc, _emscripten_stack_get_current, __indirect_function_table, wasmTable;
+    var ASM_CONSTS = { 613693: ($0) => stringToNewUTF8(Emval.toValue($0)) };
+    var __ZdlPvm, _pthread_self, __Znwm, _free, _malloc, _calloc, ___getTypeName, __embind_initialize_bindings, _emscripten_builtin_free, __emscripten_tls_init, __emscripten_thread_init, ___set_thread_state, __emscripten_thread_crashed, ___libc_free, _emscripten_builtin_malloc, ___libc_malloc, __emscripten_run_js_on_main_thread_done, __emscripten_run_js_on_main_thread, __emscripten_thread_free_data, __emscripten_thread_exit, __emscripten_timeout, __emscripten_check_mailbox, __ZdaPv, __ZdaPvm, __ZdlPv, __Znam, __ZnamSt11align_val_t, __ZnwmSt11align_val_t, ___libc_calloc, ___libc_realloc, _emscripten_builtin_calloc, _emscripten_builtin_realloc, _malloc_size, _malloc_usable_size, _reallocf, _setThrew, _emscripten_stack_set_limits, __emscripten_stack_restore, __emscripten_stack_alloc, _emscripten_stack_get_current, __indirect_function_table, wasmTable;
     function assignWasmExports(wasmExports) {
-      __ZdlPvm = Module2["__ZdlPvm"] = wasmExports["Z"];
-      _malloc = Module2["_malloc"] = wasmExports["_"];
-      _free = wasmExports["$"];
-      _calloc = Module2["_calloc"] = wasmExports["aa"];
-      ___getTypeName = wasmExports["ba"];
-      __embind_initialize_bindings = wasmExports["ca"];
-      _pthread_self = wasmExports["da"];
-      _emscripten_builtin_free = Module2["_emscripten_builtin_free"] = wasmExports["ea"];
-      __emscripten_tls_init = wasmExports["fa"];
-      __emscripten_thread_init = wasmExports["ha"];
-      __emscripten_thread_crashed = wasmExports["ia"];
-      ___libc_free = Module2["___libc_free"] = wasmExports["ja"];
-      _emscripten_builtin_malloc = Module2["_emscripten_builtin_malloc"] = wasmExports["ka"];
-      ___libc_malloc = Module2["___libc_malloc"] = wasmExports["la"];
-      __emscripten_run_js_on_main_thread = wasmExports["ma"];
-      __emscripten_thread_free_data = wasmExports["na"];
-      __emscripten_thread_exit = wasmExports["oa"];
-      __emscripten_timeout = wasmExports["pa"];
-      __emscripten_check_mailbox = wasmExports["qa"];
-      __ZdaPv = Module2["__ZdaPv"] = wasmExports["ra"];
-      __ZdaPvm = Module2["__ZdaPvm"] = wasmExports["sa"];
-      __ZdlPv = Module2["__ZdlPv"] = wasmExports["ta"];
-      __Znaj = Module2["__Znaj"] = wasmExports["ua"];
-      __ZnajSt11align_val_t = Module2["__ZnajSt11align_val_t"] = wasmExports["va"];
-      __Znwj = Module2["__Znwj"] = wasmExports["wa"];
-      __ZnwjSt11align_val_t = Module2["__ZnwjSt11align_val_t"] = wasmExports["xa"];
-      ___libc_calloc = Module2["___libc_calloc"] = wasmExports["ya"];
-      ___libc_realloc = Module2["___libc_realloc"] = wasmExports["za"];
-      _emscripten_builtin_calloc = Module2["_emscripten_builtin_calloc"] = wasmExports["Aa"];
-      _emscripten_builtin_realloc = Module2["_emscripten_builtin_realloc"] = wasmExports["Ba"];
-      _malloc_size = Module2["_malloc_size"] = wasmExports["Ca"];
-      _malloc_usable_size = Module2["_malloc_usable_size"] = wasmExports["Da"];
-      _reallocf = Module2["_reallocf"] = wasmExports["Ea"];
-      _setThrew = wasmExports["Fa"];
-      _emscripten_stack_set_limits = wasmExports["Ga"];
-      __emscripten_stack_restore = wasmExports["Ha"];
-      __emscripten_stack_alloc = wasmExports["Ia"];
-      _emscripten_stack_get_current = wasmExports["Ja"];
-      __indirect_function_table = wasmTable = wasmExports["ga"];
+      __ZdlPvm = Module2["__ZdlPvm"] = wasmExports["ia"];
+      _pthread_self = wasmExports["ja"];
+      __Znwm = Module2["__Znwm"] = wasmExports["ka"];
+      _free = wasmExports["la"];
+      _malloc = Module2["_malloc"] = wasmExports["ma"];
+      _calloc = Module2["_calloc"] = wasmExports["na"];
+      ___getTypeName = wasmExports["oa"];
+      __embind_initialize_bindings = wasmExports["pa"];
+      _emscripten_builtin_free = Module2["_emscripten_builtin_free"] = wasmExports["qa"];
+      __emscripten_tls_init = wasmExports["ra"];
+      __emscripten_thread_init = wasmExports["ta"];
+      ___set_thread_state = wasmExports["ua"];
+      __emscripten_thread_crashed = wasmExports["va"];
+      ___libc_free = Module2["___libc_free"] = wasmExports["wa"];
+      _emscripten_builtin_malloc = Module2["_emscripten_builtin_malloc"] = wasmExports["xa"];
+      ___libc_malloc = Module2["___libc_malloc"] = wasmExports["ya"];
+      __emscripten_run_js_on_main_thread_done = wasmExports["za"];
+      __emscripten_run_js_on_main_thread = wasmExports["Aa"];
+      __emscripten_thread_free_data = wasmExports["Ba"];
+      __emscripten_thread_exit = wasmExports["Ca"];
+      __emscripten_timeout = wasmExports["Da"];
+      __emscripten_check_mailbox = wasmExports["Ea"];
+      __ZdaPv = Module2["__ZdaPv"] = wasmExports["Fa"];
+      __ZdaPvm = Module2["__ZdaPvm"] = wasmExports["Ga"];
+      __ZdlPv = Module2["__ZdlPv"] = wasmExports["Ha"];
+      __Znam = Module2["__Znam"] = wasmExports["Ia"];
+      __ZnamSt11align_val_t = Module2["__ZnamSt11align_val_t"] = wasmExports["Ja"];
+      __ZnwmSt11align_val_t = Module2["__ZnwmSt11align_val_t"] = wasmExports["Ka"];
+      ___libc_calloc = Module2["___libc_calloc"] = wasmExports["La"];
+      ___libc_realloc = Module2["___libc_realloc"] = wasmExports["Ma"];
+      _emscripten_builtin_calloc = Module2["_emscripten_builtin_calloc"] = wasmExports["Na"];
+      _emscripten_builtin_realloc = Module2["_emscripten_builtin_realloc"] = wasmExports["Oa"];
+      _malloc_size = Module2["_malloc_size"] = wasmExports["Pa"];
+      _malloc_usable_size = Module2["_malloc_usable_size"] = wasmExports["Qa"];
+      _reallocf = Module2["_reallocf"] = wasmExports["Ra"];
+      _setThrew = wasmExports["Sa"];
+      _emscripten_stack_set_limits = wasmExports["Ta"];
+      __emscripten_stack_restore = wasmExports["Ua"];
+      __emscripten_stack_alloc = wasmExports["Va"];
+      _emscripten_stack_get_current = wasmExports["Wa"];
+      __indirect_function_table = wasmTable = wasmExports["sa"];
     }
     var wasmImports;
     function assignWasmImports() {
-      wasmImports = { b: ___assert_fail, K: ___pthread_create_js, p: ___syscall_fcntl64, J: ___syscall_getdents64, T: ___syscall_ioctl, q: ___syscall_openat, F: __abort_js, s: __embind_register_bigint, u: __embind_register_bool, k: __embind_register_class, U: __embind_register_class_constructor, d: __embind_register_class_function, c: __embind_register_class_property, X: __embind_register_emval, r: __embind_register_float, g: __embind_register_integer, e: __embind_register_memory_view, t: __embind_register_std_string, l: __embind_register_std_wstring, v: __embind_register_void, O: __emscripten_init_main_thread_js, G: __emscripten_notify_mailbox_postmessage, L: __emscripten_receive_on_main_thread_js, B: __emscripten_runtime_keepalive_clear, n: __emscripten_thread_cleanup, N: __emscripten_thread_mailbox_await, W: __emscripten_thread_set_strongref, z: __emscripten_throw_longjmp, C: __setitimer_js, o: _emscripten_check_blocking_allowed, f: _emscripten_date_now, m: _emscripten_err, V: _emscripten_exit_with_live_runtime, H: _emscripten_get_heap_max, h: _emscripten_get_now, I: _emscripten_num_logical_cores, D: _emscripten_resize_heap, P: _environ_get, Q: _environ_sizes_get, i: _exit, j: _fd_close, S: _fd_read, M: _fd_seek, R: _fd_write, y: invoke_iii, w: invoke_iiii, x: invoke_iiiii, a: wasmMemory, A: _proc_exit, E: _random_get };
+      wasmImports = { b: ___assert_fail, Q: ___pthread_create_js, y: ___syscall_fcntl64, P: ___syscall_getdents64, Y: ___syscall_ioctl, z: ___syscall_openat, L: __abort_js, B: __embind_register_bigint, ba: __embind_register_bool, ga: __embind_register_class, fa: __embind_register_class_constructor, d: __embind_register_class_function, da: __embind_register_class_property, $: __embind_register_emval, A: __embind_register_float, l: __embind_register_integer, e: __embind_register_memory_view, aa: __embind_register_std_string, t: __embind_register_std_wstring, ca: __embind_register_void, T: __emscripten_init_main_thread_js, M: __emscripten_notify_mailbox_postmessage, x: __emscripten_receive_on_main_thread_js, H: __emscripten_runtime_keepalive_clear, v: __emscripten_thread_cleanup, S: __emscripten_thread_mailbox_await, _: __emscripten_thread_set_strongref, F: __emscripten_throw_longjmp, h: __emval_create_invoker, c: __emval_decref, ea: __emval_get_property, i: __emval_incref, g: __emval_invoke, p: __emval_new_array, j: __emval_new_cstring, s: __emval_new_object, f: __emval_run_destructors, k: __emval_set_property, I: __setitimer_js, n: _emscripten_asm_const_ptr, w: _emscripten_check_blocking_allowed, m: _emscripten_date_now, u: _emscripten_err, Z: _emscripten_exit_with_live_runtime, N: _emscripten_get_heap_max, o: _emscripten_get_now, O: _emscripten_num_logical_cores, J: _emscripten_resize_heap, U: _environ_get, V: _environ_sizes_get, q: _exit, r: _fd_close, X: _fd_read, R: _fd_seek, W: _fd_write, E: invoke_iii, C: invoke_iiii, D: invoke_iiiii, a: wasmMemory, G: _proc_exit, K: _random_get };
     }
     function invoke_iii(index, a1, a2) {
       var sp = stackSave();
@@ -2299,7 +2503,7 @@
         return getWasmTableEntry(index)(a1, a2);
       } catch (e) {
         stackRestore(sp);
-        if (e !== e + 0)
+        if (!(e instanceof EmscriptenEH))
           throw e;
         _setThrew(1, 0);
       }
@@ -2310,7 +2514,7 @@
         return getWasmTableEntry(index)(a1, a2, a3, a4);
       } catch (e) {
         stackRestore(sp);
-        if (e !== e + 0)
+        if (!(e instanceof EmscriptenEH))
           throw e;
         _setThrew(1, 0);
       }
@@ -2321,23 +2525,23 @@
         return getWasmTableEntry(index)(a1, a2, a3);
       } catch (e) {
         stackRestore(sp);
-        if (e !== e + 0)
+        if (!(e instanceof EmscriptenEH))
           throw e;
         _setThrew(1, 0);
       }
     }
     function initRuntime(wasmExports) {
       runtimeInitialized = true;
-      PThread.tlsInitFunctions.push(wasmExports["fa"]);
+      PThread.tlsInitFunctions.push(wasmExports["ra"]);
       if (ENVIRONMENT_IS_PTHREAD)
         return;
-      wasmExports["Y"]();
+      wasmExports["ha"]();
     }
     var wasmModule;
     function loadModule() {
       assignWasmImports();
       var imports = { a: wasmImports };
-      WebAssembly.instantiateStreaming(fetch("jassub-worker.wasm"), imports).then((output) => {
+      WebAssembly.instantiateStreaming(fetch(new URL("jassub-worker.wasm", self.location.href)), imports).then((output) => {
         var wasmExports = (output.instance || output).exports;
         wasmModule = output.module || Module2["wasm"];
         assignWasmExports(wasmExports);
@@ -2361,7 +2565,7 @@
     return moduleRtn;
   }
   var jassub_worker_default = Module;
-  var isPthread = globalThis.self?.name?.startsWith("em-pthread");
+  var isPthread = globalThis.name == "em-pthread";
   isPthread && Module();
 
   // node_modules/jassub/dist/worker/renderers/2d-renderer.js
@@ -2376,7 +2580,9 @@
     });
     _scheduledResize;
     resizeCanvas(width, height) {
-      if (width <= 0 || height <= 0)
+      if (!width || !height)
+        return;
+      if (this.canvas?.width === width && this.canvas?.height === height)
         return;
       this._scheduledResize = { width, height };
     }
@@ -2390,6 +2596,8 @@
       if (!this.ctx)
         throw new Error("Could not get 2D context");
     }
+    // not supported
+    // https://issues.chromium.org/u/1/issues/40910142
     setColorMatrix(subtitleColorSpace, videoColorSpace) {
     }
     // this is horribly inefficient, but it's a fallback for systems without a GPU, this is the least of their problems
@@ -2449,17 +2657,14 @@
     "black",
     "ultrablack"
   ];
-  var IS_FIREFOX = navigator.userAgent.toLowerCase().includes("firefox");
+  var UA = navigator.userAgent.toLowerCase();
+  var IS_FIREFOX = UA.includes("firefox");
+  var IS_SAFARI = /applewebkit\/[\d.]+ \(khtml, like gecko\)(?!.*chrome\/)/.test(UA);
   var a = "BT601";
   var b = "BT709";
   var c = "SMPTE240M";
   var d = "FCC";
   var LIBASS_YCBCR_MAP = [null, a, null, a, a, b, b, c, c, d, d];
-  function _applyKeys(input, output) {
-    for (const v of Object.keys(input)) {
-      output[v] = input[v];
-    }
-  }
   var _fetch = globalThis.fetch;
   async function fetchtext(url) {
     const res = await _fetch(url);
@@ -2467,7 +2672,7 @@
   }
   var THREAD_COUNT = !IS_FIREFOX && self.crossOriginIsolated ? Math.min(Math.max(1, navigator.hardwareConcurrency - 2), 8) : 1;
   var SUPPORTS_GROWTH = !!WebAssembly.Memory.prototype.toResizableBuffer;
-  var SHOULD_REFERENCE_MEMORY = !IS_FIREFOX && (SUPPORTS_GROWTH || THREAD_COUNT > 1);
+  var SHOULD_REFERENCE_MEMORY = !IS_FIREFOX && !IS_SAFARI && (SUPPORTS_GROWTH || THREAD_COUNT > 1);
   var IDENTITY_MATRIX = new Float32Array([
     1,
     0,
@@ -2579,6 +2784,9 @@ varying vec4 v_color;
 varying vec2 v_texSize;
 varying float v_texLayer;
 varying vec2 v_texCoord;
+varying vec2 v_normalizedImageSize;
+
+uniform vec2 u_texDimensions;
 
 void main() {
   vec2 pixelPos = a_destRect.xy + a_quadPos * a_destRect.zw;
@@ -2591,6 +2799,7 @@ void main() {
   v_texSize = a_destRect.zw;
   v_texLayer = a_texLayer;
   v_texCoord = a_quadPos;
+  v_normalizedImageSize = a_destRect.zw / u_texDimensions;
 }
 `
   );
@@ -2602,23 +2811,17 @@ precision mediump float;
 uniform sampler2D u_tex;
 uniform mat3 u_colorMatrix;
 uniform vec2 u_resolution;
-uniform vec2 u_texDimensions; // Actual texture dimensions
 
 varying vec2 v_destXY;
 varying vec4 v_color;
 varying vec2 v_texSize;
 varying float v_texLayer;
 varying vec2 v_texCoord;
+varying vec2 v_normalizedImageSize;
 
 void main() {
-  // v_texCoord is in 0-1 range for the quad
-  // We need to map it to the actual image size within the texture
-  // The image occupies only (v_texSize.x / u_texDimensions.x, v_texSize.y / u_texDimensions.y) of the texture
-  vec2 normalizedImageSize = v_texSize / u_texDimensions;
-  vec2 texCoord = v_texCoord * normalizedImageSize;
-
   // Sample texture (r channel contains mask)
-  float mask = texture2D(u_tex, texCoord).r;
+  float mask = texture2D(u_tex, v_texCoord * v_normalizedImageSize).r;
 
   // Apply color matrix conversion (identity if no conversion needed)
   vec3 correctedColor = u_colorMatrix * v_color.rgb;
@@ -2673,7 +2876,9 @@ void main() {
     }
     _scheduledResize;
     resizeCanvas(width, height) {
-      if (width <= 0 || height <= 0)
+      if (!width || !height)
+        return;
+      if (this.canvas?.width === width && this.canvas?.height === height)
         return;
       this._scheduledResize = { width, height };
     }
@@ -2908,7 +3113,7 @@ void main() {
   var VERTEX_SHADER2 = (
     /* glsl */
     `#version 300 es
-precision mediump float;
+precision highp float;
 
 const vec2 QUAD_POSITIONS[6] = vec2[6](
   vec2(0.0, 0.0),
@@ -2948,8 +3153,8 @@ void main() {
   var FRAGMENT_SHADER2 = (
     /* glsl */
     `#version 300 es
-precision mediump float;
-precision mediump sampler2DArray;
+precision highp float;
+precision highp sampler2DArray;
 
 uniform sampler2DArray u_texArray;
 uniform mat3 u_colorMatrix;
@@ -3026,7 +3231,9 @@ void main() {
     }
     _scheduledResize;
     resizeCanvas(width, height) {
-      if (width <= 0 || height <= 0)
+      if (!width || !height)
+        return;
+      if (this.canvas?.width === width && this.canvas?.height === height)
         return;
       this._scheduledResize = { width, height };
     }
@@ -3181,7 +3388,7 @@ void main() {
           const img = validImages[i];
           const layer = instanceCount;
           this.gl.pixelStorei(this.gl.UNPACK_ROW_LENGTH, img.stride);
-          if (IS_FIREFOX) {
+          if (IS_FIREFOX || IS_SAFARI) {
             const sourceView = new Uint8Array(heap.buffer, img.bitmap, img.stride * img.h);
             const bitmapData = new Uint8Array(sourceView);
             this.gl.texSubImage3D(
@@ -3273,16 +3480,18 @@ void main() {
   };
 
   // node_modules/jassub/dist/worker/worker.js
+  var constructor = /* @__PURE__ */ Symbol.for("constructor");
   var ASSRenderer = class {
-    _offCanvas;
     _wasm;
     _subtitleColorSpace;
     _videoColorSpace;
     _malloc;
     _gpurender;
     debug = false;
-    _ready;
-    constructor(data, getFont) {
+    constructor(...args) {
+      return this[constructor](...args);
+    }
+    async [constructor](data, getFont, ctrl) {
       this._availableFonts = Object.fromEntries(Object.entries(data.availableFonts).map(([k, v]) => [k.trim().toLowerCase(), v]));
       this.debug = data.debug;
       this.queryFonts = data.queryFonts;
@@ -3290,14 +3499,6 @@ void main() {
       this._defaultFont = data.defaultFont.trim().toLowerCase();
       const _fetch2 = globalThis.fetch;
       globalThis.fetch = (_) => _fetch2(data.wasmUrl);
-      const handleMessage = ({ data: data2 }) => {
-        if (data2.name === "offscreenCanvas") {
-          this._offCanvas = data2.ctrl;
-          this._gpurender.setCanvas(this._offCanvas);
-          removeEventListener("message", handleMessage);
-        }
-      };
-      addEventListener("message", handleMessage);
       try {
         const testCanvas = new OffscreenCanvas(1, 1);
         if (testCanvas.getContext("webgl2")) {
@@ -3308,60 +3509,53 @@ void main() {
       } catch {
         this._gpurender = new Canvas2DRenderer();
       }
-      this._ready = jassub_worker_default({ __url: data.wasmUrl, __out: (log) => this._log(log) }).then(async ({ _malloc, JASSUB }) => {
-        this._malloc = _malloc;
-        this._wasm = new JASSUB(data.width, data.height, this._defaultFont);
-        this._wasm.setThreads(THREAD_COUNT);
-        this._loadInitialFonts(data.fonts);
-        this._wasm.createTrackMem(data.subContent ?? await fetchtext(data.subUrl));
-        this._subtitleColorSpace = LIBASS_YCBCR_MAP[this._wasm.trackColorSpace];
-        if (data.libassMemoryLimit > 0 || data.libassGlyphLimit > 0) {
-          this._wasm.setMemoryLimits(data.libassGlyphLimit || 0, data.libassMemoryLimit || 0);
-        }
-        this._checkColorSpace();
-      });
+      this._gpurender.setCanvas(ctrl);
+      this._loadedInitialFonts = !data.fonts.length;
+      const { _malloc, JASSUB } = await jassub_worker_default({ __url: data.wasmUrl, __out: (log) => this._log(log) });
+      this._malloc = _malloc;
+      this._wasm = new JASSUB(data.width, data.height, this._defaultFont);
+      this._wasm.setThreads(THREAD_COUNT);
+      if (!this._loadedInitialFonts)
+        await this._loadInitialFonts(data.fonts);
+      this._wasm.createTrackMem(data.subContent ?? await fetchtext(data.subUrl));
+      this._subtitleColorSpace = LIBASS_YCBCR_MAP[this._wasm.trackColorSpace];
+      if (data.libassMemoryLimit > 0 || data.libassGlyphLimit > 0) {
+        this._wasm.setMemoryLimits(data.libassGlyphLimit || 0, data.libassMemoryLimit || 0);
+      }
+      this._checkColorSpace();
+      return this;
     }
-    ready() {
-      return this._ready;
+    // this passes a string of track data to libass, be it styles, events etc, which it then processes and adds to the track
+    // useful for streaming subtitles
+    processData(events) {
+      this._wasm.processData(events);
     }
     createEvent(event) {
-      _applyKeys(event, this._wasm.getEvent(this._wasm.allocEvent()));
+      this._wasm.createEvent(event);
     }
     getEvents() {
-      const events = [];
-      for (let i = 0; i < this._wasm.getEventCount(); i++) {
-        const { Start, Duration, ReadOrder, Layer, Style, MarginL, MarginR, MarginV, Name, Text, Effect } = this._wasm.getEvent(i);
-        events.push({ Start, Duration, ReadOrder, Layer, Style, MarginL, MarginR, MarginV, Name, Text, Effect });
-      }
-      return events;
+      return this._wasm.getEvents();
     }
     setEvent(event, index) {
-      _applyKeys(event, this._wasm.getEvent(index));
+      this._wasm.setEvent(index, event);
     }
     removeEvent(index) {
       this._wasm.removeEvent(index);
     }
     createStyle(style) {
-      const alloc = this._wasm.getStyle(this._wasm.allocStyle());
-      _applyKeys(style, alloc);
-      return alloc;
+      this._wasm.createStyle(style);
     }
     getStyles() {
-      const styles = [];
-      for (let i = 0; i < this._wasm.getStyleCount(); i++) {
-        const { Name, FontName, FontSize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding, treat_fontname_as_pattern, Blur, Justify } = this._wasm.getStyle(i);
-        styles.push({ Name, FontName, FontSize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding, treat_fontname_as_pattern, Blur, Justify });
-      }
-      return styles;
+      return this._wasm.getStyles();
     }
     setStyle(style, index) {
-      _applyKeys(style, this._wasm.getStyle(index));
+      this._wasm.setStyle(index, style);
     }
     removeStyle(index) {
       this._wasm.removeStyle(index);
     }
     styleOverride(style) {
-      this._wasm.styleOverride(this.createStyle(style));
+      this._wasm.styleOverride(style);
     }
     disableStyleOverride() {
       this._wasm.disableStyleOverride();
@@ -3395,7 +3589,7 @@ void main() {
     }
     async addFonts(fontOrURLs) {
       if (!fontOrURLs.length)
-        return;
+        return false;
       const strings = [];
       const uint8s = [];
       for (const fontOrURL of fontOrURLs) {
@@ -3407,7 +3601,7 @@ void main() {
       }
       if (uint8s.length)
         this._allocFonts(uint8s);
-      return await Promise.allSettled(strings.map((url) => this._asyncWrite(url)));
+      return !!await Promise.allSettled(strings.map((url) => this._asyncWrite(url)));
     }
     // we don't want to run _findAvailableFont before initial fonts are loaded
     // because it could duplicate fonts
@@ -3415,6 +3609,7 @@ void main() {
     async _loadInitialFonts(fontOrURLs) {
       await this.addFonts(fontOrURLs);
       this._loadedInitialFonts = true;
+      this._wasm.reloadFonts();
     }
     _getFont;
     _availableFonts = {};
@@ -3475,7 +3670,6 @@ void main() {
       this._gpurender.resizeCanvas(width, height);
     }
     async [finalizer]() {
-      await this._ready;
       this._wasm.quitLibrary();
       this._gpurender.destroy();
       this._wasm = null;
@@ -3483,24 +3677,10 @@ void main() {
       this._availableFonts = {};
     }
     _draw(time, repaint = false) {
-      if (!this._offCanvas || !this._gpurender)
+      const images = this._wasm.rawRender(time, Number(repaint));
+      if (!images)
         return;
-      const result = this._wasm.rawRender(time, Number(repaint));
-      if (this._wasm.changed === 0 && !repaint)
-        return;
-      const bitmaps = [];
-      for (let image = result, i = 0; i < this._wasm.count; image = image.next, ++i) {
-        bitmaps.push({
-          bitmap: image.bitmap,
-          color: image.color,
-          dst_x: image.dst_x,
-          dst_y: image.dst_y,
-          h: image.h,
-          stride: image.stride,
-          w: image.w
-        });
-      }
-      this._gpurender.render(bitmaps, self.HEAPU8RAW);
+      this._gpurender.render(images, self.HEAPU8RAW);
     }
     _setColorSpace(videoColorSpace) {
       if (videoColorSpace === "RGB")

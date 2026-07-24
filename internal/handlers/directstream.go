@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"fmt"
+	"net/http"
 	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/directstream"
 	"seanime/internal/mkvparser"
+	"seanime/internal/security"
+	"seanime/internal/util"
 
 	"github.com/labstack/echo/v4"
 )
@@ -17,6 +20,10 @@ import (
 //	@returns mediastream.MediaContainer
 //	@route /api/v1/directstream/play/localfile [POST]
 func (h *Handler) HandleDirectstreamPlayLocalFile(c echo.Context) error {
+	if err := h.guardMediaConsumption(c); err != nil {
+		return err
+	}
+
 	type body struct {
 		Path     string `json:"path"`     // The path of the file.
 		ClientId string `json:"clientId"` // The session id
@@ -28,6 +35,12 @@ func (h *Handler) HandleDirectstreamPlayLocalFile(c echo.Context) error {
 	}
 
 	profileID := core.GetProfileIDFromContext(c)
+	b.ClientId = getRequestClientId(c, b.ClientId)
+	b.Path = util.ResolvePhysicalPath(b.Path)
+	if err := h.guardStrictFilesystemPath(c, b.Path); err != nil {
+		return err
+	}
+
 	lfs, _, err := db_bridge.GetLocalFiles(h.App.Database, profileID)
 	if err != nil {
 		return h.RespondWithError(c, err)
@@ -87,6 +100,10 @@ func (h *Handler) HandleDirectstreamConvertSubs(c echo.Context) error {
 	}
 
 	// Convert from url
+	if err := security.ValidateOutboundUrl(b.Url); err != nil {
+		return h.RespondWithStatusError(c, echo.ErrForbidden.Code, err)
+	}
+
 	ret, err := session.VideoCore.FetchAndConvertSubsTo(b.Url, to)
 	if err != nil {
 		return h.RespondWithError(c, err)
@@ -114,6 +131,10 @@ func (h *Handler) directStreamManagerFor(c echo.Context) *directstream.Manager {
 }
 
 func (h *Handler) HandleDirectstreamGetStream(c echo.Context) error {
+	if !canConsumeMedia(c.Request(), h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist) {
+		return h.RespondWithStatusError(c, http.StatusForbidden, errPrivilegedExecutionDenied)
+	}
+
 	dsm := h.directStreamManagerFor(c)
 	handler := dsm.ServeEchoStream()
 	handler.ServeHTTP(c.Response(), c.Request())
@@ -121,6 +142,10 @@ func (h *Handler) HandleDirectstreamGetStream(c echo.Context) error {
 }
 
 func (h *Handler) HandleDirectstreamGetAttachments(c echo.Context) error {
+	if err := h.guardMediaConsumption(c); err != nil {
+		return err
+	}
+
 	dsm := h.directStreamManagerFor(c)
 	return dsm.ServeEchoAttachments(c)
 }

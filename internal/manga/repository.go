@@ -1,11 +1,10 @@
 package manga
 
 import (
-	"bytes"
 	"errors"
-	"image"
 	_ "image/jpeg" // Register JPEG format
 	_ "image/png"  // Register PNG format
+	"io"
 	"net/http"
 	"seanime/internal/database/db"
 	"seanime/internal/database/models"
@@ -41,6 +40,10 @@ type (
 		serverUri        string
 		wsEventManager   events.WSEventManagerInterface
 		mu               sync.Mutex
+		preferencesMu    sync.Mutex
+		sourceRefreshMu  sync.Mutex
+		sourceRefresh    *mangaSourceRefreshState
+		sourceRefreshLog map[string]mangaSourceRefreshCompleted
 		downloadDir      string
 		db               *db.Database
 
@@ -69,6 +72,7 @@ func NewRepository(opts *NewRepositoryOptions) *Repository {
 		downloadDir:      opts.DownloadDir,
 		extensionBankRef: opts.ExtensionBankRef,
 		db:               opts.Database,
+		sourceRefreshLog: make(map[string]mangaSourceRefreshCompleted),
 	}
 	return r
 }
@@ -161,23 +165,20 @@ func getImageNaturalSize(url string) (int, int, error) {
 	}
 	defer resp.Body.Close()
 
-	// Decode the image
-	img, _, err := image.DecodeConfig(resp.Body)
+	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	// Return the natural size
-	return img.Width, img.Height, nil
+	return getImageNaturalSizeB(buf)
 }
 
 func getImageNaturalSizeB(data []byte) (int, int, error) {
-	// Decode the image
-	img, _, err := image.DecodeConfig(bytes.NewReader(data))
+	width, height, _, err := util.DetectImageFormatAndDimensions(data, "")
 	if err != nil {
 		return 0, 0, err
 	}
 
 	// Return the natural size
-	return img.Width, img.Height, nil
+	return width, height, nil
 }

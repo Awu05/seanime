@@ -247,6 +247,19 @@ func (pm *PlaybackManager) SetAnimeCollection(ac *anilist.AnimeCollection) {
 	pm.animeCollection.Store(ac)
 }
 
+func (pm *PlaybackManager) GetCurrentMedia() (*anilist.BaseAnime, bool) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if media, ok := pm.currentStreamMedia.Get(); ok {
+		return media, true
+	}
+	if entry, ok := pm.currentMediaListEntry.Get(); ok {
+		return entry.GetMedia(), true
+	}
+	return nil, false
+}
+
 func (pm *PlaybackManager) SetSettings(s *Settings) {
 	pm.settings.Store(s)
 }

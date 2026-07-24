@@ -1,10 +1,12 @@
 import { useGetMediastreamSettings, useSaveMediastreamSettings } from "@/api/hooks/mediastream.hooks"
+import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets.ts"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { useMediastreamActiveOnDevice } from "@/app/(main)/mediastream/_lib/mediastream.atoms"
 import { SettingsCard, SettingsPageHeader } from "@/app/(main)/settings/_components/settings-card"
 import { SettingsIsDirty, SettingsSubmitButton } from "@/app/(main)/settings/_components/settings-submit-button"
 import { defineSchema, Field, Form } from "@/components/ui/form"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { WSEvents } from "@/lib/server/ws-events.ts"
 import React from "react"
 import { UseFormReturn } from "react-hook-form"
 import { LuTabletSmartphone } from "react-icons/lu"
@@ -27,6 +29,7 @@ const MEDIASTREAM_HW_ACCEL_OPTIONS = [
     { label: "CPU (Disabled)", value: "cpu" },
     { label: "NVIDIA (NVENC)", value: "nvidia" },
     { label: "Intel (QSV)", value: "qsv" },
+    { label: "Intel (QSV Low-Power)", value: "qsv-low-power" },
     { label: "VAAPI", value: "vaapi" },
     { label: "Apple VideoToolbox", value: "videotoolbox" },
     { label: "Custom", value: "custom" },
@@ -53,11 +56,18 @@ export function MediastreamSettings(props: MediastreamSettingsProps) {
 
     const serverStatus = useServerStatus()
 
-    const { data: settings, isLoading } = useGetMediastreamSettings(true)
+    const { data: settings, isLoading, refetch } = useGetMediastreamSettings(true)
 
     const { mutate, isPending } = useSaveMediastreamSettings()
 
     const { activeOnDevice, setActiveOnDevice } = useMediastreamActiveOnDevice()
+
+    useWebsocketMessageListener({
+        type: WSEvents.SETTINGS_CHANGED,
+        onMessage: () => {
+            refetch()
+        },
+    })
 
     const formRef = React.useRef<UseFormReturn<any>>(null)
 
@@ -72,6 +82,7 @@ export function MediastreamSettings(props: MediastreamSettingsProps) {
             />
 
             <Form
+                key={settings?.updatedAt ?? "mediastream-settings"}
                 schema={mediastreamSchema}
                 mRef={formRef}
                 onSubmit={data => {
@@ -106,7 +117,7 @@ export function MediastreamSettings(props: MediastreamSettingsProps) {
                     ffprobePath: settings?.ffprobePath || "",
                     transcodeHwAccelCustomSettings: settings?.transcodeHwAccelCustomSettings || "{\n	\"name\": \"\",\n	\"decodeFlags\": [\n		\"-hwaccel\", \"\",\n		\"-hwaccel_output_format\", \"\",\n	],\n	\"encodeFlags\": [\n		\"-c:v\", \"\",\n		\"-preset\", \"\",\n		\"-pix_fmt\", \"yuv420p\",\n	],\n	\"scaleFilter\": \"scale=%d:%d\"\n}",
                 }}
-                stackClass="space-y-4"
+                stackClass="space-y-8"
             >
                 {(f) => (
                     <>

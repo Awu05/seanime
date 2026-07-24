@@ -5,10 +5,12 @@ import React from "react"
 
 type ConfirmationDialogHookProps = {
     title: string,
-    description?: string,
+    description?: React.ReactNode,
     actionText?: string,
+    cancelText?: string,
     actionIntent?: ButtonProps["intent"]
     onConfirm: () => void
+    onCancel?: () => void
 }
 
 export function useConfirmationDialog(props: ConfirmationDialogHookProps) {
@@ -25,9 +27,11 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogHookProps & UseDiscl
         isOpen,
         close,
         onConfirm,
+        onCancel,
         title,
         description = "Are you sure you want to continue?",
         actionText = "Confirm",
+        cancelText = "Cancel",
         actionIntent = "alert-subtle",
     } = props
 
@@ -40,7 +44,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogHookProps & UseDiscl
                 onOpenChange={close}
             >
                 <div className="space-y-4">
-                    <p className="text-center">{description}</p>
+                    <div className="text-center">{description}</div>
                     <div className="flex gap-2 justify-center items-center">
                         <Button
                             intent={actionIntent}
@@ -51,7 +55,15 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogHookProps & UseDiscl
                         >
                             {actionText}
                         </Button>
-                        <Button intent="white" onClick={close}>Cancel</Button>
+                        <Button
+                            intent="white"
+                            onClick={() => {
+                                onCancel?.()
+                                close()
+                            }}
+                        >
+                            {cancelText}
+                        </Button>
                     </div>
                 </div>
             </Modal>

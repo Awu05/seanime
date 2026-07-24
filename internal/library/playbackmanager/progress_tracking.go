@@ -70,7 +70,23 @@ func (pm *PlaybackManager) handleTrackingStarted(status *mediaplayer.PlaybackSta
 
 	// Set the current media playback status
 	pm.currentMediaPlaybackStatus = status
-	// Get the playback state
+
+	// Retrieve data about the current video playback
+	// Set PlaybackManager.currentMediaListEntry to the list entry of the current video
+	currentMediaListEntry, currentLocalFile, currentLocalFileWrapperEntry, err := pm.getLocalFilePlaybackDetails(status.Filepath)
+	if err != nil {
+		pm.Logger.Error().Err(err).Msg("playback manager: Failed to get media data")
+		// Send error event to the client
+		pm.wsEventManager.SendEvent(events.ErrorToast, err.Error())
+		//
+		pm.MediaPlayerRepository.Cancel()
+		return
+	}
+
+	pm.currentMediaListEntry = mo.Some(currentMediaListEntry)
+	pm.currentLocalFile = mo.Some(currentLocalFile)
+	pm.currentLocalFileWrapperEntry = mo.Some(currentLocalFileWrapperEntry)
+	// Get the playback state after swapping in the new local-file metadata.
 	_ps := pm.getLocalFilePlaybackState(status)
 	// Log
 	pm.Logger.Debug().Msg("playback manager: Tracking started, extracting metadata...")
@@ -88,22 +104,6 @@ func (pm *PlaybackManager) handleTrackingStarted(status *mediaplayer.PlaybackSta
 			return true
 		})
 	}()
-
-	// Retrieve data about the current video playback
-	// Set PlaybackManager.currentMediaListEntry to the list entry of the current video
-	currentMediaListEntry, currentLocalFile, currentLocalFileWrapperEntry, err := pm.getLocalFilePlaybackDetails(status.Filepath)
-	if err != nil {
-		pm.Logger.Error().Err(err).Msg("playback manager: Failed to get media data")
-		// Send error event to the client
-		pm.wsEventManager.SendEvent(events.ErrorToast, err.Error())
-		//
-		pm.MediaPlayerRepository.Cancel()
-		return
-	}
-
-	pm.currentMediaListEntry = mo.Some(currentMediaListEntry)
-	pm.currentLocalFile = mo.Some(currentLocalFile)
-	pm.currentLocalFileWrapperEntry = mo.Some(currentLocalFileWrapperEntry)
 	pm.Logger.Debug().
 		Str("media", pm.currentMediaListEntry.MustGet().GetMedia().GetPreferredTitle()).
 		Int("episode", pm.currentLocalFile.MustGet().GetEpisodeNumber()).
@@ -125,17 +125,13 @@ func (pm *PlaybackManager) handleTrackingStarted(status *mediaplayer.PlaybackSta
 
 	// ------- Discord ------- //
 	if pm.discordPresence != nil && !pm.isOfflineRef.Get() {
-		go pm.discordPresence.SetAnimeActivity(&discordrpc_presence.AnimeActivity{
-			ID:                  pm.currentMediaListEntry.MustGet().GetMedia().GetID(),
-			Title:               pm.currentMediaListEntry.MustGet().GetMedia().GetPreferredTitle(),
-			Image:               pm.currentMediaListEntry.MustGet().GetMedia().GetCoverImageSafe(),
-			IsMovie:             pm.currentMediaListEntry.MustGet().GetMedia().IsMovie(),
-			EpisodeNumber:       pm.currentLocalFileWrapperEntry.MustGet().GetProgressNumber(pm.currentLocalFile.MustGet()),
-			Progress:            int(pm.currentMediaPlaybackStatus.CurrentTimeInSeconds),
-			Duration:            int(pm.currentMediaPlaybackStatus.DurationInSeconds),
-			TotalEpisodes:       pm.currentMediaListEntry.MustGet().GetMedia().Episodes,
-			CurrentEpisodeCount: pm.currentMediaListEntry.MustGet().GetMedia().GetCurrentEpisodeCountOrNil(),
-		})
+		go pm.discordPresence.SetAnimeActivity(discordrpc_presence.NewAnimeActivity(
+			pm.currentMediaListEntry.MustGet().GetMedia(),
+			pm.currentLocalFileWrapperEntry.MustGet().GetProgressNumber(pm.currentLocalFile.MustGet()),
+			pm.currentLocalFile.MustGet().GetParsedEpisodeTitle(),
+			int(pm.currentMediaPlaybackStatus.CurrentTimeInSeconds),
+			int(pm.currentMediaPlaybackStatus.DurationInSeconds),
+		))
 	}
 }
 
@@ -313,17 +309,13 @@ func (pm *PlaybackManager) handleStreamingTrackingStarted(status *mediaplayer.Pl
 
 	// ------- Discord ------- //
 	if pm.discordPresence != nil && !pm.isOfflineRef.Get() {
-		go pm.discordPresence.SetAnimeActivity(&discordrpc_presence.AnimeActivity{
-			ID:                  pm.currentStreamMedia.MustGet().GetID(),
-			Title:               pm.currentStreamMedia.MustGet().GetPreferredTitle(),
-			Image:               pm.currentStreamMedia.MustGet().GetCoverImageSafe(),
-			IsMovie:             pm.currentStreamMedia.MustGet().IsMovie(),
-			EpisodeNumber:       pm.currentStreamEpisode.MustGet().GetProgressNumber(),
-			Progress:            int(pm.currentMediaPlaybackStatus.CurrentTimeInSeconds),
-			Duration:            int(pm.currentMediaPlaybackStatus.DurationInSeconds),
-			TotalEpisodes:       pm.currentStreamMedia.MustGet().Episodes,
-			CurrentEpisodeCount: pm.currentStreamMedia.MustGet().GetCurrentEpisodeCountOrNil(),
-		})
+		go pm.discordPresence.SetAnimeActivity(discordrpc_presence.NewAnimeActivity(
+			pm.currentStreamMedia.MustGet(),
+			pm.currentStreamEpisode.MustGet().GetProgressNumber(),
+			pm.currentStreamEpisode.MustGet().EpisodeTitle,
+			int(pm.currentMediaPlaybackStatus.CurrentTimeInSeconds),
+			int(pm.currentMediaPlaybackStatus.DurationInSeconds),
+		))
 	}
 }
 

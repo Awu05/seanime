@@ -17,6 +17,7 @@ import { useChangelogTourListener } from "@/app/(main)/_features/tour/changelog-
 
 import { useAnimeCollectionLoader } from "@/app/(main)/_hooks/anilist-collection-loader"
 import { useAnimeLibraryCollectionLoader } from "@/app/(main)/_hooks/anime-library-collection-loader"
+import { useMangaCollectionLoader } from "@/app/(main)/_hooks/manga-collection-loader"
 import { useMissingEpisodesLoader } from "@/app/(main)/_hooks/missing-episodes-loader"
 import { useAnimeCollectionListener } from "@/app/(main)/_listeners/anilist-collection.listeners"
 import { useAuthEventListeners } from "@/app/(main)/_listeners/auth.listeners.ts"
@@ -26,36 +27,41 @@ import { useExternalPlayerLinkListener } from "@/app/(main)/_listeners/external-
 import { useMangaListener } from "@/app/(main)/_listeners/manga.listeners"
 import { useMiscEventListeners } from "@/app/(main)/_listeners/misc-events.listeners"
 import { useSyncListener } from "@/app/(main)/_listeners/sync.listeners"
-import { DebridStreamOverlay } from "@/app/(main)/entry/_containers/debrid-stream/debrid-stream-overlay"
 import { useTorrentStreamListener } from "@/app/(main)/entry/_containers/torrent-stream/_lib/handle-torrent-stream"
-import { TorrentStreamOverlay } from "@/app/(main)/entry/_containers/torrent-stream/torrent-stream-overlay"
+import { PlaybackPlayPill } from "@/app/(main)/entry/_containers/torrent-stream/playback-play-pill"
 import { ChapterDownloadsDrawer } from "@/app/(main)/manga/_containers/chapter-downloads/chapter-downloads-drawer"
+import { MangaPreferencesSync, MangaSourceRefreshSync } from "@/app/(main)/manga/_lib/manga-preferences-sync"
 import { LoadingOverlayWithLogo } from "@/components/shared/loading-overlay-with-logo"
 import { AppLayout, AppLayoutContent, AppLayoutSidebar, AppSidebarProvider } from "@/components/ui/app-layout"
 import { usePathname, useRouter } from "@/lib/navigation"
+import { __isElectronDesktop__ } from "@/types/constants"
 import React from "react"
 import { useServerStatus } from "../../_hooks/use-server-status"
 import { useInvalidateQueriesListener } from "../../_listeners/invalidate-queries.listeners"
 import { Announcements } from "../announcements"
 import { NakamaManager } from "../nakama/nakama-manager"
 import { NakamaWatchPartyChat, NakamaWatchPartyChatProvider } from "../nakama/nakama-watch-party-chat"
+import { RateLimitLoader } from "../rate-limit-loader"
 import { TopIndefiniteLoader } from "../top-indefinite-loader"
 
+const MpvCoreLazyWrapper = React.lazy(() => import("@/app/(main)/_features/mpv-core/mpv-core-lazy-wrapper"))
 const NativePlayerLazyWrapper = React.lazy(() => import("@/app/(main)/_features/native-player/native-player-lazy-wrapper"))
 
 export const MainLayout = ({ children }: { children: React.ReactNode }) => {
+    const serverStatus = useServerStatus()
 
     return (
         <>
             <Loader />
+            <MangaPreferencesSync />
+            <MangaSourceRefreshSync />
             <ScanProgressBar />
             <LibraryWatcher />
             <ScannerModal />
             <PlaylistListModal />
             <GlobalPlaylistManager />
             <ChapterDownloadsDrawer />
-            <TorrentStreamOverlay />
-            <DebridStreamOverlay />
+            <PlaybackPlayPill />
             <MediaPreviewModal />
             <PlaybackManagerProgressTracking />
             <ManualProgressTracking />
@@ -67,10 +73,16 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
             <React.Suspense fallback={null}>
                 <NativePlayerLazyWrapper />
             </React.Suspense>
+            {(__isElectronDesktop__ && serverStatus?.settings?.mediaPlayer?.mpvPrismEnabled) && (
+                <React.Suspense fallback={null}>
+                    <MpvCoreLazyWrapper />
+                </React.Suspense>
+            )}
             <NakamaManager />
             <NakamaWatchPartyChatProvider />
             <NakamaWatchPartyChat />
             <TopIndefiniteLoader />
+            <RateLimitLoader />
             <Announcements />
             <LibraryExplorerDrawer />
             <PluginWebviewSlot slot="fixed" />
@@ -97,6 +109,7 @@ function Loader() {
      */
     useAnimeLibraryCollectionLoader()
     useAnimeCollectionLoader()
+    useMangaCollectionLoader()
     useMissingEpisodesLoader()
 
     /**

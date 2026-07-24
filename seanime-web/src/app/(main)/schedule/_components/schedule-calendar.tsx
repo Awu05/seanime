@@ -6,11 +6,12 @@ import { SeaImage } from "@/components/shared/sea-image"
 import { IconButton } from "@/components/ui/button"
 import { CheckboxGroup } from "@/components/ui/checkbox"
 import { cn } from "@/components/ui/core/styling"
+import { Modal } from "@/components/ui/modal"
 import { Popover } from "@/components/ui/popover"
 import { RadioGroup } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import { addMonths, Day, endOfMonth, endOfWeek, format, isSameMonth, isToday, startOfMonth, startOfWeek, subMonths } from "date-fns"
+import { addMonths, Day, endOfMonth, endOfWeek, format, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek, subMonths } from "date-fns"
 import { addDays } from "date-fns/addDays"
 import { useImmerAtom } from "jotai-immer"
 import { useAtom, useAtomValue } from "jotai/react"
@@ -75,7 +76,7 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
         setCurrentDate(prevDate => addMonths(prevDate, 1))
     }
 
-    const isSameDayUtc = (dateLeft: Date, dateRight: Date) => {
+    const isSameLocalDay = (dateLeft: Date, dateRight: Date) => {
         return (
             dateLeft.getFullYear() === dateRight.getFullYear() &&
             dateLeft.getMonth() === dateRight.getMonth() &&
@@ -107,12 +108,12 @@ export function ScheduleCalendar(props: ScheduleCalendarProps) {
         let day = startOfCalendar
 
         while (day <= endOfCalendar) {
-            let events = schedule?.filter(item => isSameDayUtc(new Date(item.dateTime!), day) && isStatusIncluded(item.mediaId))?.map(item => {
+            let events = schedule?.filter(item => isSameLocalDay(new Date(item.dateTime!), day) && isStatusIncluded(item.mediaId))?.map(item => {
                 return {
                     id: String(item.mediaId) + "-" + String(item.episodeNumber) + "-" + String(item.dateTime),
                     mediaId: item.mediaId,
                     name: item.title,
-                    time: item.time.replace(":00:00", ":00"),
+                    time: format(new Date(item.dateTime!), "HH:mm"),
                     datetime: item.dateTime!,
                     image: item.image,
                     episode: item.episodeNumber || 1,
@@ -293,8 +294,16 @@ type CalendarEvent = {
     isAdult: boolean
 }
 
+type CalendarDayItem = {
+    date: string
+    isCurrentMonth: boolean
+    isToday: boolean
+    isSelected: boolean
+    events: CalendarEvent[]
+}
+
 interface MobileCalendarListProps {
-    days: any[]
+    days: CalendarDayItem[]
     showAll?: boolean
 }
 
@@ -329,15 +338,16 @@ function MobileCalendarList({ days, showAll }: MobileCalendarListProps) {
 }
 
 interface MobileDayItemProps {
-    day: any
+    day: CalendarDayItem
     calendarParams: CalendarParams
     showAll?: boolean
 }
 
 function MobileDayItem({ day, calendarParams, showAll }: MobileDayItemProps) {
-    const dayName = format(new Date(day.date), "EEEE")
+    const localDay = parseISO(day.date)
+    const dayName = format(localDay, "EEEE")
     const dayNumber = day.date.split("-")?.pop()?.replace(/^0/, "")
-    const monthDay = format(new Date(day.date), "MMM d")
+    const monthDay = format(localDay, "MMM d")
 
     return (
         <div className="p-4" data-schedule-calendar-mobile-list-day-item>
@@ -473,13 +483,65 @@ function MobileEventItem({ event, calendarParams, showAll }: MobileEventItemProp
     )
 }
 
+interface CalendarDayModalProps {
+    day: CalendarDayItem
+    open: boolean
+    onOpenChange: (open: boolean) => void
+}
+
+function CalendarDayModal({ day, open, onOpenChange }: CalendarDayModalProps) {
+    const hasEvents = day.events.length > 0
+    const calendarParams = useAtomValue(calendarParamsAtom)
+    const localDay = parseISO(day.date)
+
+    return (
+        <Modal
+            open={open}
+            onOpenChange={onOpenChange}
+            title={format(localDay, "EEEE, MMMM d, yyyy")}
+            description={hasEvents
+                ? `${day.events.length} scheduled episode${day.events.length !== 1 ? "s" : ""}`
+                : "No scheduled episodes for this day"}
+            contentClass="max-w-2xl gap-0 p-0 overflow-hidden"
+            headerClass="px-5 pt-5 pb-3 pr-12"
+            closeClass="right-5 top-5"
+            data-schedule-calendar-day-modal
+        >
+            <div
+                className="max-h-[70vh] overflow-y-auto px-5 pb-5"
+                data-schedule-calendar-day-modal-content
+            >
+                {hasEvents ? (
+                    <div className="space-y-3" data-schedule-calendar-day-modal-events>
+                        {day.events.map(event => (
+                            <MobileEventItem
+                                key={event.id}
+                                event={event}
+                                calendarParams={calendarParams}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <div
+                        className="rounded-lg border bg-[--paper] p-4 text-sm text-[--muted]"
+                        data-schedule-calendar-day-modal-empty
+                    >
+                        No episodes are scheduled for this day.
+                    </div>
+                )}
+            </div>
+        </Modal>
+    )
+}
+
 interface CalendarDayBackgroundProps {
     events: CalendarEvent[]
     isToday: boolean
     hoveredEventId: string | null
+    onClick?: () => void
 }
 
-function CalendarDayBackground({ events, isToday, hoveredEventId }: CalendarDayBackgroundProps) {
+function CalendarDayBackground({ events, isToday, hoveredEventId, onClick }: CalendarDayBackgroundProps) {
 
     const [focusedEventIndex, setFocusedEventIndex] = React.useState<number | null>(null)
     const transitionDisabled = useAtomValue(calendarDisableAnimations)
@@ -529,10 +591,11 @@ function CalendarDayBackground({ events, isToday, hoveredEventId }: CalendarDayB
             </div>
             <div
                 className={cn(
-                    "absolute left-0 bottom-0 z-[1] w-full h-full bg-gradient-to-t from-gray-950/100 via-gray-950/80 via-40% to-transparent transition-all duration-300",
+                    "absolute cursor-pointer left-0 bottom-0 z-[1] w-full h-full bg-gradient-to-t from-gray-950/100 via-gray-950/80 via-40% to-transparent transition-all duration-300",
                     isToday && "from-gray-950/90 via-gray-950/80 via-40%",
                 )}
                 data-schedule-calendar-day-background-gradient
+                onClick={onClick}
             />
         </>
     )
@@ -669,8 +732,9 @@ function CalendarEventList({ events, onEventHover, showAll }: CalendarEventListP
     )
 }
 
-function CalendarDay({ day, index, showAll }: { day: any, index: number, showAll?: boolean }) {
+function CalendarDay({ day, index, showAll }: { day: CalendarDayItem, index: number, showAll?: boolean }) {
     const [hoveredEventId, setHoveredEventId] = React.useState<string | null>(null)
+    const [modalOpen, setModalOpen] = React.useState(false)
 
     const hoveredEvent = React.useMemo(() => {
         if (hoveredEventId) {
@@ -695,6 +759,7 @@ function CalendarDay({ day, index, showAll }: { day: any, index: number, showAll
                     events={day.events}
                     isToday={day.isToday}
                     hoveredEventId={hoveredEventId}
+                    onClick={() => setModalOpen(true)}
                 />
             )}
 
@@ -743,6 +808,12 @@ function CalendarDay({ day, index, showAll }: { day: any, index: number, showAll
             >
                 {day.date.split("-")?.pop()?.replace(/^0/, "")}
             </time>
+
+            <CalendarDayModal
+                day={day}
+                open={modalOpen}
+                onOpenChange={setModalOpen}
+            />
             {day.events.length > 0 && (
                 <CalendarEventList
                     events={day.events}

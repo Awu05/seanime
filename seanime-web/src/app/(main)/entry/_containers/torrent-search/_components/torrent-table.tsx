@@ -5,6 +5,7 @@ import {
     Metadata_AnimeMetadata,
     Torrent_TorrentMetadata,
 } from "@/api/generated/types"
+import { useAnimeListTorrentProviderExtensions } from "@/api/hooks/extensions.hooks"
 import {
     filterItems,
     sortItems,
@@ -34,7 +35,10 @@ type TorrentTable = {
     debridInstantAvailability: Record<string, Debrid_TorrentItemInstantAvailability>
     animeMetadata: Metadata_AnimeMetadata | undefined
     torrentMetadata: Record<string, Torrent_TorrentMetadata> | undefined
+    includedSpecialProviders?: string[]
     type: TorrentSelectionType
+    searchAcrossProviders: boolean
+    isSpoiler: boolean
 }
 
 export const TorrentTable = memo((
@@ -52,11 +56,15 @@ export const TorrentTable = memo((
         debridInstantAvailability,
         animeMetadata,
         torrentMetadata,
+        includedSpecialProviders = [],
         type,
+        searchAcrossProviders,
+        isSpoiler,
     }: TorrentTable) => {
     // Use hooks for sorting and filtering
     const { sortField, sortDirection, handleSortChange } = useTorrentSorting()
     const { filters, handleFilterChange } = useTorrentFiltering()
+    const { data: extensions } = useAnimeListTorrentProviderExtensions()
 
     // Apply filters using the generic helper
     const filteredTorrents = filterItems(torrents, torrentMetadata, filters)
@@ -83,7 +91,7 @@ export const TorrentTable = memo((
                         onSortChange={handleSortChange}
                         onFilterChange={handleFilterChange}
                     />
-                    <ScrollAreaBox className="h-[calc(100dvh_-_25rem)]">
+                    <ScrollAreaBox className={searchAcrossProviders ? "h-[calc(100dvh_-_30rem)]" : "h-[calc(100dvh_-_26rem)]"}>
                         <TorrentList>
                             {sortedTorrents.map(torrent => {
                                 const metadata = torrentMetadata?.[torrent.infoHash!]
@@ -132,6 +140,7 @@ export const TorrentTable = memo((
                                         debridCached={((type === "download" || type === "debridstream-select" || type === "debridstream-select-file") && !!torrent.infoHash && !!debridInstantAvailability[torrent.infoHash])}
                                         isSelected={selectedTorrents.findIndex(n => n.infoHash === torrent!.infoHash) !== -1}
                                         onClick={() => onToggleTorrent(torrent!)}
+                                        isSpoiler={isSpoiler}
                                         overrideProps={{
                                             releaseGroup: releaseGroup,
                                             displayName: (episodeNumber ?? -1) >= 0
@@ -142,6 +151,9 @@ export const TorrentTable = memo((
                                             fallbackImage: (entry?.media?.coverImage?.large || entry?.media?.bannerImage),
                                             confirmed: distance === 0,
                                         }}
+                                        extensionName={torrent.provider && includedSpecialProviders?.includes(torrent.provider)
+                                            ? extensions?.find(e => e.id === torrent.provider)?.name
+                                            : undefined}
                                     />
                                 )
                             })}

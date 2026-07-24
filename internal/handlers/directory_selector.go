@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"seanime/internal/core"
+	"seanime/internal/util"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -47,42 +48,70 @@ func (h *Handler) HandleDirectorySelector(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	input := filepath.ToSlash(filepath.Clean(request.Input))
-	directoryExists, err := checkDirectoryExists(input)
+	actualInput := util.ResolvePhysicalPath(input)
+	directoryExists, err := checkDirectoryExists(actualInput)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
 	if directoryExists {
-		suggestions, err := getAutocompletionSuggestions(input)
+		suggestions, err := getAutocompletionSuggestions(actualInput)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}
 
-		content, err := getDirectoryContent(input)
+		content, err := getDirectoryContent(actualInput)
 		if err != nil {
 			return h.RespondWithError(c, err)
+		}
+
+		virtualSuggestions := make([]DirectoryInfo, len(suggestions))
+		for i, s := range suggestions {
+			virtualSuggestions[i] = DirectoryInfo{
+				FullPath:   util.ResolveVirtualPath(s.FullPath),
+				FolderName: s.FolderName,
+			}
+		}
+		virtualContent := make([]DirectoryInfo, len(content))
+		for i, co := range content {
+			virtualContent[i] = DirectoryInfo{
+				FullPath:   util.ResolveVirtualPath(co.FullPath),
+				FolderName: co.FolderName,
+			}
 		}
 
 		return h.RespondWithData(c, DirectorySelectorResponse{
-			FullPath:    input,
-			BasePath:    filepath.ToSlash(filepath.Dir(input)),
+			FullPath:    util.ResolveVirtualPath(actualInput),
+			BasePath:    util.ResolveVirtualPath(filepath.ToSlash(filepath.Dir(actualInput))),
 			Exists:      true,
-			Suggestions: suggestions,
-			Content:     content,
+			Suggestions: virtualSuggestions,
+			Content:     virtualContent,
 		})
 	}
 
-	suggestions, err := getAutocompletionSuggestions(input)
+	suggestions, err := getAutocompletionSuggestions(actualInput)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
+	virtualSuggestions := make([]DirectoryInfo, len(suggestions))
+	for i, s := range suggestions {
+		virtualSuggestions[i] = DirectoryInfo{
+			FullPath:   util.ResolveVirtualPath(s.FullPath),
+			FolderName: s.FolderName,
+		}
+	}
+
 	return h.RespondWithData(c, DirectorySelectorResponse{
-		FullPath:    input,
-		BasePath:    filepath.ToSlash(filepath.Dir(input)),
+		FullPath:    util.ResolveVirtualPath(actualInput),
+		BasePath:    util.ResolveVirtualPath(filepath.ToSlash(filepath.Dir(actualInput))),
 		Exists:      false,
-		Suggestions: suggestions,
+		Suggestions: virtualSuggestions,
 	})
 }
 
@@ -104,6 +133,9 @@ func getAutocompletionSuggestions(input string) ([]DirectoryInfo, error) {
 
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
+		if util.IsMobile() {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -124,6 +156,9 @@ func getDirectoryContent(path string) ([]DirectoryInfo, error) {
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
+		if util.IsMobile() {
+			return nil, nil
+		}
 		return nil, err
 	}
 

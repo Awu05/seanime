@@ -5,13 +5,17 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"seanime/internal/mediaplayers/mpvipc"
 	"seanime/internal/util"
 	"seanime/internal/util/result"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -41,6 +45,13 @@ type (
 		cmd            *exec.Cmd
 		prevSocketName string
 		exitedCh       chan struct{}
+		playbackSwitch bool
+		isFileLoaded   bool
+		freshPosition  bool
+		freshDuration  bool
+		autoSocket     bool
+		launchErrCh    chan error
+		launchLogPath  string
 	}
 
 	// Subscriber is a subscriber to the mpv events.
@@ -52,14 +63,16 @@ type (
 )
 
 var cmdCtx, cmdCancel = context.WithCancel(context.Background())
+var socketCounter uint64
 
 func New(logger *zerolog.Logger, socketName string, appPath string, optionalArgs ...string) *Mpv {
 	if cmdCancel != nil {
 		cmdCancel()
 	}
 
+	autoSocket := shouldAutoSocket(socketName)
 	sn := socketName
-	if socketName == "" {
+	if autoSocket {
 		sn = getDefaultSocketName()
 	}
 
@@ -78,6 +91,7 @@ func New(logger *zerolog.Logger, socketName string, appPath string, optionalArgs
 		Args:        additionalArgs,
 		subscribers: result.NewMap[string, *Subscriber](),
 		exitedCh:    make(chan struct{}),
+		autoSocket:  autoSocket,
 	}
 }
 
@@ -106,6 +120,17 @@ func (m *Mpv) launchPlayer(idle bool, filePath string, args ...string) error {
 		cmdCancel()
 	}
 	cmdCtx, cmdCancel = context.WithCancel(context.Background())
+	if m.autoSocket {
+		m.SocketName = getDefaultSocketName()
+	}
+
+	launchLogPath, err := createLaunchLogPath()
+	if err != nil {
+		return err
+	}
+	m.launchLogPath = launchLogPath
+	launchErrCh := make(chan error, 1)
+	m.launchErrCh = launchErrCh
 
 	m.Logger.Debug().Msg("mpv: Starting player")
 	if idle {
@@ -119,6 +144,7 @@ func (m *Mpv) launchPlayer(idle bool, filePath string, args ...string) error {
 		return err
 	}
 	m.prevSocketName = m.SocketName
+	m.launchLogPath = ""
 
 	// Create a pipe for stdout
 	stdoutPipe, err := m.cmd.StdoutPipe()
@@ -127,15 +153,26 @@ func (m *Mpv) launchPlayer(idle bool, filePath string, args ...string) error {
 		return err
 	}
 
+	stderrPipe, err := m.cmd.StderrPipe()
+	if err != nil {
+		m.Logger.Error().Err(err).Msg("mpv: Failed to create stderr pipe")
+		return err
+	}
+
 	err = m.cmd.Start()
 	if err != nil {
 		return err
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-
-	receivedLog := false
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	receivedLogCh := make(chan struct{})
+	var receivedLogOnce sync.Once
+	notifyLogReceived := func() {
+		receivedLogOnce.Do(func() {
+			close(receivedLogCh)
+		})
+	}
 
 	go func() {
 		scanner := bufio.NewScanner(stdoutPipe)
@@ -146,32 +183,58 @@ func (m *Mpv) launchPlayer(idle bool, filePath string, args ...string) error {
 			}
 			line := strings.TrimSpace(scanner.Text())
 			if line != "" {
-				if !receivedLog {
-					receivedLog = true
-					wg.Done()
-				}
+				notifyLogReceived()
 				m.Logger.Trace().Msg("mpv cmd: " + line) // Print to logger
 			}
 		}
 		if err := scanner.Err(); err != nil {
 			if strings.Contains(err.Error(), "file already closed") {
 				m.Logger.Debug().Msg("mpv: File closed")
-				//close(m.exitedCh)
-				//m.exitedCh = make(chan struct{})
 			} else {
 				m.Logger.Error().Err(err).Msg("mpv: Error reading from stdout")
 			}
 		}
+		// unblock startup when stdout closes before logging.
+		notifyLogReceived()
+	}()
+
+	go func() {
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line != "" {
+				notifyLogReceived()
+				m.Logger.Trace().Msg("mpv stderr: " + line)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			if strings.Contains(err.Error(), "file already closed") {
+				m.Logger.Debug().Msg("mpv: Stderr pipe closed")
+			} else {
+				m.Logger.Error().Err(err).Msg("mpv: Error reading from stderr")
+			}
+		}
+		// unblock startup when stderr closes before logging
+		notifyLogReceived()
 	}()
 
 	go func() {
 		err := m.cmd.Wait()
 		if err != nil {
-			m.Logger.Warn().Err(err).Msg("mpv: Player has exited")
+			launchErr := formatLaunchExitError(err, launchLogPath)
+			m.Logger.Warn().Err(launchErr).Msg("mpv: Player has exited")
+			launchErrCh <- launchErr
 		}
+		_ = os.Remove(launchLogPath)
 	}()
 
-	wg.Wait()
+	// Wait until either an initial log is received or 2 seconds have passed
+	select {
+	case <-receivedLogCh:
+	case <-timer.C:
+		m.Logger.Trace().Msg("mpv: Proceeding without initial log (timeout reached)")
+	}
+
 	time.Sleep(1 * time.Second)
 
 	m.Logger.Debug().Msg("mpv: Player started")
@@ -200,7 +263,13 @@ func (m *Mpv) OpenAndPlay(filePath string, args ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.playbackMu.Lock()
 	m.Playback = &Playback{}
+	m.playbackSwitch = false
+	m.isFileLoaded = false
+	m.freshPosition = false
+	m.freshDuration = false
+	m.playbackMu.Unlock()
 
 	// If the player is already running, just load the new file
 	var err error
@@ -296,8 +365,44 @@ func (m *Mpv) Resume() error {
 	return nil
 }
 
+// waitForFileLoad waits until the MPV track is ready to seek.
+func (m *Mpv) waitForFileLoad(timeoutDuration time.Duration) error {
+	timeout := time.Now().Add(timeoutDuration)
+	for {
+		if time.Now().After(timeout) {
+			return errors.New("timed out waiting for file to load")
+		}
+
+		m.mu.Lock()
+		connClosed := m.conn == nil || m.conn.IsClosed()
+		m.mu.Unlock()
+
+		if connClosed {
+			return errors.New("mpv is not running")
+		}
+
+		if m.isFileReady() {
+			return nil
+		}
+
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+func (m *Mpv) isFileReady() bool {
+	m.playbackMu.RLock()
+	defer m.playbackMu.RUnlock()
+	return m.isFileLoaded || (m.freshDuration && m.Playback.Duration > 0)
+}
+
 // SeekToSlow seeks to the given position in the file by first pausing the player and unpausing it after seeking.
 func (m *Mpv) SeekToSlow(position float64) error {
+	// Wait for file to load before seeking
+	err := m.waitForFileLoad(30 * time.Second)
+	if err != nil {
+		m.Logger.Warn().Err(err).Msg("file didn't load in time, attempting seek anyway")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -306,10 +411,15 @@ func (m *Mpv) SeekToSlow(position float64) error {
 	}
 
 	// pause the player
-	_, err := m.conn.Call("set_property", "pause", true)
+	_, err = m.conn.Call("set_property", "pause", true)
 	if err != nil {
 		return err
 	}
+
+	// unpause the player
+	defer func() {
+		_, _ = m.conn.Call("set_property", "pause", false)
+	}()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -320,17 +430,17 @@ func (m *Mpv) SeekToSlow(position float64) error {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// unpause the player
-	_, err = m.conn.Call("set_property", "pause", false)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
 // SeekTo seeks to the given position in the file.
 func (m *Mpv) SeekTo(position float64) error {
+	// Wait for file to load before seeking
+	err := m.waitForFileLoad(30 * time.Second)
+	if err != nil {
+		m.Logger.Warn().Err(err).Msg("file didn't load in time, attempting seek anyway")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -338,7 +448,7 @@ func (m *Mpv) SeekTo(position float64) error {
 		return errors.New("mpv is not running")
 	}
 
-	_, err := m.conn.Call("set_property", "time-pos", position)
+	_, err = m.conn.Call("set_property", "time-pos", position)
 	if err != nil {
 		return err
 	}
@@ -356,9 +466,17 @@ func (m *Mpv) GetOpenConnection() (*mpvipc.Connection, error) {
 func (m *Mpv) establishConnection() error {
 	tries := 1
 	for {
+		if launchErr := m.takeLaunchError(); launchErr != nil {
+			m.Logger.Error().Err(launchErr).Msg("mpv: Failed to establish connection")
+			return launchErr
+		}
 		m.conn = mpvipc.NewConnection(m.SocketName)
 		err := m.conn.Open()
 		if err != nil {
+			if launchErr := m.takeLaunchError(); launchErr != nil {
+				m.Logger.Error().Err(launchErr).Msg("mpv: Failed to establish connection")
+				return launchErr
+			}
 			if tries >= 5 {
 				m.Logger.Error().Err(err).Msg("mpv: Failed to establish connection")
 				return err
@@ -387,13 +505,7 @@ func (m *Mpv) listenForEvents(ctx context.Context) {
 	events, stopListening := m.conn.NewEventListener()
 	m.Logger.Debug().Msg("mpv: Listening for events")
 
-	_, err := m.conn.Get("path")
-	if err != nil {
-		m.Logger.Error().Err(err).Msg("mpv: Failed to get path")
-		return
-	}
-
-	_, err = m.conn.Call("observe_property", 42, "time-pos")
+	_, err := m.conn.Call("observe_property", 42, "time-pos")
 	if err != nil {
 		m.Logger.Error().Err(err).Msg("mpv: Failed to observe time-pos")
 		return
@@ -430,32 +542,22 @@ func (m *Mpv) listenForEvents(ctx context.Context) {
 		// When the context is cancelled, close the connection
 		<-ctx.Done()
 		m.Logger.Debug().Msg("mpv: Context cancelled")
-		m.Playback.IsRunning = false
+		m.playbackMu.Lock()
+		if m.Playback != nil {
+			m.Playback.IsRunning = false
+		}
+		m.playbackMu.Unlock()
 		err := m.conn.Close()
 		if err != nil {
 			m.Logger.Error().Err(err).Msg("mpv: Failed to close connection")
 		}
 		stopListening <- struct{}{}
-		return
 	}()
 
 	// Listen for events
 	for event := range events {
+		m.applyPlaybackEvent(event)
 		if event.Data != nil {
-			m.Playback.IsRunning = true
-			//m.Logger.Trace().Msgf("received event: %s, %v, %+v", event.Name, event.ID, event.Data)
-			switch event.ID {
-			case 43:
-				m.Playback.Paused = event.Data.(bool)
-			case 42:
-				m.Playback.Position = event.Data.(float64)
-			case 44:
-				m.Playback.Duration = event.Data.(float64)
-			case 45:
-				m.Playback.Filename = event.Data.(string)
-			case 46:
-				m.Playback.Filepath = event.Data.(string)
-			}
 			m.subscribers.Range(func(key string, sub *Subscriber) bool {
 				go func() {
 					sub.eventCh <- event
@@ -469,19 +571,20 @@ func (m *Mpv) listenForEvents(ctx context.Context) {
 func (m *Mpv) GetPlaybackStatus() (*Playback, error) {
 	m.playbackMu.RLock()
 	defer m.playbackMu.RUnlock()
-	if !m.Playback.IsRunning {
-		return nil, errors.New("mpv is not running")
-	}
 	if m.Playback == nil {
 		return nil, errors.New("no playback status")
 	}
-	if m.Playback.Filename == "" {
+	playback := m.snapshotPlaybackLocked()
+	if !playback.IsRunning {
+		return nil, errors.New("mpv is not running")
+	}
+	if playback.Filename == "" {
 		return nil, errors.New("no media found")
 	}
-	if m.Playback.Duration == 0 {
+	if playback.Duration == 0 {
 		return nil, errors.New("no duration found")
 	}
-	return m.Playback, nil
+	return playback, nil
 }
 
 func (m *Mpv) CloseAll() {
@@ -607,8 +710,11 @@ func parseArgs(s string) ([]string, error) {
 	return args, nil
 }
 
-// getDefaultSocketName returns the default name of the socket/pipe.
-func getDefaultSocketName() string {
+func shouldAutoSocket(socketName string) bool {
+	return socketName == "" || socketName == getLegacySocketName()
+}
+
+func getLegacySocketName() string {
 	switch runtime.GOOS {
 	case "windows":
 		return "\\\\.\\pipe\\mpv_ipc"
@@ -619,6 +725,102 @@ func getDefaultSocketName() string {
 	default:
 		return "/tmp/mpv_socket"
 	}
+}
+
+// getDefaultSocketName returns a fresh default name for the socket/pipe
+func getDefaultSocketName() string {
+	suffix := fmt.Sprintf("%d_%d_%d", os.Getpid(), time.Now().UnixNano(), atomic.AddUint64(&socketCounter, 1))
+	switch runtime.GOOS {
+	case "windows":
+		return "\\\\.\\pipe\\mpv_ipc_" + suffix
+	case "linux":
+		return filepath.Join(os.TempDir(), "mpv_socket_"+suffix)
+	case "darwin":
+		return filepath.Join(os.TempDir(), "mpv_socket_"+suffix)
+	default:
+		return filepath.Join(os.TempDir(), "mpv_socket_"+suffix)
+	}
+}
+
+func createLaunchLogPath() (string, error) {
+	file, err := os.CreateTemp("", "seanime-mpv-*.log")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
+func formatLaunchExitError(waitErr error, logPath string) error {
+	if waitErr == nil {
+		return nil
+	}
+	message := readLaunchErrorMessage(logPath)
+	if message == "" {
+		return waitErr
+	}
+	return fmt.Errorf("mpv: %s: %w", message, waitErr)
+}
+
+func readLaunchErrorMessage(logPath string) string {
+	if logPath == "" {
+		return ""
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return ""
+	}
+	return extractLaunchErrorMessage(string(data))
+}
+
+func extractLaunchErrorMessage(content string) string {
+	if content == "" {
+		return ""
+	}
+
+	lines := strings.Split(content, "\n")
+	priority := []string{
+		"Cannot open file",
+		"Failed to open ",
+		"Could not bind IPC socket",
+	}
+
+	for _, needle := range priority {
+		for i := len(lines) - 1; i >= 0; i-- {
+			message := cleanLaunchLogLine(lines[i])
+			if strings.Contains(message, needle) {
+				return message
+			}
+		}
+	}
+
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if !strings.Contains(line, "][e][") {
+			continue
+		}
+		message := cleanLaunchLogLine(line)
+		if message != "" {
+			return message
+		}
+	}
+
+	return ""
+}
+
+func cleanLaunchLogLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(trimmed, "] "); idx >= 0 {
+		return strings.TrimSpace(trimmed[idx+2:])
+	}
+	return trimmed
 }
 
 // createCmd returns a new exec.Cmd instance.
@@ -633,6 +835,10 @@ func (m *Mpv) createCmd(filePath string, args ...string) (*exec.Cmd, error) {
 			userArgs = strings.Fields(m.Args)
 		}
 		args = append(args, userArgs...)
+	}
+
+	if m.launchLogPath != "" && !containsLogFileArg(args) {
+		args = append(args, "--log-file="+m.launchLogPath)
 	}
 
 	if filePath != "" {
@@ -654,9 +860,95 @@ func (m *Mpv) createCmd(filePath string, args ...string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
+func containsLogFileArg(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--log-file" || strings.HasPrefix(args[i], "--log-file=") {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Mpv) takeLaunchError() error {
+	if m.launchErrCh == nil {
+		return nil
+	}
+	select {
+	case err := <-m.launchErrCh:
+		m.launchErrCh = nil
+		return err
+	default:
+		return nil
+	}
+}
+
+func (m *Mpv) applyPlaybackEvent(event *mpvipc.Event) {
+	m.playbackMu.Lock()
+	defer m.playbackMu.Unlock()
+
+	if m.Playback == nil {
+		m.Playback = &Playback{}
+	}
+
+	switch event.Name {
+	case "start-file":
+		m.isFileLoaded = false
+		m.startPlaybackSwitchLocked()
+	case "file-loaded":
+		m.isFileLoaded = true
+		m.startPlaybackSwitchLocked()
+	}
+
+	if event.Data == nil {
+		return
+	}
+
+	m.Playback.IsRunning = true
+
+	switch event.ID {
+	case 43:
+		m.Playback.Paused = event.Data.(bool)
+	case 42:
+		m.Playback.Position = event.Data.(float64)
+		m.freshPosition = true
+	case 44:
+		m.Playback.Duration = event.Data.(float64)
+		m.freshDuration = true
+	case 45:
+		m.Playback.Filename = event.Data.(string)
+	case 46:
+		m.Playback.Filepath = event.Data.(string)
+	}
+
+	if m.playbackSwitch && m.freshPosition && m.freshDuration {
+		m.playbackSwitch = false
+	}
+}
+
+func (m *Mpv) startPlaybackSwitchLocked() {
+	m.playbackSwitch = true
+	m.freshPosition = false
+	m.freshDuration = false
+	if m.Playback != nil {
+		m.Playback.Position = 0
+	}
+}
+
+func (m *Mpv) snapshotPlaybackLocked() *Playback {
+	playback := *m.Playback
+	if m.playbackSwitch {
+		playback.Position = 0
+	}
+	return &playback
+}
+
 func (m *Mpv) resetPlaybackStatus() {
 	m.playbackMu.Lock()
 	m.Logger.Trace().Msg("mpv: Resetting playback status")
+	m.playbackSwitch = false
+	m.isFileLoaded = false
+	m.freshPosition = false
+	m.freshDuration = false
 	m.Playback.Filename = ""
 	m.Playback.Filepath = ""
 	m.Playback.Paused = false
@@ -664,7 +956,6 @@ func (m *Mpv) resetPlaybackStatus() {
 	m.Playback.Duration = 0
 	m.Playback.IsRunning = false
 	m.playbackMu.Unlock()
-	return
 }
 
 func (m *Mpv) publishDone() {

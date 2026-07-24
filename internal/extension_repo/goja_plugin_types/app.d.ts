@@ -22,6 +22,7 @@ declare namespace $app {
         variables?: Record<string, any>;
         query: string;
         list?: Array<AL_BaseAnime>;
+        profileId?: string;
     }
 
     /**
@@ -34,6 +35,7 @@ declare namespace $app {
         next(): void;
 
         list?: Array<AL_BaseAnime>;
+        profileId?: string;
     }
 
 
@@ -58,6 +60,7 @@ declare namespace $app {
         from: string;
         id: number;
         media?: Animap_Anime;
+        profileId?: string;
     }
 
     /**
@@ -72,6 +75,7 @@ declare namespace $app {
         next(): void;
 
         media?: Animap_Anime;
+        profileId?: string;
     }
 
 
@@ -99,6 +103,7 @@ declare namespace $app {
         localFiles?: Array<Anime_LocalFile>;
         animeCollection?: AL_AnimeCollection;
         entry?: Anime_Entry;
+        profileId?: string;
     }
 
     /**
@@ -114,6 +119,7 @@ declare namespace $app {
         next(): void;
 
         entry?: Anime_Entry;
+        profileId?: string;
     }
 
     /**
@@ -132,6 +138,7 @@ declare namespace $app {
         preventDefault(): void;
 
         entry?: Anime_Entry;
+        profileId?: string;
     }
 
     /**
@@ -149,6 +156,7 @@ declare namespace $app {
         entryLocalFiles?: Array<Anime_LocalFile>;
         mediaId: number;
         currentProgress: number;
+        profileId?: string;
     }
 
     /**
@@ -164,6 +172,7 @@ declare namespace $app {
         next(): void;
 
         entryLibraryData?: Anime_EntryLibraryData;
+        profileId?: string;
     }
 
     /**
@@ -183,6 +192,7 @@ declare namespace $app {
         mediaId: number;
         paths?: Array<string>;
         matchedLocalFiles?: Array<Anime_LocalFile>;
+        profileId?: string;
     }
 
     /**
@@ -203,6 +213,7 @@ declare namespace $app {
         localFiles?: Array<Anime_LocalFile>;
         silencedMediaIds?: Array<number>;
         missingEpisodes?: Anime_MissingEpisodes;
+        profileId?: string;
     }
 
     /**
@@ -217,6 +228,7 @@ declare namespace $app {
         next(): void;
 
         missingEpisodes?: Anime_MissingEpisodes;
+        profileId?: string;
     }
 
     /**
@@ -236,6 +248,7 @@ declare namespace $app {
         animeCollection?: AL_AnimeCollection;
         localFiles?: Array<Anime_LocalFile>;
         upcomingEpisodes?: Anime_UpcomingEpisodes;
+        profileId?: string;
     }
 
     /**
@@ -250,6 +263,7 @@ declare namespace $app {
         next(): void;
 
         upcomingEpisodes?: Anime_UpcomingEpisodes;
+        profileId?: string;
     }
 
     /**
@@ -270,6 +284,7 @@ declare namespace $app {
         animeCollection?: AL_AnimeCollection;
         localFiles?: Array<Anime_LocalFile>;
         libraryCollection?: Anime_LibraryCollection;
+        profileId?: string;
     }
 
     /**
@@ -284,6 +299,7 @@ declare namespace $app {
         next(): void;
 
         libraryCollection?: Anime_LibraryCollection;
+        profileId?: string;
     }
 
     /**
@@ -300,6 +316,7 @@ declare namespace $app {
 
         animeCollection?: AL_AnimeCollection;
         libraryCollection?: Anime_LibraryCollection;
+        profileId?: string;
     }
 
     /**
@@ -314,6 +331,7 @@ declare namespace $app {
         next(): void;
 
         streamCollection?: Anime_StreamCollection;
+        profileId?: string;
     }
 
     /**
@@ -329,11 +347,12 @@ declare namespace $app {
         next(): void;
 
         localFiles?: Array<Anime_LocalFile>;
-        AnimeMetadata?: Metadata_AnimeMetadata;
-        Media?: AL_BaseAnime;
-        Progress?: number;
-        Status?: AL_MediaListStatus;
+        animeMetadata?: Metadata_AnimeMetadata;
+        media?: AL_BaseAnime;
+        progress?: number;
+        status?: AL_MediaListStatus;
         entryDownloadInfo?: Anime_EntryDownloadInfo;
+        profileId?: string;
     }
 
     /**
@@ -348,6 +367,7 @@ declare namespace $app {
         next(): void;
 
         entryDownloadInfo?: Anime_EntryDownloadInfo;
+        profileId?: string;
     }
 
     /**
@@ -367,6 +387,7 @@ declare namespace $app {
         media?: AL_BaseAnime;
         metadata?: Metadata_AnimeMetadata;
         episodeCollection?: Anime_EpisodeCollection;
+        profileId?: string;
     }
 
     /**
@@ -381,6 +402,7 @@ declare namespace $app {
         next(): void;
 
         episodeCollection?: Anime_EpisodeCollection;
+        profileId?: string;
     }
 
     /**
@@ -396,6 +418,7 @@ declare namespace $app {
 
         animeCollection?: AL_AnimeCollection;
         items?: Array<Anime_ScheduleItem>;
+        profileId?: string;
     }
 
 
@@ -420,6 +443,7 @@ declare namespace $app {
         from: string;
         id: number;
         media?: Anizip_Media;
+        profileId?: string;
     }
 
     /**
@@ -434,6 +458,7 @@ declare namespace $app {
         next(): void;
 
         media?: Anizip_Media;
+        profileId?: string;
     }
 
 
@@ -457,6 +482,50 @@ declare namespace $app {
 
         rules?: Array<Anime_AutoDownloaderRule>;
         profiles?: Array<Anime_AutoDownloaderProfile>;
+        isSimulation: boolean;
+        profileId?: string;
+    }
+
+    /**
+     * @event AutoDownloaderRunCompletedEvent
+     * @file internal/library/autodownloader/hook_events.go
+     * @description
+     * AutoDownloaderRunCompletedEvent is triggered when the autodownloader finishes a run.
+     */
+    function onAutoDownloaderRunCompleted(cb: (event: AutoDownloaderRunCompletedEvent) => void): void;
+
+    interface AutoDownloaderRunCompletedEvent {
+        next(): void;
+
+        rules?: Array<Anime_AutoDownloaderRule>;
+        profiles?: Array<Anime_AutoDownloaderProfile>;
+        isSimulation: boolean;
+        downloadedCount: number;
+        queuedCount: number;
+        delayedCount: number;
+        profileId?: string;
+    }
+
+    /**
+     * @event AutoDownloaderBeforeFetchTorrentsEvent
+     * @file internal/library/autodownloader/hook_events.go
+     * @description
+     * AutoDownloaderBeforeFetchTorrentsEvent is triggered before the autodownloader fetches torrents from providers.
+     * Prevent default to skip native provider retrieval.
+     */
+    function onAutoDownloaderBeforeFetchTorrents(cb: (event: AutoDownloaderBeforeFetchTorrentsEvent) => void): void;
+
+    interface AutoDownloaderBeforeFetchTorrentsEvent {
+        next(): void;
+
+        preventDefault(): void;
+
+        rules?: Array<Anime_AutoDownloaderRule>;
+        profiles?: Array<Anime_AutoDownloaderProfile>;
+        providerIds?: Array<string>;
+        defaultProvider: string;
+        torrents?: Array<AutoDownloader_NormalizedTorrent>;
+        profileId?: string;
     }
 
     /**
@@ -471,6 +540,7 @@ declare namespace $app {
         next(): void;
 
         torrents?: Array<AutoDownloader_NormalizedTorrent>;
+        profileId?: string;
     }
 
     /**
@@ -478,7 +548,8 @@ declare namespace $app {
      * @file internal/library/autodownloader/hook_events.go
      * @description
      * AutoDownloaderMatchVerifiedEvent is triggered when a torrent is verified to follow a rule.
-     * Prevent default to abort the download if the match is found.
+     * Changing MatchFound or Episode lets the hook override the verified result.
+     * Prevent default to reject the match.
      */
     function onAutoDownloaderMatchVerified(cb: (event: AutoDownloaderMatchVerifiedEvent) => void): void;
 
@@ -493,6 +564,30 @@ declare namespace $app {
         localEntry?: Anime_LocalFileWrapperEntry;
         episode: number;
         matchFound: boolean;
+        profileId?: string;
+    }
+
+    /**
+     * @event AutoDownloaderBestCandidateSelectedEvent
+     * @file internal/library/autodownloader/hook_events.go
+     * @description
+     * AutoDownloaderBestCandidateSelectedEvent is triggered when the best candidate for an episode is selected.
+     * Prevent default to skip handling the episode.
+     */
+    function onAutoDownloaderBestCandidateSelected(cb: (event: AutoDownloaderBestCandidateSelectedEvent) => void): void;
+
+    interface AutoDownloaderBestCandidateSelectedEvent {
+        next(): void;
+
+        preventDefault(): void;
+
+        rule?: Anime_AutoDownloaderRule;
+        episode: number;
+        candidates?: Array<AutoDownloader_Candidate>;
+        candidate?: AutoDownloader_Candidate;
+        existingItem?: Models_AutoDownloaderItem;
+        isSimulation: boolean;
+        profileId?: string;
     }
 
     /**
@@ -507,6 +602,29 @@ declare namespace $app {
         next(): void;
 
         settings?: Models_AutoDownloaderSettings;
+        profileId?: string;
+    }
+
+    /**
+     * @event AutoDownloaderBeforeQueueDelayedTorrentEvent
+     * @file internal/library/autodownloader/hook_events.go
+     * @description
+     * AutoDownloaderBeforeQueueDelayedTorrentEvent is triggered when the autodownloader is about to queue a torrent with delay.
+     * Prevent default to skip the delayed queue behavior.
+     */
+    function onAutoDownloaderBeforeQueueDelayedTorrent(cb: (event: AutoDownloaderBeforeQueueDelayedTorrentEvent) => void): void;
+
+    interface AutoDownloaderBeforeQueueDelayedTorrentEvent {
+        next(): void;
+
+        preventDefault(): void;
+
+        candidate?: AutoDownloader_Candidate;
+        rule?: Anime_AutoDownloaderRule;
+        episode: number;
+        delayMinutes: number;
+        isSimulation: boolean;
+        profileId?: string;
     }
 
     /**
@@ -525,14 +643,19 @@ declare namespace $app {
 
         torrent?: AutoDownloader_NormalizedTorrent;
         rule?: Anime_AutoDownloaderRule;
+        episode: number;
+        score: number;
         items?: Array<Models_AutoDownloaderItem>;
+        existingItem?: Models_AutoDownloaderItem;
+        isSimulation: boolean;
+        profileId?: string;
     }
 
     /**
      * @event AutoDownloaderAfterDownloadTorrentEvent
      * @file internal/library/autodownloader/hook_events.go
      * @description
-     * AutoDownloaderAfterDownloadTorrentEvent is triggered when the autodownloader has downloaded a torrent.
+     * AutoDownloaderAfterDownloadTorrentEvent is triggered after the autodownloader queues or downloads a torrent.
      */
     function onAutoDownloaderAfterDownloadTorrent(cb: (event: AutoDownloaderAfterDownloadTorrentEvent) => void): void;
 
@@ -541,6 +664,12 @@ declare namespace $app {
 
         torrent?: AutoDownloader_NormalizedTorrent;
         rule?: Anime_AutoDownloaderRule;
+        episode: number;
+        score: number;
+        downloaded: boolean;
+        item?: Models_AutoDownloaderItem;
+        isSimulation: boolean;
+        profileId?: string;
     }
 
 
@@ -564,6 +693,7 @@ declare namespace $app {
 
         mediaId: number;
         watchHistoryItem?: Continuity_WatchHistoryItem;
+        profileId?: string;
     }
 
     /**
@@ -578,6 +708,7 @@ declare namespace $app {
         next(): void;
 
         watchHistoryItem?: Continuity_WatchHistoryItem;
+        profileId?: string;
     }
 
     /**
@@ -592,6 +723,7 @@ declare namespace $app {
         Path: string;
         LocalFiles?: Array<Anime_LocalFile>;
         watchHistoryItem?: Continuity_WatchHistoryItem;
+        profileId?: string;
     }
 
     /**
@@ -606,6 +738,7 @@ declare namespace $app {
         Episode: number;
         MediaId: number;
         watchHistoryItem?: Continuity_WatchHistoryItem;
+        profileId?: string;
     }
 
 
@@ -627,6 +760,7 @@ declare namespace $app {
         next(): void;
 
         Torrents?: Array<HibikeTorrent_AnimeTorrent>;
+        profileId?: string;
     }
 
     /**
@@ -649,6 +783,7 @@ declare namespace $app {
      * in seconds
      */
         retryDelay: number;
+        profileId?: string;
     }
 
     /**
@@ -670,6 +805,46 @@ declare namespace $app {
         media?: AL_BaseAnime;
         aniDbEpisode: string;
         playbackType: string;
+        profileId?: string;
+    }
+
+    /**
+     * @event DebridAddTorrentRequestedEvent
+     * @file internal/debrid/client/hook_events.go
+     * @description
+     * DebridAddTorrentRequestedEvent is triggered when Seanime is about to add a torrent to the debrid provider.
+     * Prevent default to bypass the native add call and provide TorrentItemID yourself.
+     */
+    function onDebridAddTorrentRequested(cb: (event: DebridAddTorrentRequestedEvent) => void): void;
+
+    interface DebridAddTorrentRequestedEvent {
+        next(): void;
+
+        preventDefault(): void;
+
+        options?: Debrid_AddTorrentOptions;
+        destination: string;
+        mediaId: number;
+        torrentItemId: string;
+        profileId?: string;
+    }
+
+    /**
+     * @event DebridAddTorrentEvent
+     * @file internal/debrid/client/hook_events.go
+     * @description
+     * DebridAddTorrentEvent is triggered after Seanime adds a torrent to the debrid provider and queues it locally.
+     */
+    function onDebridAddTorrent(cb: (event: DebridAddTorrentEvent) => void): void;
+
+    interface DebridAddTorrentEvent {
+        next(): void;
+
+        options?: Debrid_AddTorrentOptions;
+        destination: string;
+        mediaId: number;
+        torrentItemId: string;
+        profileId?: string;
     }
 
     /**
@@ -689,6 +864,42 @@ declare namespace $app {
         torrentName: string;
         destination: string;
         downloadUrl: string;
+        profileId?: string;
+    }
+
+    /**
+     * @event DebridLocalDownloadStartedEvent
+     * @file internal/debrid/client/hook_events.go
+     * @description
+     * DebridLocalDownloadStartedEvent is triggered right after Seanime accepts a local debrid download.
+     */
+    function onDebridLocalDownloadStarted(cb: (event: DebridLocalDownloadStartedEvent) => void): void;
+
+    interface DebridLocalDownloadStartedEvent {
+        next(): void;
+
+        torrentItemId: string;
+        torrentName: string;
+        destination: string;
+        downloadUrl: string;
+        profileId?: string;
+    }
+
+    /**
+     * @event DebridLocalDownloadCompletedEvent
+     * @file internal/debrid/client/hook_events.go
+     * @description
+     * DebridLocalDownloadCompletedEvent is triggered when Seanime finishes a local debrid download.
+     */
+    function onDebridLocalDownloadCompleted(cb: (event: DebridLocalDownloadCompletedEvent) => void): void;
+
+    interface DebridLocalDownloadCompletedEvent {
+        next(): void;
+
+        torrentItemId: string;
+        torrentName: string;
+        destination: string;
+        profileId?: string;
     }
 
 
@@ -735,6 +946,7 @@ declare namespace $app {
         instance: boolean;
         type: number;
         statusDisplayType?: number;
+        profileId?: string;
     }
 
     /**
@@ -776,6 +988,7 @@ declare namespace $app {
         instance: boolean;
         type: number;
         statusDisplayType?: number;
+        profileId?: string;
     }
 
     /**
@@ -789,6 +1002,7 @@ declare namespace $app {
     interface DiscordPresenceClientClosedEvent {
         next(): void;
 
+        profileId?: string;
     }
 
 
@@ -811,7 +1025,9 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         entry?: Anime_Entry;
+        profileId?: string;
     }
 
     /**
@@ -829,7 +1045,9 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         episodes?: Array<Onlinestream_Episode>;
+        profileId?: string;
     }
 
     /**
@@ -847,7 +1065,9 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         episodes?: Array<Anime_Episode>;
+        profileId?: string;
     }
 
 
@@ -873,6 +1093,7 @@ declare namespace $app {
         mediaId: number;
         mangaCollection?: AL_MangaCollection;
         entry?: Manga_Entry;
+        profileId?: string;
     }
 
     /**
@@ -887,6 +1108,7 @@ declare namespace $app {
         next(): void;
 
         entry?: Manga_Entry;
+        profileId?: string;
     }
 
     /**
@@ -901,6 +1123,7 @@ declare namespace $app {
         next(): void;
 
         mangaCollection?: AL_MangaCollection;
+        profileId?: string;
     }
 
     /**
@@ -915,6 +1138,7 @@ declare namespace $app {
         next(): void;
 
         libraryCollection?: Manga_Collection;
+        profileId?: string;
     }
 
     /**
@@ -934,6 +1158,7 @@ declare namespace $app {
 
         mangaCollection?: AL_MangaCollection;
         chapterContainers?: Array<Manga_ChapterContainer>;
+        profileId?: string;
     }
 
     /**
@@ -948,6 +1173,7 @@ declare namespace $app {
         next(): void;
 
         chapterContainers?: Array<Manga_ChapterContainer>;
+        profileId?: string;
     }
 
     /**
@@ -962,6 +1188,7 @@ declare namespace $app {
         next(): void;
 
         latestChapterNumbersMap?: Record<number, Array<Manga_MangaLatestChapterNumberItem>>;
+        profileId?: string;
     }
 
     /**
@@ -977,6 +1204,7 @@ declare namespace $app {
         next(): void;
 
         mediaMap?: Manga_MediaMap;
+        profileId?: string;
     }
 
     /**
@@ -1000,6 +1228,7 @@ declare namespace $app {
         titles?: Array<string>;
         year: number;
         chapterContainer?: Manga_ChapterContainer;
+        profileId?: string;
     }
 
     /**
@@ -1015,6 +1244,7 @@ declare namespace $app {
         next(): void;
 
         chapterContainer?: Manga_ChapterContainer;
+        profileId?: string;
     }
 
 
@@ -1039,6 +1269,7 @@ declare namespace $app {
         startRefreshDelay: number;
         refreshDelay: number;
         maxRetries: number;
+        profileId?: string;
     }
 
     /**
@@ -1059,6 +1290,7 @@ declare namespace $app {
         refreshDelay: number;
         maxRetries: number;
         maxRetriesAfterStart: number;
+        profileId?: string;
     }
 
 
@@ -1084,6 +1316,7 @@ declare namespace $app {
 
         mediaId: number;
         animeMetadata?: Metadata_AnimeMetadata;
+        profileId?: string;
     }
 
     /**
@@ -1102,6 +1335,7 @@ declare namespace $app {
 
         mediaId: number;
         animeMetadata?: Metadata_AnimeMetadata;
+        profileId?: string;
     }
 
     /**
@@ -1124,6 +1358,7 @@ declare namespace $app {
         episode: string;
         episodeNumber: number;
         mediaId: number;
+        profileId?: string;
     }
 
     /**
@@ -1144,6 +1379,7 @@ declare namespace $app {
         episode: string;
         episodeNumber: number;
         mediaId: number;
+        profileId?: string;
     }
 
 
@@ -1161,6 +1397,7 @@ declare namespace $app {
         next(): void;
 
         anime?: AL_BaseAnime;
+        profileId?: string;
     }
 
     /**
@@ -1173,6 +1410,7 @@ declare namespace $app {
         next(): void;
 
         anime?: AL_AnimeDetailsById_Media;
+        profileId?: string;
     }
 
     /**
@@ -1185,6 +1423,7 @@ declare namespace $app {
         next(): void;
 
         manga?: AL_BaseManga;
+        profileId?: string;
     }
 
     /**
@@ -1197,6 +1436,7 @@ declare namespace $app {
         next(): void;
 
         manga?: AL_MangaDetailsById_Media;
+        profileId?: string;
     }
 
     /**
@@ -1209,6 +1449,7 @@ declare namespace $app {
         next(): void;
 
         animeCollection?: AL_AnimeCollection;
+        profileId?: string;
     }
 
     /**
@@ -1221,6 +1462,7 @@ declare namespace $app {
         next(): void;
 
         mangaCollection?: AL_MangaCollection;
+        profileId?: string;
     }
 
     /**
@@ -1233,6 +1475,7 @@ declare namespace $app {
         next(): void;
 
         animeCollection?: AL_AnimeCollection;
+        profileId?: string;
     }
 
     /**
@@ -1245,6 +1488,7 @@ declare namespace $app {
         next(): void;
 
         mangaCollection?: AL_MangaCollection;
+        profileId?: string;
     }
 
     /**
@@ -1257,6 +1501,7 @@ declare namespace $app {
         next(): void;
 
         animeCollection?: AL_AnimeCollection;
+        profileId?: string;
     }
 
     /**
@@ -1269,6 +1514,7 @@ declare namespace $app {
         next(): void;
 
         mangaCollection?: AL_MangaCollection;
+        profileId?: string;
     }
 
     /**
@@ -1281,6 +1527,7 @@ declare namespace $app {
         next(): void;
 
         animeCollection?: AL_AnimeCollection;
+        profileId?: string;
     }
 
     /**
@@ -1293,6 +1540,7 @@ declare namespace $app {
         next(): void;
 
         mangaCollection?: AL_MangaCollection;
+        profileId?: string;
     }
 
     /**
@@ -1305,6 +1553,7 @@ declare namespace $app {
         next(): void;
 
         studio?: AL_StudioDetails;
+        profileId?: string;
     }
 
     /**
@@ -1327,6 +1576,7 @@ declare namespace $app {
         progress?: number;
         startedAt?: AL_FuzzyDateInput;
         completedAt?: AL_FuzzyDateInput;
+        profileId?: string;
     }
 
     /**
@@ -1339,6 +1589,7 @@ declare namespace $app {
         next(): void;
 
         mediaId?: number;
+        profileId?: string;
     }
 
     /**
@@ -1359,6 +1610,7 @@ declare namespace $app {
         progress?: number;
         totalCount?: number;
         status?: AL_MediaListStatus;
+        profileId?: string;
     }
 
     /**
@@ -1371,6 +1623,7 @@ declare namespace $app {
         next(): void;
 
         mediaId?: number;
+        profileId?: string;
     }
 
     /**
@@ -1389,6 +1642,7 @@ declare namespace $app {
 
         mediaId?: number;
         repeat?: number;
+        profileId?: string;
     }
 
     /**
@@ -1401,6 +1655,7 @@ declare namespace $app {
         next(): void;
 
         mediaId?: number;
+        profileId?: string;
     }
 
     /**
@@ -1419,6 +1674,7 @@ declare namespace $app {
 
         mediaId?: number;
         entryId?: number;
+        profileId?: string;
     }
 
     /**
@@ -1432,6 +1688,7 @@ declare namespace $app {
 
         mediaId?: number;
         entryId?: number;
+        profileId?: string;
     }
 
 
@@ -1453,7 +1710,9 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         path: string;
+        profileId?: string;
     }
 
     /**
@@ -1470,10 +1729,12 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         windowTitle: string;
         payload: string;
         media?: AL_BaseAnime;
         aniDbEpisode: string;
+        profileId?: string;
     }
 
     /**
@@ -1490,7 +1751,9 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         isStream: boolean;
+        profileId?: string;
     }
 
     /**
@@ -1510,11 +1773,13 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         path: string;
         localFiles?: Array<Anime_LocalFile>;
         animeListEntry?: AL_AnimeListEntry;
         localFile?: Anime_LocalFile;
         localFileWrapperEntry?: Anime_LocalFileWrapperEntry;
+        profileId?: string;
     }
 
     /**
@@ -1532,9 +1797,11 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         animeCollection?: AL_AnimeCollection;
         mediaId: number;
         animeListEntry?: AL_AnimeListEntry;
+        profileId?: string;
     }
 
 
@@ -1556,12 +1823,14 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         libraryPath: string;
         otherLibraryPaths?: Array<string>;
         enhanced: boolean;
         skipLocked: boolean;
         skipIgnored: boolean;
         localFiles?: Array<Anime_LocalFile>;
+        profileId?: string;
     }
 
     /**
@@ -1577,7 +1846,9 @@ declare namespace $app {
     interface ScanFilePathsRetrievedEvent {
         next(): void;
 
+        profileId: string;
         filePaths?: Array<string>;
+        profileId?: string;
     }
 
     /**
@@ -1592,7 +1863,9 @@ declare namespace $app {
     interface ScanLocalFilesParsedEvent {
         next(): void;
 
+        profileId: string;
         localFiles?: Array<Anime_LocalFile>;
+        profileId?: string;
     }
 
     /**
@@ -1608,11 +1881,13 @@ declare namespace $app {
     interface ScanCompletedEvent {
         next(): void;
 
+        profileId: string;
         localFiles?: Array<Anime_LocalFile>;
     /**
      * in milliseconds
      */
         duration: number;
+        profileId?: string;
     }
 
     /**
@@ -1626,9 +1901,11 @@ declare namespace $app {
     interface ScanMediaFetcherStartedEvent {
         next(): void;
 
+        profileId: string;
         enhanced: boolean;
         enhanceWithOfflineDatabase: boolean;
         disableAnimeCollection: boolean;
+        profileId?: string;
     }
 
     /**
@@ -1644,8 +1921,10 @@ declare namespace $app {
     interface ScanMediaFetcherCompletedEvent {
         next(): void;
 
+        profileId: string;
         allMedia?: Array<Anime_NormalizedMedia>;
         unknownMediaIds?: Array<number>;
+        profileId?: string;
     }
 
     /**
@@ -1662,10 +1941,12 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         localFiles?: Array<Anime_LocalFile>;
         normalizedMedia?: Array<Anime_NormalizedMedia>;
         algorithm: string;
         threshold: number;
+        profileId?: string;
     }
 
     /**
@@ -1682,10 +1963,12 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         match?: Anime_NormalizedMedia;
         found: boolean;
         localFile?: Anime_LocalFile;
         score: number;
+        profileId?: string;
     }
 
     /**
@@ -1699,7 +1982,9 @@ declare namespace $app {
     interface ScanMatchingCompletedEvent {
         next(): void;
 
+        profileId: string;
         localFiles?: Array<Anime_LocalFile>;
+        profileId?: string;
     }
 
     /**
@@ -1716,8 +2001,10 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         localFiles?: Array<Anime_LocalFile>;
         allMedia?: Array<Anime_NormalizedMedia>;
+        profileId?: string;
     }
 
     /**
@@ -1734,8 +2021,10 @@ declare namespace $app {
 
         preventDefault(): void;
 
+        profileId: string;
         localFile?: Anime_LocalFile;
         media?: Anime_NormalizedMedia;
+        profileId?: string;
     }
 
     /**
@@ -1749,9 +2038,52 @@ declare namespace $app {
     interface ScanLocalFileHydratedEvent {
         next(): void;
 
+        profileId: string;
         localFile?: Anime_LocalFile;
         mediaId: number;
         episode: number;
+        profileId?: string;
+    }
+
+
+    /**
+     * @package torrent
+     */
+
+    /**
+     * @event TorrentSearchRequestedEvent
+     * @file internal/torrents/torrent/hook_events.go
+     * @description
+     * TorrentSearchRequestedEvent is triggered before Seanime searches anime torrents.
+     * Prevent default to skip the native search and return SearchData.
+     */
+    function onTorrentSearchRequested(cb: (event: TorrentSearchRequestedEvent) => void): void;
+
+    interface TorrentSearchRequestedEvent {
+        next(): void;
+
+        preventDefault(): void;
+
+        options: Torrent_AnimeSearchOptions;
+        searchData?: Torrent_SearchData;
+        profileId?: string;
+    }
+
+    /**
+     * @event TorrentSearchEvent
+     * @file internal/torrents/torrent/hook_events.go
+     * @description
+     * TorrentSearchEvent is triggered after Seanime assembles the torrent search response.
+     * Handlers can mutate SearchData before it is cached and returned.
+     */
+    function onTorrentSearch(cb: (event: TorrentSearchEvent) => void): void;
+
+    interface TorrentSearchEvent {
+        next(): void;
+
+        options: Torrent_AnimeSearchOptions;
+        searchData?: Torrent_SearchData;
+        profileId?: string;
     }
 
 
@@ -1773,6 +2105,7 @@ declare namespace $app {
         next(): void;
 
         Torrents?: Array<HibikeTorrent_AnimeTorrent>;
+        profileId?: string;
     }
 
     /**
@@ -1794,6 +2127,7 @@ declare namespace $app {
         media?: AL_BaseAnime;
         aniDbEpisode: string;
         playbackType: string;
+        profileId?: string;
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3148,6 +3482,8 @@ declare namespace $app {
          */
         metadataIssue?: string;
         baseAnime?: AL_BaseAnime;
+        torrentAvailability?: Anime_EpisodeTorrentAvailability;
+        isMissingGroup?: boolean;
         _isNakamaEpisode: boolean;
     }
 
@@ -3177,6 +3513,11 @@ declare namespace $app {
         hasImage?: boolean;
         title?: string;
     }
+
+    /**
+     * - Filepath: internal/library/anime/episode.go
+     */
+    export type Anime_EpisodeTorrentAvailability = "available" | "checking" | "waiting" | "unknown";
 
     /**
      * - Filepath: internal/library/anime/collection.go
@@ -3476,6 +3817,16 @@ declare namespace $app {
     }
 
     /**
+     * - Filepath: internal/library/autodownloader/autodownloader.go
+     * @description
+     *  Candidate represents a potential torrent to download with its score
+     */
+    interface AutoDownloader_Candidate {
+        Torrent?: AutoDownloader_NormalizedTorrent;
+        Score: number;
+    }
+
+    /**
      * - Filepath: internal/library/autodownloader/autodownloader_torrent.go
      */
     interface AutoDownloader_NormalizedTorrent {
@@ -3550,6 +3901,36 @@ declare namespace $app {
     }
 
     /**
+     * - Filepath: internal/debrid/debrid/debrid.go
+     */
+    interface Debrid_AddTorrentOptions {
+        magnetLink: string;
+        infoHash: string;
+        /**
+         * Real-Debrid only, ID, IDs, or "all"
+         */
+        selectFileId: string;
+    }
+
+    /**
+     * - Filepath: internal/debrid/debrid/debrid.go
+     */
+    interface Debrid_CachedFile {
+        size: number;
+        name: string;
+    }
+
+    /**
+     * - Filepath: internal/debrid/debrid/debrid.go
+     */
+    interface Debrid_TorrentItemInstantAvailability {
+        /**
+         * Key is the file ID (or index)
+         */
+        cachedFiles?: Record<string, Debrid_CachedFile>;
+    }
+
+    /**
      * - Filepath: internal/discordrpc/presence/presence.go
      */
     interface DiscordRPC_AnimeActivity {
@@ -3572,6 +3953,22 @@ declare namespace $app {
     interface DiscordRPC_Button {
         label?: string;
         url?: string;
+    }
+
+    /**
+     * - Filepath: internal/discordrpc/presence/presence.go
+     */
+    interface DiscordRPC_CustomActivity {
+        type?: number;
+        details: string;
+        state?: string;
+        largeImageKey?: string;
+        largeImageText?: string;
+        smallImageKey?: string;
+        smallImageText?: string;
+        buttons?: Array<DiscordRPC_Button>;
+        startTimestamp?: number;
+        endTimestamp?: number;
     }
 
     /**
@@ -3833,11 +4230,91 @@ declare namespace $app {
         eta: string;
         status: TorrentClient_TorrentStatus;
         contentPath: string;
+        peers: number;
+        ratio: number;
+        addedAt?: string;
+        queueIndex: number;
+        forceStart: boolean;
+        sequential: boolean;
+        error: string;
     }
 
     /**
      * - Filepath: internal/torrent_clients/torrent_client/torrent.go
      */
-    export type TorrentClient_TorrentStatus = "downloading" | "seeding" | "paused" | "other" | "stopped";
+    export type TorrentClient_TorrentStatus = "downloading" |
+    "seeding" |
+    "paused" |
+    "other" |
+    "stopped" |
+    "queued" |
+    "error";
+
+    /**
+     * - Filepath: internal/torrents/torrent/search.go
+     */
+    interface Torrent_AnimeSearchOptions {
+        provider: string;
+        type?: Torrent_AnimeSearchType;
+        media?: AL_BaseAnime;
+        query?: string;
+        batch?: boolean;
+        episodeNumber?: number;
+        bestReleases?: boolean;
+        resolution?: string;
+        includeSpecialProviders?: boolean;
+        skipPreviews?: boolean;
+    }
+
+    /**
+     * - Filepath: internal/torrents/torrent/search.go
+     */
+    export type Torrent_AnimeSearchType = "smart" | "simple";
+
+    /**
+     * - Filepath: internal/torrents/torrent/search.go
+     */
+    interface Torrent_Preview {
+        /**
+         * nil if batch
+         */
+        episode?: Anime_Episode;
+        torrent?: HibikeTorrent_AnimeTorrent;
+    }
+
+    /**
+     * - Filepath: internal/torrents/torrent/search.go
+     */
+    interface Torrent_SearchData {
+        /**
+         * Torrents found
+         */
+        torrents?: Array<HibikeTorrent_AnimeTorrent>;
+        /**
+         * TorrentPreview for each torrent
+         */
+        previews?: Array<Torrent_Preview>;
+        /**
+         * Torrent metadata
+         */
+        torrentMetadata?: Record<string, Torrent_TorrentMetadata>;
+        /**
+         * Debrid instant availability
+         */
+        debridInstantAvailability?: Record<string, Debrid_TorrentItemInstantAvailability>;
+        /**
+         * Animap media
+         */
+        animeMetadata?: Metadata_AnimeMetadata;
+        includedSpecialProviders?: Array<string>;
+    }
+
+    /**
+     * - Filepath: internal/torrents/torrent/search.go
+     */
+    interface Torrent_TorrentMetadata {
+        distance: number;
+        metadata?: $habari.Metadata;
+    }
 
 }

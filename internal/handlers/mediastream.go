@@ -3,9 +3,13 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/mediastream"
+	"seanime/internal/util"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -41,6 +45,17 @@ func (h *Handler) HandleSaveMediastreamSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	prevSettings := h.getMediastreamSettings(c)
+	if err := h.guardStrictMediastreamRootMutation(c, prevSettings, &b.Settings); err != nil {
+		return err
+	}
+	if err := h.guardPrivilegedMediastreamSettingsMutation(c, prevSettings, &b.Settings); err != nil {
+		return err
+	}
+
+	b.Settings.FfmpegPath = strings.TrimSpace(strings.Trim(b.Settings.FfmpegPath, "\""))
+	b.Settings.FfprobePath = strings.TrimSpace(strings.Trim(b.Settings.FfprobePath, "\""))
+
 	var settings *models.MediastreamSettings
 	var err error
 	profileID := core.GetProfileIDFromContext(c)
@@ -66,6 +81,9 @@ func (h *Handler) HandleSaveMediastreamSettings(c echo.Context) error {
 //	@returns mediastream.MediaContainer
 //	@route /api/v1/mediastream/request [POST]
 func (h *Handler) HandleRequestMediastreamMediaContainer(c echo.Context) error {
+	if err := h.guardMediaConsumption(c); err != nil {
+		return err
+	}
 
 	type body struct {
 		Path             string                 `json:"path"`             // The path of the file.
@@ -77,6 +95,18 @@ func (h *Handler) HandleRequestMediastreamMediaContainer(c echo.Context) error {
 	var b body
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	b.ClientId = getRequestClientId(c, b.ClientId)
+
+	b.Path = util.ResolvePhysicalPath(b.Path)
+
+	if err := h.guardStrictFilesystemPath(c, b.Path); err != nil {
+		return err
+	}
+
+	if err := h.guardPrivilegedMediastream(c, h.App.SecondarySettings.Mediastream); err != nil {
+		return err
 	}
 
 	var mediaContainer *mediastream.MediaContainer
@@ -104,6 +134,9 @@ func (h *Handler) HandleRequestMediastreamMediaContainer(c echo.Context) error {
 //	@returns bool
 //	@route /api/v1/mediastream/preload [POST]
 func (h *Handler) HandlePreloadMediastreamMediaContainer(c echo.Context) error {
+	if err := h.guardMediaConsumption(c); err != nil {
+		return err
+	}
 
 	type body struct {
 		Path             string                 `json:"path"`             // The path of the file.
@@ -114,6 +147,16 @@ func (h *Handler) HandlePreloadMediastreamMediaContainer(c echo.Context) error {
 	var b body
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	b.Path = util.ResolvePhysicalPath(b.Path)
+
+	if err := h.guardStrictFilesystemPath(c, b.Path); err != nil {
+		return err
+	}
+
+	if err := h.guardPrivilegedMediastream(c, h.App.SecondarySettings.Mediastream); err != nil {
+		return err
 	}
 
 	var err error
@@ -209,9 +252,56 @@ func (h *Handler) HandleMediastreamShutdownTranscodeStream(c echo.Context) error
 func (h *Handler) HandleMediastreamFile(c echo.Context) error {
 	client := "1"
 	fp := c.QueryParam("path")
+	fp = util.ResolvePhysicalPath(fp)
 	var libraryPaths []string
 	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil && currentSettings.GetLibrary() != nil {
 		libraryPaths = currentSettings.GetLibrary().GetLibraryPaths()
 	}
 	return h.App.MediastreamRepository.ServeEchoFile(c, fp, client, libraryPaths)
+}
+
+// HandleMediastreamLocalSubtitles
+//
+//	@summary get local subtitle files.
+//	@desc This returns same-directory subtitle files for a local video file.
+//	@returns []util.LocalSubtitleFile
+//	@route /api/v1/mediastream/local-subtitles [GET]
+func (h *Handler) HandleMediastreamLocalSubtitles(c echo.Context) error {
+	if err := h.guardMediaConsumption(c); err != nil {
+		return err
+	}
+
+	rawPath := c.QueryParam("path")
+	fp, _ := url.PathUnescape(rawPath)
+	if util.IsBase64(rawPath) {
+		decodedPath, err := util.Base64DecodeStr(rawPath)
+		if err == nil {
+			fp = decodedPath
+		}
+	}
+
+	fp = util.ResolvePhysicalPath(fp)
+
+	if err := h.guardStrictFilesystemPath(c, fp); err != nil {
+		return err
+	}
+
+	libraryPaths := h.App.Settings.GetLibrary().GetLibraryPaths()
+	inLibrary := false
+	for _, libraryPath := range libraryPaths {
+		if util.IsFileUnderDir(fp, libraryPath) {
+			inLibrary = true
+			break
+		}
+	}
+	if !inLibrary {
+		return c.NoContent(http.StatusNotFound)
+	}
+
+	files, err := util.FindLocalSubtitleFiles(fp)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	return h.RespondWithData(c, files)
 }

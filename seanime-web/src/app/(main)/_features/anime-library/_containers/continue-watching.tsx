@@ -3,6 +3,7 @@ import { getEpisodeMinutesRemaining, getEpisodePercentageComplete, useGetContinu
 import { usePlayNext } from "@/app/(main)/_atoms/playback.atoms"
 import { __libraryHeaderImageAtom } from "@/app/(main)/_features/anime-library/_components/library-header"
 import { EpisodeCard } from "@/app/(main)/_features/anime/_components/episode-card"
+import { EpisodeTorrentAvailabilityBadge } from "@/app/(main)/_features/anime/_components/episode-torrent-availability-badge"
 import { useSeaCommandInject } from "@/app/(main)/_features/sea-command/use-inject"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { episodeCardCarouselItemClass } from "@/components/shared/classnames"
@@ -13,6 +14,7 @@ import { Carousel, CarouselContent, CarouselDotButtons, CarouselItem } from "@/c
 import { useDebounce } from "@/hooks/use-debounce"
 import { anilist_animeIsMovie } from "@/lib/helpers/media"
 import { useRouter } from "@/lib/navigation"
+import { useContinueWatchingSpoilers } from "@/lib/theme/anime-spoilers"
 import { ThemeLibraryScreenBannerType, useThemeSettings } from "@/lib/theme/theme-hooks"
 import { useWindowSize } from "@uidotdev/usehooks"
 import { atom } from "jotai"
@@ -31,6 +33,7 @@ export function ContinueWatching({ episodes, isLoading, linkTemplate, withTitle 
 
     const router = useRouter()
     const ts = useThemeSettings()
+    const spoilerActive = useContinueWatchingSpoilers(ts)
 
     const { data: watchHistory } = useGetContinuityWatchHistory()
 
@@ -180,6 +183,7 @@ export function ContinueWatching({ episodes, isLoading, linkTemplate, withTitle 
                                 episode={episode}
                                 mRef={episodeRefs[idx]}
                                 overrideLink={linkTemplate}
+                                spoilerActive={spoilerActive}
                                 watchHistory={watchHistory}
                             />
                         </CarouselItem>
@@ -191,10 +195,11 @@ export function ContinueWatching({ episodes, isLoading, linkTemplate, withTitle 
     return null
 }
 
-const _EpisodeCard = React.memo(({ episode, mRef, overrideLink, watchHistory }: {
+const _EpisodeCard = React.memo(({ episode, mRef, overrideLink, spoilerActive, watchHistory }: {
     episode: Anime_Episode,
     mRef: React.RefObject<any>,
     overrideLink?: string
+    spoilerActive: boolean
     watchHistory: Continuity_WatchHistory | undefined
 }) => {
     const serverStatus = useServerStatus()
@@ -228,11 +233,16 @@ const _EpisodeCard = React.memo(({ episode, mRef, overrideLink, watchHistory }: 
             episode={episode}
             image={episode.episodeMetadata?.image || episode.baseAnime?.bannerImage || episode.baseAnime?.coverImage?.extraLarge}
             topTitle={episode.episodeTitle || episode?.baseAnime?.title?.userPreferred}
+            spoilerSafeTopTitle={episode?.baseAnime?.title?.userPreferred}
+            disableAnimation={true}
+            spoilerMode="replace"
+            spoilerActive={spoilerActive}
             title={episode.displayTitle}
             isInvalid={episode.isInvalid}
             progressTotal={episode.baseAnime?.episodes}
             progressNumber={episode.progressNumber}
             episodeNumber={episode.episodeNumber}
+            badge={<EpisodeTorrentAvailabilityBadge status={episode.torrentAvailability} />}
             length={episode.episodeMetadata?.length}
             hasDiscrepancy={episode.episodeNumber !== episode.progressNumber}
             percentageComplete={getEpisodePercentageComplete(watchHistory, episode.baseAnime?.id || 0, episode.episodeNumber)}
@@ -270,4 +280,3 @@ const _EpisodeCard = React.memo(({ episode, mRef, overrideLink, watchHistory }: 
         />
     )
 })
-

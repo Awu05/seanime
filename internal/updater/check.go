@@ -4,13 +4,40 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"runtime"
 	"strings"
 
 	"github.com/goccy/go-json"
 )
 
-var githubApiUrl = "https://api.github.com/repos/Awu05/seanime/releases/latest"
+var (
+	githubApiUrl         = "https://api.github.com/repos/Awu05/seanime/releases/latest"
+	ErrInsecureUpdateURL = errors.New("update URL must use https")
+)
+
+func validateUpdateURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid update URL %q: %w", rawURL, err)
+	}
+
+	if parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("%w: %s", ErrInsecureUpdateURL, rawURL)
+	}
+
+	return nil
+}
+
+func validateReleaseDownloadURLs(release *Release) error {
+	for _, asset := range release.Assets {
+		if err := validateUpdateURL(asset.BrowserDownloadUrl); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 type (
 	GitHubResponse struct {
@@ -100,6 +127,10 @@ func (u *Updater) GetReleaseName(version string) string {
 }
 
 func (u *Updater) fetchLatestRelease(channel string) (*Release, error) {
+	if err := validateUpdateURL(githubApiUrl); err != nil {
+		return nil, err
+	}
+
 	response, err := u.client.Get(githubApiUrl)
 	if err != nil {
 		return nil, err
@@ -147,6 +178,10 @@ func (u *Updater) fetchLatestRelease(channel string) (*Release, error) {
 			Size:               asset.Size,
 			BrowserDownloadUrl: asset.BrowserDownloadURL,
 		}
+	}
+
+	if err := validateReleaseDownloadURLs(release); err != nil {
+		return nil, err
 	}
 
 	return release, nil

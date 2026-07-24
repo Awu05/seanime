@@ -26,16 +26,19 @@ jobs:
             id: 'seanime-denshi-darwin-arm64'
             go_binary_id: 'seanime-server-darwin' # Artifact: go-seanime-server-darwin (contains both arm64 and x86_64)
             electron_args: '--mac --arm64'
+            mpv_prism_target: 'darwin-arm64'
           # For Linux
           - os: 'ubuntu-latest'
             id: 'seanime-denshi-linux-x64'
             go_binary_id: 'seanime-server-linux' # Artifact: go-seanime-server-linux (contains x86_64)
             electron_args: '--linux --x64'
+            mpv_prism_target: 'linux-x64'
           # For Windows
           - os: 'windows-latest'
             id: 'seanime-denshi-windows-x64'
             go_binary_id: 'seanime-server-windows' # Artifact: go-seanime-server-windows (contains x86_64)
             electron_args: '--win --x64'
+            mpv_prism_target: 'win32-x64'
 
     runs-on: ${{ matrix.os }}
     outputs:
@@ -53,7 +56,7 @@ jobs:
       - name: Setup Node.js 📦
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Get package version 📦
         id: get-version
@@ -142,8 +145,10 @@ jobs:
       - name: Install and build 📦️
         run: |
           cd seanime-denshi
-          npm install
-          npm run build -- ${{ matrix.electron_args }}
+          npm ci
+          npm run build:main
+          npm run sync:mpv-prism -- ${{ matrix.mpv_prism_target }}
+          npx electron-builder build ${{ matrix.electron_args }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

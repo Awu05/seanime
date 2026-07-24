@@ -1,24 +1,60 @@
 package filecache
 
 import (
-	"github.com/davecgh/go-spew/spew"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"path/filepath"
-	"seanime/internal/test_utils"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/davecgh/go-spew/spew"
+	"github.com/stretchr/testify/assert"
 )
 
+func TestRemoveAllBy(t *testing.T) {
+	cacher, err := NewCacher(filepath.Join(t.TempDir(), "cache"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mediaInfoBucket := NewBucket("mediastream_mediainfo_test", time.Hour)
+	otherBucket := NewBucket("other", time.Hour)
+	if err := cacher.Set(mediaInfoBucket, "key", "stale"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cacher.Set(otherBucket, "key", "keep"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cacher.RemoveAllBy(func(filename string) bool {
+		return strings.HasPrefix(filename, "mediastream_mediainfo_")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var value string
+	found, err := cacher.Get(mediaInfoBucket, "key", &value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatal("removed cache remained in memory")
+	}
+
+	found, err = cacher.Get(otherBucket, "key", &value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found || value != "keep" {
+		t.Fatalf("unrelated cache was removed: found=%v value=%q", found, value)
+	}
+}
+
 func TestCacherFunctions(t *testing.T) {
-	test_utils.InitTestProvider(t)
-
-	tempDir := t.TempDir()
-	t.Log(tempDir)
-
-	cacher, err := NewCacher(filepath.Join(tempDir, "cache"))
-	require.NoError(t, err)
+	cacher, err := NewCacher(filepath.Join(t.TempDir(), "cache"))
+	if err != nil {
+		t.Fatalf("Failed to create cacher: %v", err)
+	}
 
 	bucket := Bucket{
 		name: "test",
@@ -63,12 +99,7 @@ func TestCacherFunctions(t *testing.T) {
 }
 
 func TestCacherSetAndGet(t *testing.T) {
-	test_utils.InitTestProvider(t)
-
-	tempDir := t.TempDir()
-	t.Log(tempDir)
-
-	cacher, err := NewCacher(filepath.Join(test_utils.ConfigData.Path.DataDir, "cache"))
+	cacher, err := NewCacher(filepath.Join(t.TempDir(), "cache"))
 
 	bucket := Bucket{
 		name: "test",

@@ -225,6 +225,36 @@
     }
   },
   {
+    "name": "HandleGetRawAnimeCollectionTags",
+    "trimmedName": "GetRawAnimeCollectionTags",
+    "comments": [
+      "HandleGetRawAnimeCollectionTags",
+      "",
+      "\t@summary returns the AniList tags for the user's raw anime collection.",
+      "\t@desc This runs a dedicated AniList tags query used by the lists page filters.",
+      "\t@returns anilist.MediaTagMap",
+      "\t@route /api/v1/anilist/collection/raw/tags [GET]",
+      ""
+    ],
+    "filepath": "internal/handlers/anilist.go",
+    "filename": "anilist.go",
+    "api": {
+      "summary": "returns the AniList tags for the user's raw anime collection.",
+      "descriptions": [
+        "This runs a dedicated AniList tags query used by the lists page filters."
+      ],
+      "endpoint": "/api/v1/anilist/collection/raw/tags",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "anilist.MediaTagMap",
+      "returnGoType": "anilist.MediaTagMap",
+      "returnTypescriptType": "AL_MediaTagMap"
+    }
+  },
+  {
     "name": "HandleEditAnilistListEntry",
     "trimmedName": "EditAnilistListEntry",
     "comments": [
@@ -534,6 +564,15 @@
         {
           "name": "Genres",
           "jsonName": "genres",
+          "goType": "[]string",
+          "usedStructType": "",
+          "typescriptType": "Array\u003cstring\u003e",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Tags",
+          "jsonName": "tags",
           "goType": "[]string",
           "usedStructType": "",
           "typescriptType": "Array\u003cstring\u003e",
@@ -910,6 +949,69 @@
       "getSettings returns the settings for the current profile.",
       "In multi-user mode, returns per-profile settings.",
       "In single-user mode, returns global settings (ID=1).",
+      ""
+    ],
+    "filepath": "internal/handlers/anilist_helper.go",
+    "filename": "anilist_helper.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "getMediastreamSettings",
+    "trimmedName": "getMediastreamSettings",
+    "comments": [
+      "getMediastreamSettings returns mediastream settings for the current profile.",
+      ""
+    ],
+    "filepath": "internal/handlers/anilist_helper.go",
+    "filename": "anilist_helper.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "getTorrentstreamSettings",
+    "trimmedName": "getTorrentstreamSettings",
+    "comments": [
+      "getTorrentstreamSettings returns torrentstream settings for the current profile.",
+      ""
+    ],
+    "filepath": "internal/handlers/anilist_helper.go",
+    "filename": "anilist_helper.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "getDebridSettings",
+    "trimmedName": "getDebridSettings",
+    "comments": [
+      "getDebridSettings returns debrid settings for the current profile.",
       ""
     ],
     "filepath": "internal/handlers/anilist_helper.go",
@@ -1683,10 +1785,76 @@
     "comments": [
       "tryExtractProfile attempts to read the JWT from the request and set profile context.",
       "Used on public paths so endpoints like /status can return per-profile data when authenticated.",
+      "Returns true only when a valid profile/admin-scoped token was found.",
       ""
     ],
     "filepath": "internal/handlers/auth_middleware.go",
     "filename": "auth_middleware.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "check",
+    "trimmedName": "check",
+    "comments": [
+      "check returns false (with a retry-after hint) while the client is blocked.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_ratelimit.go",
+    "filename": "auth_ratelimit.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "fail",
+    "trimmedName": "fail",
+    "comments": [
+      "fail records a failed credential attempt; after the threshold, blocks with",
+      "exponential backoff.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_ratelimit.go",
+    "filename": "auth_ratelimit.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "checkAuthRateLimit",
+    "trimmedName": "checkAuthRateLimit",
+    "comments": [
+      "checkAuthRateLimit responds with 429 when the client is currently blocked.",
+      "Returns nil when the attempt may proceed.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_ratelimit.go",
+    "filename": "auth_ratelimit.go",
     "api": {
       "summary": "",
       "descriptions": [],
@@ -2581,6 +2749,76 @@
     }
   },
   {
+    "name": "HandleGetDummyDebridSettings",
+    "trimmedName": "GetDummyDebridSettings",
+    "comments": [
+      "HandleGetDummyDebridSettings",
+      "",
+      "\t@summary get dummy debrid settings.",
+      "\t@desc This returns the dummy debrid settings.",
+      "\t@returns models.DummyDebridSettings",
+      "\t@route /api/v1/debrid/dummy/settings [GET]",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "get dummy debrid settings.",
+      "descriptions": [
+        "This returns the dummy debrid settings."
+      ],
+      "endpoint": "/api/v1/debrid/dummy/settings",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "models.DummyDebridSettings",
+      "returnGoType": "models.DummyDebridSettings",
+      "returnTypescriptType": "Models_DummyDebridSettings"
+    }
+  },
+  {
+    "name": "HandleSaveDummyDebridSettings",
+    "trimmedName": "SaveDummyDebridSettings",
+    "comments": [
+      "HandleSaveDummyDebridSettings",
+      "",
+      "\t@summary save dummy debrid settings.",
+      "\t@desc This saves the dummy debrid settings.",
+      "\t@returns models.DummyDebridSettings",
+      "\t@route /api/v1/debrid/dummy/settings [PATCH]",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "save dummy debrid settings.",
+      "descriptions": [
+        "This saves the dummy debrid settings."
+      ],
+      "endpoint": "/api/v1/debrid/dummy/settings",
+      "methods": [
+        "PATCH"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Settings",
+          "jsonName": "settings",
+          "goType": "models.DummyDebridSettings",
+          "usedStructType": "models.DummyDebridSettings",
+          "typescriptType": "Models_DummyDebridSettings",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "models.DummyDebridSettings",
+      "returnGoType": "models.DummyDebridSettings",
+      "returnTypescriptType": "Models_DummyDebridSettings"
+    }
+  },
+  {
     "name": "HandleDebridAddTorrents",
     "trimmedName": "DebridAddTorrents",
     "comments": [
@@ -2968,6 +3206,50 @@
           "descriptions": []
         }
       ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "debridLocalDownloadPaths",
+    "trimmedName": "debridLocalDownloadPaths",
+    "comments": [
+      "debridLocalDownloadPaths returns the paths a local-download record refers to:",
+      "the exact created paths when recorded, otherwise the legacy LocalPath.",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isProtectedLibraryAncestor",
+    "trimmedName": "isProtectedLibraryAncestor",
+    "comments": [
+      "isProtectedLibraryAncestor reports whether p equals or contains any",
+      "configured library path — deleting such a path would delete the library.",
+      ""
+    ],
+    "filepath": "internal/handlers/debrid.go",
+    "filename": "debrid.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
       "returns": "bool",
       "returnGoType": "bool",
       "returnTypescriptType": "boolean"
@@ -3375,6 +3657,32 @@
       "returns": "string",
       "returnGoType": "string",
       "returnTypescriptType": "string"
+    }
+  },
+  {
+    "name": "directStreamManagerFor",
+    "trimmedName": "directStreamManagerFor",
+    "comments": [
+      "directStreamManagerFor returns whichever DirectStreamManager owns the",
+      "request's clientId stream. Local-file and direct debrid-URL plays register",
+      "into the per-profile session's manager, but debrid StartStream, Nakama, and",
+      "playlist playback register into the App singleton manager — serving only",
+      "from the session manager would 404 those. Falls back to the session",
+      "manager for requests with no matching stream anywhere (e.g. still loading).",
+      ""
+    ],
+    "filepath": "internal/handlers/directstream.go",
+    "filename": "directstream.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {
@@ -4214,6 +4522,52 @@
     }
   },
   {
+    "name": "HandleSetExternalExtensionDisabled",
+    "trimmedName": "SetExternalExtensionDisabled",
+    "comments": [
+      "HandleSetExternalExtensionDisabled",
+      "",
+      "\t@summary enables or disables an external extension.",
+      "\t@route /api/v1/extensions/external/disabled [POST]",
+      "\t@returns bool",
+      ""
+    ],
+    "filepath": "internal/handlers/extensions.go",
+    "filename": "extensions.go",
+    "api": {
+      "summary": "enables or disables an external extension.",
+      "descriptions": [],
+      "endpoint": "/api/v1/extensions/external/disabled",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "ID",
+          "jsonName": "id",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Disabled",
+          "jsonName": "disabled",
+          "goType": "bool",
+          "usedStructType": "",
+          "typescriptType": "boolean",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleListExtensionData",
     "trimmedName": "ListExtensionData",
     "comments": [
@@ -4437,6 +4791,33 @@
       "returns": "[]extension_repo.AnimeTorrentProviderExtensionItem",
       "returnGoType": "extension_repo.AnimeTorrentProviderExtensionItem",
       "returnTypescriptType": "Array\u003cExtensionRepo_AnimeTorrentProviderExtensionItem\u003e"
+    }
+  },
+  {
+    "name": "HandleListAnimeEntryEpisodeTabExtensions",
+    "trimmedName": "ListAnimeEntryEpisodeTabExtensions",
+    "comments": [
+      "HandleListAnimeEntryEpisodeTabExtensions",
+      "",
+      "\t@summary returns the installed plugins that registered an anime entry episode tab.",
+      "\t@route /api/v1/extensions/list/anime-entry-episode-tabs [GET]",
+      "\t@returns []extension_repo.PluginEpisodeTabExtensionItem",
+      ""
+    ],
+    "filepath": "internal/handlers/extensions.go",
+    "filename": "extensions.go",
+    "api": {
+      "summary": "returns the installed plugins that registered an anime entry episode tab.",
+      "descriptions": [],
+      "endpoint": "/api/v1/extensions/list/anime-entry-episode-tabs",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "[]extension_repo.PluginEpisodeTabExtensionItem",
+      "returnGoType": "extension_repo.PluginEpisodeTabExtensionItem",
+      "returnTypescriptType": "Array\u003cExtensionRepo_PluginEpisodeTabExtensionItem\u003e"
     }
   },
   {
@@ -4964,6 +5345,29 @@
     }
   },
   {
+    "name": "validateLibraryPath",
+    "trimmedName": "validateLibraryPath",
+    "comments": [
+      "validateLibraryPath rejects paths that would expose the Seanime data",
+      "directory (SQLite DB with credential hashes and AniList tokens) to",
+      "scanning/streaming, in either direction of containment.",
+      ""
+    ],
+    "filepath": "internal/handlers/library_paths.go",
+    "filename": "library_paths.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleSetOfflineMode",
     "trimmedName": "SetOfflineMode",
     "comments": [
@@ -5364,6 +5768,426 @@
       "methods": [
         "POST"
       ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isTrustedRequestHost",
+    "trimmedName": "isTrustedRequestHost",
+    "comments": [
+      "isTrustedRequestHost checks if the request originates from a trusted host such as localhost, a loopback, or private network address.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isRequestPermitted",
+    "trimmedName": "isRequestPermitted",
+    "comments": [
+      "isRequestPermitted determines if an HTTP request is permitted based on server password, access allowlist, and request origin metadata.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isTrustedCORSOrigin",
+    "trimmedName": "isTrustedCORSOrigin",
+    "comments": [
+      "isTrustedCORSOrigin determines if the provided CORS origin is trusted based on server security settings and allowlist rules.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isTrustedRequest",
+    "trimmedName": "isTrustedRequest",
+    "comments": [
+      "isTrustedRequest determines whether the request is from a trusted source based on server password, security mode, or request origin.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardPrivilegedSettingsMutation",
+    "trimmedName": "guardPrivilegedSettingsMutation",
+    "comments": [
+      "guardPrivilegedSettingsMutation checks and denies unauthorized privileged settings modifications, returning an error if access is forbidden.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardPrivilegedExtensionManagement",
+    "trimmedName": "guardPrivilegedExtensionManagement",
+    "comments": [
+      "guardPrivilegedExtensionManagement checks if a request meets the criteria for privileged extension management access.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardPrivilegedMediastreamSettingsMutation",
+    "trimmedName": "guardPrivilegedMediastreamSettingsMutation",
+    "comments": [
+      "guardPrivilegedMediastreamSettingsMutation ensures that mutations to privileged mediastream settings are only allowed by trusted or authorized sources.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "canMutatePrivilegedSettings",
+    "trimmedName": "canMutatePrivilegedSettings",
+    "comments": [
+      "canMutatePrivilegedSettings determines if privileged settings modifications can proceed based on request origin, server password, and settings changes.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "canMutatePrivilegedMediastreamSettings",
+    "trimmedName": "canMutatePrivilegedMediastreamSettings",
+    "comments": [
+      "canMutatePrivilegedMediastreamSettings determines if privileged mediastream settings can be modified based on request trust and setting changes.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "canUsePrivilegedExtensionManagement",
+    "trimmedName": "canUsePrivilegedExtensionManagement",
+    "comments": [
+      "canUsePrivilegedExtensionManagement determines if the request can access privileged extension management based on security mode, origin, and server password.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardPrivilegedMediaPlayer",
+    "trimmedName": "guardPrivilegedMediaPlayer",
+    "comments": [
+      "guardPrivilegedMediaPlayer restricts access to privileged media player actions based on security settings and request origin validation.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardPrivilegedTorrentClient",
+    "trimmedName": "guardPrivilegedTorrentClient",
+    "comments": [
+      "guardPrivilegedTorrentClient ensures that only trusted or authorized requests can execute privileged torrent client actions.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardPrivilegedMediastream",
+    "trimmedName": "guardPrivilegedMediastream",
+    "comments": [
+      "guardPrivilegedMediastream ensures that privileged mediastream actions are restricted to trusted requests or server password authorization.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardPrivilegedLocalExecution",
+    "trimmedName": "guardPrivilegedLocalExecution",
+    "comments": [
+      "guardPrivilegedLocalExecution enforces security checks for privileged actions, ensuring the request originates from a trusted or authorized source.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "getContextClientId",
+    "trimmedName": "getContextClientId",
+    "comments": [
+      "getContextClientId retrieves the client ID from the echo.Context by checking a header or a cookie, returning an empty string if not found.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "getRequestClientId",
+    "trimmedName": "getRequestClientId",
+    "comments": [
+      "getRequestClientId retrieves the client ID from the context or falls back to the claimed value after trimming whitespace.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isSameContextClientId",
+    "trimmedName": "isSameContextClientId",
+    "comments": [
+      "isSameContextClientId checks if the claimed client ID matches the context's client ID after trimming spaces and ensuring both are non-empty.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isRequestFromTrustedLocal",
+    "trimmedName": "isRequestFromTrustedLocal",
+    "comments": [
+      "note: this rejects requests from hosted instances",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "privilegedMediastreamSettingsChanged",
+    "trimmedName": "privilegedMediastreamSettingsChanged",
+    "comments": [
+      "privilegedMediastreamSettingsChanged checks if privileged mediastream settings differ between the previous and the next configuration.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "hasCustomExecutablePath",
+    "trimmedName": "hasCustomExecutablePath",
+    "comments": [
+      "hasCustomExecutablePath checks if the given path differs from the provided default executable paths. Returns true if a custom path is detected, false otherwise.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
       "params": [],
       "bodyFields": [],
       "returns": "bool",
@@ -5873,6 +6697,187 @@
     }
   },
   {
+    "name": "HandleGetMangaPreferences",
+    "trimmedName": "GetMangaPreferences",
+    "comments": [
+      "HandleGetMangaPreferences",
+      "",
+      "\t@summary returns server-backed manga source preferences.",
+      "\t@route /api/v1/manga/preferences [GET]",
+      "\t@returns manga.MangaPreferences",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "returns server-backed manga source preferences.",
+      "descriptions": [],
+      "endpoint": "/api/v1/manga/preferences",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "manga.MangaPreferences",
+      "returnGoType": "manga.MangaPreferences",
+      "returnTypescriptType": "Manga_MangaPreferences"
+    }
+  },
+  {
+    "name": "HandleImportMangaPreferences",
+    "trimmedName": "ImportMangaPreferences",
+    "comments": [
+      "HandleImportMangaPreferences",
+      "",
+      "\t@summary imports client manga preferences missing from the server.",
+      "\t@route /api/v1/manga/preferences/import [POST]",
+      "\t@returns manga.MangaPreferences",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "imports client manga preferences missing from the server.",
+      "descriptions": [],
+      "endpoint": "/api/v1/manga/preferences/import",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "manga.MangaPreferences",
+      "returnGoType": "manga.MangaPreferences",
+      "returnTypescriptType": "Manga_MangaPreferences"
+    }
+  },
+  {
+    "name": "HandlePatchMangaPreference",
+    "trimmedName": "PatchMangaPreference",
+    "comments": [
+      "HandlePatchMangaPreference",
+      "",
+      "\t@summary updates a manga source preference.",
+      "\t@route /api/v1/manga/preferences/{mediaId} [PATCH]",
+      "\t@returns manga.MangaEntryPreference",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "updates a manga source preference.",
+      "descriptions": [],
+      "endpoint": "/api/v1/manga/preferences/{mediaId}",
+      "methods": [
+        "PATCH"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "manga.MangaEntryPreference",
+      "returnGoType": "manga.MangaEntryPreference",
+      "returnTypescriptType": "Manga_MangaEntryPreference"
+    }
+  },
+  {
+    "name": "HandleStartMangaSourceRefresh",
+    "trimmedName": "StartMangaSourceRefresh",
+    "comments": [
+      "HandleStartMangaSourceRefresh",
+      "",
+      "\t@summary starts a background manga source refresh.",
+      "\t@route /api/v1/manga/source-refresh [POST]",
+      "\t@returns manga.MangaSourceRefreshJob",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "starts a background manga source refresh.",
+      "descriptions": [],
+      "endpoint": "/api/v1/manga/source-refresh",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Mode",
+          "jsonName": "mode",
+          "goType": "manga.MangaSourceRefreshMode",
+          "usedStructType": "manga.MangaSourceRefreshMode",
+          "typescriptType": "Manga_MangaSourceRefreshMode",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "MediaIds",
+          "jsonName": "mediaIds",
+          "goType": "[]int",
+          "usedStructType": "",
+          "typescriptType": "Array\u003cnumber\u003e",
+          "required": false,
+          "descriptions": []
+        }
+      ],
+      "returns": "manga.MangaSourceRefreshJob",
+      "returnGoType": "manga.MangaSourceRefreshJob",
+      "returnTypescriptType": "Manga_MangaSourceRefreshJob"
+    }
+  },
+  {
+    "name": "HandleGetMangaSourceRefresh",
+    "trimmedName": "GetMangaSourceRefresh",
+    "comments": [
+      "HandleGetMangaSourceRefresh",
+      "",
+      "\t@summary returns the client's active or latest manga source refresh.",
+      "\t@route /api/v1/manga/source-refresh [GET]",
+      "\t@returns manga.MangaSourceRefreshJob",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "returns the client's active or latest manga source refresh.",
+      "descriptions": [],
+      "endpoint": "/api/v1/manga/source-refresh",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "manga.MangaSourceRefreshJob",
+      "returnGoType": "manga.MangaSourceRefreshJob",
+      "returnTypescriptType": "Manga_MangaSourceRefreshJob"
+    }
+  },
+  {
+    "name": "HandleStopMangaSourceRefresh",
+    "trimmedName": "StopMangaSourceRefresh",
+    "comments": [
+      "HandleStopMangaSourceRefresh",
+      "",
+      "\t@summary stops or dismisses the client's manga source refresh.",
+      "\t@route /api/v1/manga/source-refresh [DELETE]",
+      "\t@returns manga.MangaSourceRefreshJob",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "stops or dismisses the client's manga source refresh.",
+      "descriptions": [],
+      "endpoint": "/api/v1/manga/source-refresh",
+      "methods": [
+        "DELETE"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "manga.MangaSourceRefreshJob",
+      "returnGoType": "manga.MangaSourceRefreshJob",
+      "returnTypescriptType": "Manga_MangaSourceRefreshJob"
+    }
+  },
+  {
     "name": "HandleGetAnilistMangaCollection",
     "trimmedName": "GetAnilistMangaCollection",
     "comments": [
@@ -5935,6 +6940,36 @@
       "returns": "anilist.MangaCollection",
       "returnGoType": "anilist.MangaCollection",
       "returnTypescriptType": "AL_MangaCollection"
+    }
+  },
+  {
+    "name": "HandleGetRawAnilistMangaCollectionTags",
+    "trimmedName": "GetRawAnilistMangaCollectionTags",
+    "comments": [
+      "HandleGetRawAnilistMangaCollectionTags",
+      "",
+      "\t@summary returns the AniList tags for the user's raw manga collection.",
+      "\t@desc This runs a dedicated AniList tags query used by the lists page filters.",
+      "\t@route /api/v1/manga/anilist/collection/raw/tags [GET]",
+      "\t@returns anilist.MediaTagMap",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "returns the AniList tags for the user's raw manga collection.",
+      "descriptions": [
+        "This runs a dedicated AniList tags query used by the lists page filters."
+      ],
+      "endpoint": "/api/v1/manga/anilist/collection/raw/tags",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "anilist.MediaTagMap",
+      "returnGoType": "anilist.MediaTagMap",
+      "returnTypescriptType": "AL_MediaTagMap"
     }
   },
   {
@@ -6402,6 +7437,15 @@
           "descriptions": []
         },
         {
+          "name": "Tags",
+          "jsonName": "tags",
+          "goType": "[]string",
+          "usedStructType": "",
+          "typescriptType": "Array\u003cstring\u003e",
+          "required": false,
+          "descriptions": []
+        },
+        {
           "name": "AverageScoreGreater",
           "jsonName": "averageScore_greater",
           "goType": "int",
@@ -6566,6 +7610,52 @@
       "returns": "[]hibikemanga.SearchResult",
       "returnGoType": "hibikemanga.SearchResult",
       "returnTypescriptType": "Array\u003cHibikeManga_SearchResult\u003e"
+    }
+  },
+  {
+    "name": "HandlePreviewMangaMapping",
+    "trimmedName": "PreviewMangaMapping",
+    "comments": [
+      "HandlePreviewMangaMapping",
+      "",
+      "\t@summary returns a chapter summary for a manual manga mapping.",
+      "\t@route /api/v1/manga/manual-mapping/preview [POST]",
+      "\t@returns manga.MappingPreview",
+      ""
+    ],
+    "filepath": "internal/handlers/manga.go",
+    "filename": "manga.go",
+    "api": {
+      "summary": "returns a chapter summary for a manual manga mapping.",
+      "descriptions": [],
+      "endpoint": "/api/v1/manga/manual-mapping/preview",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Provider",
+          "jsonName": "provider",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "MangaId",
+          "jsonName": "mangaId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "manga.MappingPreview",
+      "returnGoType": "manga.MappingPreview",
+      "returnTypescriptType": "Manga_MappingPreview"
     }
   },
   {
@@ -7400,6 +8490,36 @@
     }
   },
   {
+    "name": "HandleMediastreamLocalSubtitles",
+    "trimmedName": "MediastreamLocalSubtitles",
+    "comments": [
+      "HandleMediastreamLocalSubtitles",
+      "",
+      "\t@summary get local subtitle files.",
+      "\t@desc This returns same-directory subtitle files for a local video file.",
+      "\t@returns []util.LocalSubtitleFile",
+      "\t@route /api/v1/mediastream/local-subtitles [GET]",
+      ""
+    ],
+    "filepath": "internal/handlers/mediastream.go",
+    "filename": "mediastream.go",
+    "api": {
+      "summary": "get local subtitle files.",
+      "descriptions": [
+        "This returns same-directory subtitle files for a local video file."
+      ],
+      "endpoint": "/api/v1/mediastream/local-subtitles",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "[]util.LocalSubtitleFile",
+      "returnGoType": "util.LocalSubtitleFile",
+      "returnTypescriptType": "Array\u003cUtil_LocalSubtitleFile\u003e"
+    }
+  },
+  {
     "name": "HandlePopulateFillerData",
     "trimmedName": "PopulateFillerData",
     "comments": [
@@ -7618,6 +8738,46 @@
       "returns": "bool",
       "returnGoType": "bool",
       "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "HandleMpvCoreInSightGetCharacterDetails",
+    "trimmedName": "MpvCoreInSightGetCharacterDetails",
+    "comments": [
+      "HandleMpvCoreInSightGetCharacterDetails",
+      "",
+      "\t@summary returns the character details for MpvCore InSight.",
+      "\t@param malId - int - true - \"The MAL character ID\"",
+      "\t@returns mpvcore.InSightCharacterDetails",
+      "\t@route /api/v1/mpvcore/insight/character/{malId} [GET]",
+      ""
+    ],
+    "filepath": "internal/handlers/mpvcore.go",
+    "filename": "mpvcore.go",
+    "api": {
+      "summary": "returns the character details for MpvCore InSight.",
+      "descriptions": [],
+      "endpoint": "/api/v1/mpvcore/insight/character/{malId}",
+      "methods": [
+        "GET"
+      ],
+      "params": [
+        {
+          "name": "malId",
+          "jsonName": "malId",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": true,
+          "descriptions": [
+            "The MAL character ID"
+          ]
+        }
+      ],
+      "bodyFields": [],
+      "returns": "mpvcore.InSightCharacterDetails",
+      "returnGoType": "mpvcore.InSightCharacterDetails",
+      "returnTypescriptType": "MpvCore_InSightCharacterDetails"
     }
   },
   {
@@ -8487,6 +9647,15 @@
           "usedStructType": "",
           "typescriptType": "boolean",
           "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Refresh",
+          "jsonName": "refresh",
+          "goType": "bool",
+          "usedStructType": "",
+          "typescriptType": "boolean",
+          "required": false,
           "descriptions": []
         }
       ],
@@ -9438,27 +10607,6 @@
     }
   },
   {
-    "name": "rewriteURI",
-    "trimmedName": "rewriteURI",
-    "comments": [
-      "rewriteURI rewrites a URI pointer if needed, returns true if modified",
-      ""
-    ],
-    "filepath": "internal/handlers/proxy.go",
-    "filename": "proxy.go",
-    "api": {
-      "summary": "",
-      "descriptions": [],
-      "endpoint": "",
-      "methods": null,
-      "params": [],
-      "bodyFields": [],
-      "returns": "bool",
-      "returnGoType": "bool",
-      "returnTypescriptType": "boolean"
-    }
-  },
-  {
     "name": "HandleInstallLatestUpdate",
     "trimmedName": "InstallLatestUpdate",
     "comments": [
@@ -9787,6 +10935,27 @@
       "returns": "report.IssueReport",
       "returnGoType": "report.IssueReport",
       "returnTypescriptType": "Report_IssueReport"
+    }
+  },
+  {
+    "name": "createRequestBoundaryView",
+    "trimmedName": "createRequestBoundaryView",
+    "comments": [
+      "createRequestBoundaryView processes an HTTP request and returns a structure describing the request's host, IP, scheme, and related attributes.",
+      ""
+    ],
+    "filepath": "internal/handlers/request_boundary.go",
+    "filename": "request_boundary.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {
@@ -10158,6 +11327,55 @@
           "goType": "models.NakamaSettings",
           "usedStructType": "models.NakamaSettings",
           "typescriptType": "Models_NakamaSettings",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "handlers.Status",
+      "returnGoType": "handlers.Status",
+      "returnTypescriptType": "Status"
+    }
+  },
+  {
+    "name": "HandlePatchSetting",
+    "trimmedName": "PatchSetting",
+    "comments": [
+      "HandlePatchSetting",
+      "",
+      "\t@summary patches a specific app setting.",
+      "\t@desc This updates a single setting path and refreshes the server status.",
+      "\t@route /api/v1/settings/path [PATCH]",
+      "\t@returns handlers.Status",
+      ""
+    ],
+    "filepath": "internal/handlers/settings.go",
+    "filename": "settings.go",
+    "api": {
+      "summary": "patches a specific app setting.",
+      "descriptions": [
+        "This updates a single setting path and refreshes the server status."
+      ],
+      "endpoint": "/api/v1/settings/path",
+      "methods": [
+        "PATCH"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Path",
+          "jsonName": "path",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Value",
+          "jsonName": "value",
+          "goType": "",
+          "usedStructType": "",
+          "typescriptType": "any",
           "required": true,
           "descriptions": []
         }
@@ -10712,6 +11930,48 @@
     }
   },
   {
+    "name": "guardStrictLocalOnlyAction",
+    "trimmedName": "guardStrictLocalOnlyAction",
+    "comments": [
+      "guardStrictLocalOnlyAction ensures an action is restricted to trusted local requests when in strict security mode, returning an error if denied.",
+      ""
+    ],
+    "filepath": "internal/handlers/strict_security.go",
+    "filename": "strict_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "guardStrictFilesystemPath",
+    "trimmedName": "guardStrictFilesystemPath",
+    "comments": [
+      "guardStrictFilesystemPath validates if a filesystem path is allowed under strict security mode based on origin and root constraints.",
+      ""
+    ],
+    "filepath": "internal/handlers/strict_security.go",
+    "filename": "strict_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleGetTheme",
     "trimmedName": "GetTheme",
     "comments": [
@@ -10840,7 +12100,7 @@
           "goType": "string",
           "usedStructType": "",
           "typescriptType": "string",
-          "required": true,
+          "required": false,
           "descriptions": []
         },
         {
@@ -10858,13 +12118,112 @@
           "goType": "string",
           "usedStructType": "",
           "typescriptType": "string",
-          "required": true,
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Tracker",
+          "jsonName": "tracker",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Name",
+          "jsonName": "name",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Value",
+          "jsonName": "value",
+          "goType": "bool",
+          "usedStructType": "",
+          "typescriptType": "boolean",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Index",
+          "jsonName": "index",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Priority",
+          "jsonName": "priority",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "DownloadLimit",
+          "jsonName": "downloadLimit",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "UploadLimit",
+          "jsonName": "uploadLimit",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": false,
+          "descriptions": []
+        },
+        {
+          "name": "Magnet",
+          "jsonName": "magnet",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": false,
           "descriptions": []
         }
       ],
       "returns": "bool",
       "returnGoType": "bool",
       "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "HandleGetBuiltInTorrentDetails",
+    "trimmedName": "GetBuiltInTorrentDetails",
+    "comments": [
+      "HandleGetBuiltInTorrentDetails",
+      "",
+      "\t@summary returns details for a torrent managed by the Seanime torrent client.",
+      "\t@route /api/v1/torrent-client/details [GET]",
+      "\t@returns seanime.TorrentDetails",
+      ""
+    ],
+    "filepath": "internal/handlers/torrent_client.go",
+    "filename": "torrent_client.go",
+    "api": {
+      "summary": "returns details for a torrent managed by the Seanime torrent client.",
+      "descriptions": [],
+      "endpoint": "/api/v1/torrent-client/details",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "seanime.TorrentDetails",
+      "returnGoType": "seanime.TorrentDetails",
+      "returnTypescriptType": "TorrentDetails"
     }
   },
   {
@@ -11642,6 +13001,46 @@
     }
   },
   {
+    "name": "HandleDeleteTorrentstreamBatchHistory",
+    "trimmedName": "DeleteTorrentstreamBatchHistory",
+    "comments": [
+      "HandleDeleteTorrentstreamBatchHistory",
+      "",
+      "\t@summary deletes the saved batch selection.",
+      "\t@desc This clears the saved previous batch selection for a media entry.",
+      "\t@returns bool",
+      "\t@route /api/v1/torrentstream/batch-history/delete [POST]",
+      ""
+    ],
+    "filepath": "internal/handlers/torrentstream.go",
+    "filename": "torrentstream.go",
+    "api": {
+      "summary": "deletes the saved batch selection.",
+      "descriptions": [
+        "This clears the saved previous batch selection for a media entry."
+      ],
+      "endpoint": "/api/v1/torrentstream/batch-history/delete",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "MediaID",
+          "jsonName": "mediaId",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleTorrentstreamServeStream",
     "trimmedName": "TorrentstreamServeStream",
     "comments": [
@@ -11730,8 +13129,72 @@
           "descriptions": []
         },
         {
+          "name": "ConfirmPassword",
+          "jsonName": "confirmPassword",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
           "name": "AccessCode",
           "jsonName": "accessCode",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "map[string]interface{}",
+      "returnGoType": "interface{}",
+      "returnTypescriptType": "Record\u003cstring, interface{}\u003e"
+    }
+  },
+  {
+    "name": "HandleChangeAdminPassword",
+    "trimmedName": "ChangeAdminPassword",
+    "comments": [
+      "HandleChangeAdminPassword",
+      "",
+      "\t@summary changes the admin password (admin only, current password required).",
+      "\t@route /api/v1/auth/change-password [POST]",
+      "\t@returns map[string]interface{}",
+      ""
+    ],
+    "filepath": "internal/handlers/user_auth.go",
+    "filename": "user_auth.go",
+    "api": {
+      "summary": "changes the admin password (admin only, current password required).",
+      "descriptions": [],
+      "endpoint": "/api/v1/auth/change-password",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "CurrentPassword",
+          "jsonName": "currentPassword",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "NewPassword",
+          "jsonName": "newPassword",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "ConfirmPassword",
+          "jsonName": "confirmPassword",
           "goType": "string",
           "usedStructType": "",
           "typescriptType": "string",
@@ -12029,6 +13492,61 @@
       "returns": "videocore.InSightCharacterDetails",
       "returnGoType": "videocore.InSightCharacterDetails",
       "returnTypescriptType": "VideoCore_InSightCharacterDetails"
+    }
+  },
+  {
+    "name": "HandleVideoCoreSaveScreenshot",
+    "trimmedName": "VideoCoreSaveScreenshot",
+    "comments": [
+      "HandleVideoCoreSaveScreenshot",
+      "",
+      "\t@summary saves a screenshot to a local directory.",
+      "\t@route /api/v1/videocore/screenshot [POST]",
+      "\t@returns bool",
+      ""
+    ],
+    "filepath": "internal/handlers/videocore.go",
+    "filename": "videocore.go",
+    "api": {
+      "summary": "saves a screenshot to a local directory.",
+      "descriptions": [],
+      "endpoint": "/api/v1/videocore/screenshot",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "Dir",
+          "jsonName": "dir",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Filename",
+          "jsonName": "filename",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "Base64Data",
+          "jsonName": "base64Data",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {

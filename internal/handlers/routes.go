@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"path/filepath"
 	"seanime/internal/core"
@@ -20,11 +21,19 @@ type Handler struct {
 }
 
 func InitRoutes(app *core.App, e *echo.Echo) {
+	h := &Handler{App: app}
+
+	e.Use(h.trustedLocalRequestMiddleware)
+
 	// CORS middleware
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
+		AllowOriginFunc: func(origin string) (bool, error) {
+			return isTrustedCORSOrigin(origin, app.Config.Server.Password, app.Config.Server.AccessAllowlist), nil
+		},
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Cookie", "Authorization",
-			"X-Seanime-Token", "X-Seanime-Nakama-Token", "X-Seanime-Nakama-Username", "X-Seanime-Nakama-Server-Version", "X-Seanime-Nakama-Peer-Id"},
+			"X-Seanime-Token", clientIdHeaderName, clientIdProofHeaderName, clientPlatformHeader,
+			"X-Seanime-Nakama-Token", "X-Seanime-Nakama-Username", "X-Seanime-Nakama-Server-Version", "X-Seanime-Nakama-Peer-Id"},
+		ExposeHeaders:    []string{clientIdHeaderName, clientIdProofHeaderName},
 		AllowCredentials: true,
 	}))
 
@@ -71,41 +80,42 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	// Client ID middleware
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Check if the client has a UUID cookie
-			cookie, err := c.Cookie("Seanime-Client-Id")
+			req := c.Request()
+			cookie, err := c.Cookie(clientIdCookieName)
+			cookieClientID := ""
+			if err == nil {
+				cookieClientID = strings.TrimSpace(cookie.Value)
+			}
+			clientID := resolveClientIdFromRequest(app, req, cookieClientID)
 
-			if err != nil || cookie.Value == "" {
-				// Generate a new UUID for the client
-				u := uuid.New().String()
+			if clientID == "" {
+				clientID = uuid.New().String()
+			}
 
-				// Create a cookie with the UUID
+			if err != nil || cookie == nil || strings.TrimSpace(cookie.Value) != clientID {
 				newCookie := new(http.Cookie)
-				newCookie.Name = "Seanime-Client-Id"
-				newCookie.Value = u
-				newCookie.HttpOnly = false // Make the cookie accessible via JS
+				newCookie.Name = clientIdCookieName
+				newCookie.Value = clientID
+				newCookie.HttpOnly = true
 				newCookie.Expires = time.Now().Add(24 * time.Hour)
 				newCookie.Path = "/"
 				newCookie.Domain = ""
-				newCookie.SameSite = http.SameSiteDefaultMode
-				newCookie.Secure = false
+				newCookie.SameSite = http.SameSiteLaxMode
+				newCookie.Secure = requestUsesTrustedHTTPS(req)
 
-				// Set the cookie
 				c.SetCookie(newCookie)
-
-				// Store the UUID in the context for use in the request
-				c.Set("Seanime-Client-Id", u)
-			} else {
-				// Store the existing UUID in the context for use in the request
-				c.Set("Seanime-Client-Id", cookie.Value)
 			}
+
+			setClientIdentityHeaders(c.Response().Header(), app, clientID)
+
+			c.Set(clientIdCookieName, clientID)
+			c.Set(clientPlatformHeader, getClientPlatformFromRequest(req))
 
 			return next(c)
 		}
 	})
 
 	e.Use(headMethodMiddleware)
-
-	h := &Handler{App: app}
 
 	e.GET("/events", h.webSocketEventHandler)
 
@@ -180,6 +190,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	// Settings
 	v1.GET("/settings", h.HandleGetSettings)
 	v1.PATCH("/settings", h.HandleSaveSettings)
+	v1.PATCH("/settings/path", h.HandlePatchSetting)
 	v1.POST("/start", h.HandleGettingStarted)
 	v1.PATCH("/settings/auto-downloader", h.HandleSaveAutoDownloaderSettings)
 	v1.PATCH("/settings/media-player", h.HandleSaveMediaPlayerSettings)
@@ -223,6 +234,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 
 	v1Anilist.GET("/collection/raw", h.HandleGetRawAnimeCollection)
 	v1Anilist.POST("/collection/raw", h.HandleGetRawAnimeCollection)
+	v1Anilist.GET("/collection/raw/tags", h.HandleGetRawAnimeCollectionTags)
 
 	v1Anilist.GET("/media-details/:id", h.HandleGetAnilistAnimeDetails)
 
@@ -313,6 +325,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/torrent/search", h.HandleSearchTorrent)
 	v1.POST("/torrent-client/download", h.HandleTorrentClientDownload)
 	v1.GET("/torrent-client/list", h.HandleGetActiveTorrentList)
+	v1.GET("/torrent-client/details", h.HandleGetBuiltInTorrentDetails)
 	v1.POST("/torrent-client/action", h.HandleTorrentClientAction)
 	v1.POST("/torrent-client/get-files", h.HandleTorrentClientGetFiles)
 	v1.POST("/torrent-client/rule-magnet", h.HandleTorrentClientAddMagnetFromRule)
@@ -407,8 +420,15 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1Manga.POST("/anilist/collection", h.HandleGetAnilistMangaCollection)
 	v1Manga.GET("/anilist/collection/raw", h.HandleGetRawAnilistMangaCollection)
 	v1Manga.POST("/anilist/collection/raw", h.HandleGetRawAnilistMangaCollection)
+	v1Manga.GET("/anilist/collection/raw/tags", h.HandleGetRawAnilistMangaCollectionTags)
 	v1Manga.POST("/anilist/list", h.HandleAnilistListManga)
 	v1Manga.GET("/collection", h.HandleGetMangaCollection)
+	v1Manga.GET("/preferences", h.HandleGetMangaPreferences)
+	v1Manga.POST("/preferences/import", h.HandleImportMangaPreferences)
+	v1Manga.PATCH("/preferences/:mediaId", h.HandlePatchMangaPreference)
+	v1Manga.POST("/source-refresh", h.HandleStartMangaSourceRefresh)
+	v1Manga.GET("/source-refresh", h.HandleGetMangaSourceRefresh)
+	v1Manga.DELETE("/source-refresh", h.HandleStopMangaSourceRefresh)
 	v1Manga.GET("/latest-chapter-numbers", h.HandleGetMangaLatestChapterNumbersMap)
 	v1Manga.POST("/refetch-chapter-containers", h.HandleRefetchMangaChapterContainers)
 	v1Manga.GET("/entry/:id", h.HandleGetMangaEntry)
@@ -430,6 +450,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1Manga.POST("/download-queue/reset-errored", h.HandleResetErroredChapterDownloadQueue)
 
 	v1Manga.POST("/search", h.HandleMangaManualSearch)
+	v1Manga.POST("/manual-mapping/preview", h.HandlePreviewMangaMapping)
 	v1Manga.POST("/manual-mapping", h.HandleMangaManualMapping)
 	v1Manga.POST("/get-mapping", h.HandleGetMangaMapping)
 	v1Manga.POST("/remove-mapping", h.HandleRemoveMangaMapping)
@@ -472,6 +493,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.GET("/mediastream/direct", h.HandleMediastreamDirectPlay)
 	v1.HEAD("/mediastream/direct", h.HandleMediastreamDirectPlay)
 	v1.GET("/mediastream/file", h.HandleMediastreamFile)
+	v1.GET("/mediastream/local-subtitles", h.HandleMediastreamLocalSubtitles)
 
 	//
 	// Direct Stream
@@ -486,6 +508,8 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	// VideoCore
 	//
 	v1.GET("/videocore/insight/character/:malId", h.HandleVideoCoreInSightGetCharacterDetails)
+	v1.POST("/videocore/screenshot", h.HandleVideoCoreSaveScreenshot)
+	v1.GET("/mpvcore/insight/character/:malId", h.HandleMpvCoreInSightGetCharacterDetails)
 
 	//
 	// Torrent stream
@@ -497,6 +521,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/torrentstream/drop", h.HandleTorrentstreamDropTorrent)
 	v1.POST("/torrentstream/torrent-file-previews", h.HandleGetTorrentstreamTorrentFilePreviews)
 	v1.POST("/torrentstream/batch-history", h.HandleGetTorrentstreamBatchHistory)
+	v1.POST("/torrentstream/batch-history/delete", h.HandleDeleteTorrentstreamBatchHistory)
 	v1.GET("/torrentstream/stream/*", h.HandleTorrentstreamServeStream)
 
 	//
@@ -512,6 +537,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1Extensions.POST("/external/edit-payload", h.HandleUpdateExtensionCode)
 	v1Extensions.POST("/external/reload", h.HandleReloadExternalExtensions)
 	v1Extensions.POST("/external/reload", h.HandleReloadExternalExtension)
+	v1Extensions.POST("/external/disabled", h.HandleSetExternalExtensionDisabled)
 	v1Extensions.POST("/all", h.HandleGetAllExtensions)
 	v1Extensions.GET("/updates", h.HandleGetExtensionUpdateData)
 	v1Extensions.GET("/list", h.HandleListExtensionData)
@@ -520,6 +546,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1Extensions.GET("/list/manga-provider", h.HandleListMangaProviderExtensions)
 	v1Extensions.GET("/list/onlinestream-provider", h.HandleListOnlinestreamProviderExtensions)
 	v1Extensions.GET("/list/anime-torrent-provider", h.HandleListAnimeTorrentProviderExtensions)
+	v1Extensions.GET("/list/anime-entry-episode-tabs", h.HandleListAnimeEntryEpisodeTabExtensions)
 	v1Extensions.GET("/list/custom-source", h.HandleListCustomSourceExtensions)
 	v1Extensions.GET("/user-config/:id", h.HandleGetExtensionUserConfig)
 	v1Extensions.POST("/user-config", h.HandleSaveExtensionUserConfig)
@@ -560,6 +587,8 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 
 	v1.GET("/debrid/settings", h.HandleGetDebridSettings)
 	v1.PATCH("/debrid/settings", h.HandleSaveDebridSettings)
+	v1.GET("/debrid/dummy/settings", h.HandleGetDummyDebridSettings)
+	v1.PATCH("/debrid/dummy/settings", h.HandleSaveDummyDebridSettings)
 	v1.POST("/debrid/torrents", h.HandleDebridAddTorrents)
 	v1.POST("/debrid/torrents/download", h.HandleDebridDownloadTorrent)
 	v1.POST("/debrid/torrents/cancel", h.HandleDebridCancelDownload)
@@ -630,7 +659,31 @@ func (h *Handler) RespondWithData(c echo.Context, data interface{}) error {
 }
 
 func (h *Handler) RespondWithError(c echo.Context, err error) error {
-	return c.JSON(500, NewErrorResponse(err))
+	return c.JSON(statusCodeForError(err), NewErrorResponse(err))
+}
+
+func (h *Handler) RespondWithStatusError(c echo.Context, code int, err error) error {
+	return c.JSON(code, NewErrorResponse(err))
+}
+
+func statusCodeForError(err error) int {
+	if err == nil {
+		return http.StatusInternalServerError
+	}
+
+	if echoErr, ok := errors.AsType[*echo.HTTPError](err); ok && echoErr.Code >= 400 && echoErr.Code < 600 {
+		return echoErr.Code
+	}
+
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return http.StatusRequestEntityTooLarge
+	}
+
+	if strings.EqualFold(strings.TrimSpace(err.Error()), "UNAUTHENTICATED") {
+		return http.StatusUnauthorized
+	}
+
+	return http.StatusInternalServerError
 }
 
 func headMethodMiddleware(next echo.HandlerFunc) echo.HandlerFunc {

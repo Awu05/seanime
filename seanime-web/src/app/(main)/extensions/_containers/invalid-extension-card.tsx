@@ -4,15 +4,12 @@ import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websocke
 import { ExtensionSettings } from "@/app/(main)/extensions/_containers/extension-card"
 import { ExtensionCodeModal } from "@/app/(main)/extensions/_containers/extension-code"
 import { LANGUAGES_LIST } from "@/app/(main)/manga/_lib/language-map"
-import { clientIdAtom } from "@/app/websocket-provider"
 import { SeaImage } from "@/components/shared/sea-image"
 import { Alert } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button, IconButton } from "@/components/ui/button"
 import { cn } from "@/components/ui/core/styling"
 import { Modal } from "@/components/ui/modal"
-import { atom, useAtomValue } from "jotai"
-import { useAtom } from "jotai/react"
 import React from "react"
 import { BiCog, BiInfoCircle } from "react-icons/bi"
 import { FaCode } from "react-icons/fa"
@@ -167,8 +164,6 @@ type UnauthorizedExtensionPluginCardProps = {
     isUnsafe?: boolean
 }
 
-const shouldGrantPluginPermissionsAtom = atom<string[]>([])
-
 export function UnauthorizedExtensionPluginCard(props: UnauthorizedExtensionPluginCardProps) {
 
     const {
@@ -178,18 +173,16 @@ export function UnauthorizedExtensionPluginCard(props: UnauthorizedExtensionPlug
         ...rest
     } = props
 
-    const clientId = useAtomValue(clientIdAtom)
     const { mutate: grantPluginPermissions, isPending: isGrantingPluginPermissions } = useGrantPluginPermissions()
     const { mutate: reloadExternalExtension, isPending: isReloadingExtension } = useReloadExternalExtension()
-
-    const [shouldGrantPluginPermissions, setShouldGrantPluginPermissions] = useAtom(shouldGrantPluginPermissionsAtom)
+    const pendingGrantRef = React.useRef(false)
 
     useWebsocketMessageListener({
         type: "grant-plugin-permission-check",
         onMessage: (message: string) => {
             // message format: {extensionId}$$${challengeID}:{code}
-            if (message.startsWith(extension.extension?.id) && shouldGrantPluginPermissions.includes(extension.extension?.id ?? "")) {
-                setShouldGrantPluginPermissions(p => p.filter(id => id !== (extension.extension?.id ?? "")))
+            if (message.startsWith(extension.extension?.id) && pendingGrantRef.current) {
+                pendingGrantRef.current = false
                 const token = message.split("$$$")?.[1] || ""
                 grantPluginPermissions({ id: extension.extension?.id ?? "", clientId: "CODE:" + token })
             }
@@ -225,14 +218,14 @@ export function UnauthorizedExtensionPluginCard(props: UnauthorizedExtensionPlug
                         The plugin <span className="font-bold">{extension.extension?.name}</span> is requesting the following permissions:
                     </p>
 
-                    <p className="whitespace-pre-wrap w-full max-w-full overflow-x-auto text-md leading-relaxed text-left bg-[--subtle] p-3 rounded-xl">
+                    <p className="whitespace-pre-wrap w-full max-w-full overflow-x-auto text-md leading-relaxed text-left bg-gray-800 border p-3 rounded-xl">
                         {extension.pluginPermissionDescription?.split("\n").map((line, index) => {
                             line = line.trimEnd()
                             if (line.startsWith("•") && !line.startsWith("*")) {
                                 const l = line.replace("• ", "")
-                                return <span key={index} className="pl-4 mb-1 block">
+                                return <span key={index} className="mb-1 block">
                                     {l.startsWith("Domain:") ? <>
-                                            <span className="font-bold bg-gray-950 border px-2 py-[0.1rem] rounded-lg inline-block">{l
+                                            <span className="font-bold bg-gray-900 border px-2 py-[0.08rem] rounded-lg inline-block">{l
                                                 .split(":")[0].trim()}</span>: {l.substring(l.indexOf(":") + 1)}<br />
                                         </> :
                                         <>
@@ -263,30 +256,34 @@ export function UnauthorizedExtensionPluginCard(props: UnauthorizedExtensionPlug
                         {extension.path}
                     </p>
 
-                    <ExtensionCodeModal extension={extension.extension} readOnly>
+                    <div className="flex gap-2 w-full">
+                        <ExtensionCodeModal extension={extension.extension} readOnly>
+                            <Button
+                                size="md"
+                                intent="gray-subtle"
+                                className="w-full"
+                            >
+                                View code
+                            </Button>
+                        </ExtensionCodeModal>
+
                         <Button
                             size="md"
-                            intent="gray-subtle"
+                            intent="warning-subtle"
+                            leftIcon={<LuShieldCheck className="size-5" />}
+                            className="w-full"
+                            onClick={() => {
+                                if (!extension.extension?.id) return toast.error("Extension has no ID")
+                                pendingGrantRef.current = true
+                                React.startTransition(() => {
+                                    grantPluginPermissions({ id: extension.extension?.id ?? "", clientId: "" })
+                                })
+                            }}
+                            loading={isGrantingPluginPermissions}
                         >
-                            View code
+                            Grant permissions
                         </Button>
-                    </ExtensionCodeModal>
-
-                    <Button
-                        size="md"
-                        intent="success-subtle"
-                        leftIcon={<LuShieldCheck className="size-5" />}
-                        onClick={() => {
-                            if (!extension.extension?.id) return toast.error("Extension has no ID")
-                            setShouldGrantPluginPermissions(p => [...p, extension.extension?.id!])
-                            React.startTransition(() => {
-                                grantPluginPermissions({ id: extension.extension?.id ?? "", clientId: clientId || "" })
-                            })
-                        }}
-                        loading={isGrantingPluginPermissions}
-                    >
-                        Grant permissions
-                    </Button>
+                    </div>
                 </Modal>
                 {/*Show settings if extension has an ID and manifest URI*/}
                 {/*This will allow the user to fetch updates or uninstall the extension*/}

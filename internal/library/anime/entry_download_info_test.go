@@ -7,7 +7,7 @@ import (
 	"seanime/internal/api/metadata_provider"
 	"seanime/internal/database/db"
 	"seanime/internal/library/anime"
-	"seanime/internal/test_utils"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"testing"
 
@@ -16,15 +16,15 @@ import (
 )
 
 func TestNewEntryDownloadInfo(t *testing.T) {
-	test_utils.InitTestProvider(t, test_utils.Anilist())
+	cfg := testutil.InitTestProvider(t, testutil.Anilist())
 
 	logger := util.NewLogger()
-	database, err := db.NewDatabase(test_utils.ConfigData.Path.DataDir, test_utils.ConfigData.Database.Name, logger)
+	database, err := db.NewDatabase(cfg.Path.DataDir, cfg.Database.Name, logger)
 	require.NoError(t, err)
-	metadataProvider := metadata_provider.GetFakeProvider(t, database)
+	metadataProvider := metadata_provider.NewTestProvider(t, database)
 
-	anilistClient := anilist.TestGetMockAnilistClient()
-	animeCollection, err := anilistClient.AnimeCollection(context.Background(), &test_utils.ConfigData.Provider.AnilistUsername)
+	anilistClient := anilist.NewFixtureAnilistClient()
+	animeCollection, err := anilistClient.AnimeCollection(context.Background(), &cfg.Provider.AnilistUsername)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,16 +157,16 @@ func TestNewEntryDownloadInfo(t *testing.T) {
 }
 
 func TestNewEntryDownloadInfo2(t *testing.T) {
-	test_utils.InitTestProvider(t, test_utils.Anilist())
+	cfg := testutil.InitTestProvider(t, testutil.Anilist())
 
 	mediaId := 21
 
 	logger := util.NewLogger()
-	database, err := db.NewDatabase(test_utils.ConfigData.Path.DataDir, test_utils.ConfigData.Database.Name, logger)
+	database, err := db.NewDatabase(cfg.Path.DataDir, cfg.Database.Name, logger)
 	require.NoError(t, err)
-	metadataProvider := metadata_provider.GetFakeProvider(t, database)
+	metadataProvider := metadata_provider.NewTestProvider(t, database)
 
-	anilistClient := anilist.TestGetMockAnilistClient()
+	anilistClient := anilist.NewFixtureAnilistClient()
 	animeCollection, err := anilistClient.AnimeCollection(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)

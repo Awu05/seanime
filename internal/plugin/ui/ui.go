@@ -39,6 +39,8 @@ type UI struct {
 	wsEventManager events.WSEventManagerInterface
 	appContext     plugin.AppContext
 	scheduler      *gojautil.Scheduler
+	store          *plugin.Store[string, any]
+	storage        *plugin.Storage
 
 	onCrash func(reason string)
 
@@ -56,6 +58,8 @@ type NewUIOptions struct {
 	WSManager events.WSEventManagerInterface
 	Database  *db.Database
 	Scheduler *gojautil.Scheduler
+	Store     *plugin.Store[string, any]
+	Storage   *plugin.Storage
 	Extension *extension.Extension
 	OnCrash   func(reason string)
 }
@@ -68,6 +72,8 @@ func NewUI(options NewUIOptions) *UI {
 		wsEventManager: options.WSManager,
 		appContext:     plugin.GlobalAppContext, // Get the app context from the global hook manager
 		scheduler:      options.Scheduler,
+		store:          options.Store,
+		storage:        options.Storage,
 		destroyedCh:    make(chan struct{}),
 		onCrash:        options.OnCrash,
 	}
@@ -119,6 +125,17 @@ func (u *UI) UnloadFromInside(signalDestroyed bool) {
 // Destroyed returns a channel that is closed when the UI is destroyed
 func (u *UI) Destroyed() <-chan struct{} {
 	return u.destroyedCh
+}
+
+func (u *UI) ListAnimeEntryEpisodeTabs() []*EpisodeTabItem {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	if u.destroyed || u.context == nil || u.context.episodeTabManager == nil {
+		return nil
+	}
+
+	return u.context.episodeTabManager.ListTabs()
 }
 
 // signalDestroyed tells the plugin that the UI has been destroyed.
@@ -188,6 +205,8 @@ func (u *UI) Register(callback string) error {
 	u.context.actionManager.renderAnimePageDropdownItems()
 	u.context.actionManager.renderAnimeLibraryDropdownItems()
 	u.context.actionManager.renderMangaPageButtons()
+	u.context.actionManager.renderMangaPageDropdownItems()
+	u.context.actionManager.renderMangaLibraryDropdownItems()
 	u.context.actionManager.renderMediaCardContextMenuItems()
 	u.context.actionManager.renderEpisodeCardContextMenuItems()
 	u.context.actionManager.renderEpisodeGridItemMenuItems()
@@ -196,6 +215,7 @@ func (u *UI) Register(callback string) error {
 	//u.context.webviewManager.renderWebviewScheduled()
 	u.context.webviewManager.renderWebviewIframe()
 	u.context.webviewManager.renderWebviewSidebar()
+	u.context.episodeTabManager.renderTabs()
 
 	u.wsEventManager.SendEvent(events.PluginLoaded, u.ext.ID)
 
@@ -271,6 +291,12 @@ func (u *UI) dispatchClientEvent(clientEvent *ClientPluginEvent) {
 	case ClientActionRenderMangaPageButtonsEvent: // Client wants to update the manga page buttons
 		u.context.actionManager.renderMangaPageButtons()
 
+	case ClientActionRenderMangaPageDropdownItemsEvent: // Client wants to update the manga page dropdown items
+		u.context.actionManager.renderMangaPageDropdownItems()
+
+	case ClientActionRenderMangaLibraryDropdownItemsEvent: // Client wants to update the manga library dropdown items
+		u.context.actionManager.renderMangaLibraryDropdownItems()
+
 	case ClientActionRenderMediaCardContextMenuItemsEvent: // Client wants to update the media card context menu items
 		u.context.actionManager.renderMediaCardContextMenuItems()
 
@@ -279,6 +305,12 @@ func (u *UI) dispatchClientEvent(clientEvent *ClientPluginEvent) {
 
 	case ClientActionRenderEpisodeGridItemMenuItemsEvent: // Client wants to update the episode grid item menu items
 		u.context.actionManager.renderEpisodeGridItemMenuItems()
+
+	case ClientDOMEventTriggeredEvent: // A DOM event was triggered on the client
+		var payload ClientDOMEventTriggeredEventPayload
+		if clientEvent.ParsePayloadAs(ClientDOMEventTriggeredEvent, &payload) {
+			u.context.domManager.HandleDOMEvent(payload.ElementId, payload.EventType, payload.Event)
+		}
 
 	case ClientRenderCommandPaletteEvent: // Client wants to render the command palette
 		u.context.commandPaletteManager.renderCommandPaletteScheduled()

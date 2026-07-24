@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
 	"seanime/internal/database/db_bridge"
 	"seanime/internal/extension"
@@ -43,12 +44,26 @@ func (a *AppContextImpl) BindAnimeToContextObj(vm *goja.Runtime, obj *goja.Objec
 	// Get downloaded chapter containers
 	_ = animeObj.Set("getAnimeEntry", m.getAnimeEntry)
 	_ = animeObj.Set("getAnimeMetadata", m.getAnimeMetadata)
+	_ = animeObj.Set("getEntryDownloadInfo", m.getEntryDownloadInfo)
+	_ = animeObj.Set("getEpisodeCollection", m.getEpisodeCollection)
 	_ = animeObj.Set("clearEpisodeMetadataCache", func(call goja.FunctionCall) goja.Value {
 		metadataProviderRef, ok := a.metadataProviderRef.Get()
 		if ok {
 			metadataProviderRef.Get().ClearCache()
 			anime.ClearEpisodeCollectionCache()
 		}
+		return goja.Undefined()
+	})
+	_ = animeObj.Set("clearEpisodeCollectionCache", func(call goja.FunctionCall) goja.Value {
+		anime.ClearEpisodeCollectionCache()
+		return goja.Undefined()
+	})
+	_ = animeObj.Set("clearMissingEpisodesCache", func(call goja.FunctionCall) goja.Value {
+		anime.ClearMissingEpisodesCache()
+		return goja.Undefined()
+	})
+	_ = animeObj.Set("clearScheduleCache", func(call goja.FunctionCall) goja.Value {
+		anime.ClearScheduleCache()
 		return goja.Undefined()
 	})
 	_ = obj.Set("anime", animeObj)
@@ -169,6 +184,145 @@ func (m *Anime) getAnimeEntry(call goja.FunctionCall) goja.Value {
 
 		m.scheduler.ScheduleAsync(func() error {
 			_ = resolve(m.vm.ToValue(entry))
+			return nil
+		})
+	}()
+
+	return m.vm.ToValue(promise)
+}
+
+func (m *Anime) getEntryDownloadInfo(call goja.FunctionCall) goja.Value {
+	promise, resolve, reject := m.vm.NewPromise()
+
+	mediaId := call.Argument(0).ToInteger()
+	if mediaId == 0 {
+		_ = reject(goja_bindings.NewErrorString(m.vm, "invalid media id"))
+		return m.vm.ToValue(promise)
+	}
+
+	database, ok := m.ctx.database.Get()
+	if !ok {
+		_ = reject(goja_bindings.NewErrorString(m.vm, "database not found"))
+		return m.vm.ToValue(promise)
+	}
+
+	anilistPlatformRef, ok := m.ctx.anilistPlatformRef.Get()
+	if !ok {
+		_ = reject(goja_bindings.NewErrorString(m.vm, "anilist platform not found"))
+		return m.vm.ToValue(promise)
+	}
+
+	metadataProviderRef, ok := m.ctx.metadataProviderRef.Get()
+	if !ok {
+		_ = reject(goja_bindings.NewErrorString(m.vm, "metadata provider not found"))
+		return m.vm.ToValue(promise)
+	}
+
+	go func() {
+		lfs, _, err := db_bridge.GetLocalFiles(database, "")
+		if err != nil {
+			_ = reject(m.vm.ToValue(err.Error()))
+			return
+		}
+
+		animeCollection, err := anilistPlatformRef.Get().GetAnimeCollection(context.Background(), false)
+		if err != nil {
+			_ = reject(m.vm.ToValue(err.Error()))
+			return
+		}
+
+		var media *anilist.BaseAnime
+		var progress *int
+		var status *anilist.MediaListStatus
+
+		if animeCollection != nil {
+			if listEntry, found := animeCollection.GetListEntryFromAnimeId(int(mediaId)); found {
+				media = listEntry.Media
+				progressValue := listEntry.GetProgressSafe()
+				progress = &progressValue
+				if listEntry.Status != nil {
+					statusValue := *listEntry.Status
+					status = &statusValue
+				}
+			}
+		}
+
+		if media == nil {
+			media, err = anilistPlatformRef.Get().GetAnime(context.Background(), int(mediaId))
+			if err != nil {
+				_ = reject(m.vm.ToValue(err.Error()))
+				return
+			}
+		}
+
+		animeMetadata, err := metadataProviderRef.Get().GetAnimeMetadata(metadata.AnilistPlatform, int(mediaId))
+		if err != nil {
+			_ = reject(goja_bindings.NewError(m.vm, err))
+			return
+		}
+
+		info, err := anime.NewEntryDownloadInfo(context.Background(), &anime.NewEntryDownloadInfoOptions{
+			LocalFiles:          lfs,
+			AnimeMetadata:       animeMetadata,
+			Media:               media,
+			Progress:            progress,
+			Status:              status,
+			MetadataProviderRef: metadataProviderRef,
+		})
+		if err != nil {
+			_ = reject(goja_bindings.NewError(m.vm, err))
+			return
+		}
+
+		m.scheduler.ScheduleAsync(func() error {
+			_ = resolve(m.vm.ToValue(info))
+			return nil
+		})
+	}()
+
+	return m.vm.ToValue(promise)
+}
+
+func (m *Anime) getEpisodeCollection(call goja.FunctionCall) goja.Value {
+	promise, resolve, reject := m.vm.NewPromise()
+
+	mediaId := call.Argument(0).ToInteger()
+	if mediaId == 0 {
+		_ = reject(goja_bindings.NewErrorString(m.vm, "invalid media id"))
+		return m.vm.ToValue(promise)
+	}
+
+	anilistPlatformRef, ok := m.ctx.anilistPlatformRef.Get()
+	if !ok {
+		_ = reject(goja_bindings.NewErrorString(m.vm, "anilist platform not found"))
+		return m.vm.ToValue(promise)
+	}
+
+	metadataProviderRef, ok := m.ctx.metadataProviderRef.Get()
+	if !ok {
+		_ = reject(goja_bindings.NewErrorString(m.vm, "metadata provider not found"))
+		return m.vm.ToValue(promise)
+	}
+
+	go func() {
+		media, err := anilistPlatformRef.Get().GetAnime(context.Background(), int(mediaId))
+		if err != nil {
+			_ = reject(m.vm.ToValue(err.Error()))
+			return
+		}
+
+		ec, err := anime.NewEpisodeCollection(context.Background(), anime.NewEpisodeCollectionOptions{
+			Media:               media,
+			MetadataProviderRef: metadataProviderRef,
+			Logger:              m.logger,
+		})
+		if err != nil {
+			_ = reject(goja_bindings.NewError(m.vm, err))
+			return
+		}
+
+		m.scheduler.ScheduleAsync(func() error {
+			_ = resolve(m.vm.ToValue(ec))
 			return nil
 		})
 	}()

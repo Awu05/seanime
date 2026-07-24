@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"seanime/internal/constants"
 	"seanime/internal/util"
 	"strconv"
@@ -16,14 +17,18 @@ import (
 type Config struct {
 	Version string
 	Server  struct {
-		Host          string
-		Port          int
-		Offline       bool
-		UseBinaryPath bool // Makes $SEANIME_WORKING_DIR point to the binary's directory
-		Systray       bool
-		DoHUrl        string
-		Password      string
-		Tls           struct {
+		Host            string
+		Port            int
+		Offline         bool
+		UseBinaryPath   bool // Makes $SEANIME_WORKING_DIR point to the binary's directory
+		Systray         bool
+		DoHUrl          string
+		Password        string
+		SecureMode      string   // empty = current baseline defaults, "hardened" opts into a stricter passwordless boundary, "lax" disables baseline request-boundary restrictions, "strict" includes hardened plus extra restrictions
+		AccessAllowlist []string // Additional remote hosts/origins allowed through the passwordless API/events boundary
+		TrustedProxies  []string // Explicit reverse proxies allowed to supply forwarded client IP/host/proto headers
+		ExternalURL     string   // Canonical public URL used for proxy-aware secure cookies and request normalization
+		Tls             struct {
 			Enabled  bool
 			CertPath string
 			KeyPath  string
@@ -57,11 +62,15 @@ type Config struct {
 	Extensions struct {
 		Dir string
 	}
+	Torrent struct {
+		Dir string
+	}
 	Anilist struct {
 		ClientID string
 	}
 	Experimental struct {
-		MainServerTorrentStreaming bool
+		BuiltinTorrentClient bool
+		DummyDebrid          bool
 	}
 }
 
@@ -125,6 +134,11 @@ func NewConfig(options *ConfigOptions, logger *zerolog.Logger) (*Config, error) 
 		return nil, err
 	}
 
+	// Set temporary directory environment variable to guarantee a writable temp folder
+	if err = setTempDirEnv(dataDir); err != nil {
+		return nil, err
+	}
+
 	// Configure viper
 	viper.SetConfigName(constants.ConfigFileName)
 	viper.SetConfigType("toml")
@@ -135,6 +149,10 @@ func NewConfig(options *ConfigOptions, logger *zerolog.Logger) (*Config, error) 
 	viper.SetDefault("server.host", defaultHost)
 	viper.SetDefault("server.port", defaultPort)
 	viper.SetDefault("server.offline", false)
+	//viper.SetDefault("server.secureMode", "")
+	//viper.SetDefault("server.accessAllowlist", []string{})
+	//viper.SetDefault("server.trustedProxies", []string{})
+	//viper.SetDefault("server.externalURL", "")
 	// Use the binary's directory as the working directory environment variable on macOS
 	viper.SetDefault("server.useBinaryPath", true)
 	// viper.SetDefault("server.systray", true)
@@ -148,6 +166,7 @@ func NewConfig(options *ConfigOptions, logger *zerolog.Logger) (*Config, error) 
 	viper.SetDefault("offline.dir", "$SEANIME_DATA_DIR/offline")
 	viper.SetDefault("offline.assetDir", "$SEANIME_DATA_DIR/offline/assets")
 	viper.SetDefault("extensions.dir", "$SEANIME_DATA_DIR/extensions")
+	viper.SetDefault("torrent.dir", "$SEANIME_DATA_DIR/torrent")
 
 	// Create and populate the config file if it doesn't exist
 	if err = createConfigFile(configPath); err != nil {
@@ -258,6 +277,12 @@ func (cfg *Config) GetServerURI(df ...string) string {
 }
 
 func getWorkingDir(useBinaryPath bool) (string, error) {
+	if runtime.GOOS == "android" || runtime.GOOS == "ios" {
+		if dataDir := os.Getenv("SEANIME_DATA_DIR"); dataDir != "" {
+			return dataDir, nil
+		}
+	}
+
 	// Get the working directory
 	wd, err := os.Getwd()
 	if err != nil {
@@ -300,6 +325,23 @@ func setDataDirEnv(dataDir string) error {
 		}
 	}
 
+	return nil
+}
+
+func setTempDirEnv(dataDir string) error {
+	if !util.IsMobile() {
+		return nil
+	}
+	// Set TMPDIR environment variable if it's not set, or if we are on Android (where default is /data/local/tmp which is not writable)
+	if os.Getenv("TMPDIR") == "" || runtime.GOOS == "android" {
+		tempDir := filepath.Join(dataDir, "temp")
+		if err := os.MkdirAll(tempDir, 0700); err != nil {
+			return err
+		}
+		if err := os.Setenv("TMPDIR", tempDir); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -391,11 +433,6 @@ func validateConfig(cfg *Config, logger *zerolog.Logger) error {
 		}
 	}
 
-	// Uncomment if "MainServerTorrentStreaming" is no longer an experimental feature
-	if cfg.Experimental.MainServerTorrentStreaming {
-		logger.Warn().Msgf("app: 'Main Server Torrent Streaming' feature is no longer experimental, remove the flag from your config file")
-	}
-
 	return nil
 }
 
@@ -449,6 +486,7 @@ func expandEnvironmentValues(cfg *Config) {
 	cfg.Offline.Dir = filepath.FromSlash(os.ExpandEnv(cfg.Offline.Dir))
 	cfg.Offline.AssetDir = filepath.FromSlash(os.ExpandEnv(cfg.Offline.AssetDir))
 	cfg.Extensions.Dir = filepath.FromSlash(os.ExpandEnv(cfg.Extensions.Dir))
+	cfg.Torrent.Dir = filepath.FromSlash(os.ExpandEnv(cfg.Torrent.Dir))
 	cfg.Server.Tls.CertPath = filepath.FromSlash(os.ExpandEnv(cfg.Server.Tls.CertPath))
 	cfg.Server.Tls.KeyPath = filepath.FromSlash(os.ExpandEnv(cfg.Server.Tls.KeyPath))
 }

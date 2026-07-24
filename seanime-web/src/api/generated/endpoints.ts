@@ -59,6 +59,16 @@ export const API_ENDPOINTS = {
         },
         /**
          *  @description
+         *  Route returns the AniList tags for the user's raw anime collection.
+         *  This runs a dedicated AniList tags query used by the lists page filters.
+         */
+        GetRawAnimeCollectionTags: {
+            key: "ANILIST-get-raw-anime-collection-tags",
+            methods: ["GET"],
+            endpoint: "/api/v1/anilist/collection/raw/tags",
+        },
+        /**
+         *  @description
          *  Route updates the user's list entry on Anilist.
          *  This is used to edit an entry on AniList.
          *  The "type" field is used to determine if the entry is an anime or manga and refreshes the collection accordingly.
@@ -574,6 +584,26 @@ export const API_ENDPOINTS = {
         },
         /**
          *  @description
+         *  Route get dummy debrid settings.
+         *  This returns the dummy debrid settings.
+         */
+        GetDummyDebridSettings: {
+            key: "DEBRID-get-dummy-debrid-settings",
+            methods: ["GET"],
+            endpoint: "/api/v1/debrid/dummy/settings",
+        },
+        /**
+         *  @description
+         *  Route save dummy debrid settings.
+         *  This saves the dummy debrid settings.
+         */
+        SaveDummyDebridSettings: {
+            key: "DEBRID-save-dummy-debrid-settings",
+            methods: ["PATCH"],
+            endpoint: "/api/v1/debrid/dummy/settings",
+        },
+        /**
+         *  @description
          *  Route add torrent to debrid.
          *  This adds a torrent to the debrid service.
          */
@@ -829,6 +859,11 @@ export const API_ENDPOINTS = {
             methods: ["POST"],
             endpoint: "/api/v1/extensions/external/reload",
         },
+        SetExternalExtensionDisabled: {
+            key: "EXTENSIONS-set-external-extension-disabled",
+            methods: ["POST"],
+            endpoint: "/api/v1/extensions/external/disabled",
+        },
         ListExtensionData: {
             key: "EXTENSIONS-list-extension-data",
             methods: ["GET"],
@@ -868,6 +903,11 @@ export const API_ENDPOINTS = {
             key: "EXTENSIONS-list-anime-torrent-provider-extensions",
             methods: ["GET"],
             endpoint: "/api/v1/extensions/list/anime-torrent-provider",
+        },
+        ListAnimeEntryEpisodeTabExtensions: {
+            key: "EXTENSIONS-list-anime-entry-episode-tab-extensions",
+            methods: ["GET"],
+            endpoint: "/api/v1/extensions/list/anime-entry-episode-tabs",
         },
         ListCustomSourceExtensions: {
             key: "EXTENSIONS-list-custom-source-extensions",
@@ -1187,6 +1227,36 @@ export const API_ENDPOINTS = {
         },
     },
     MANGA: {
+        GetMangaPreferences: {
+            key: "MANGA-get-manga-preferences",
+            methods: ["GET"],
+            endpoint: "/api/v1/manga/preferences",
+        },
+        ImportMangaPreferences: {
+            key: "MANGA-import-manga-preferences",
+            methods: ["POST"],
+            endpoint: "/api/v1/manga/preferences/import",
+        },
+        PatchMangaPreference: {
+            key: "MANGA-patch-manga-preference",
+            methods: ["PATCH"],
+            endpoint: "/api/v1/manga/preferences/{mediaId}",
+        },
+        StartMangaSourceRefresh: {
+            key: "MANGA-start-manga-source-refresh",
+            methods: ["POST"],
+            endpoint: "/api/v1/manga/source-refresh",
+        },
+        GetMangaSourceRefresh: {
+            key: "MANGA-get-manga-source-refresh",
+            methods: ["GET"],
+            endpoint: "/api/v1/manga/source-refresh",
+        },
+        StopMangaSourceRefresh: {
+            key: "MANGA-stop-manga-source-refresh",
+            methods: ["DELETE"],
+            endpoint: "/api/v1/manga/source-refresh",
+        },
         GetAnilistMangaCollection: {
             key: "MANGA-get-anilist-manga-collection",
             methods: ["GET"],
@@ -1196,6 +1266,16 @@ export const API_ENDPOINTS = {
             key: "MANGA-get-raw-anilist-manga-collection",
             methods: ["GET", "POST"],
             endpoint: "/api/v1/manga/anilist/collection/raw",
+        },
+        /**
+         *  @description
+         *  Route returns the AniList tags for the user's raw manga collection.
+         *  This runs a dedicated AniList tags query used by the lists page filters.
+         */
+        GetRawAnilistMangaCollectionTags: {
+            key: "MANGA-get-raw-anilist-manga-collection-tags",
+            methods: ["GET"],
+            endpoint: "/api/v1/manga/anilist/collection/raw/tags",
         },
         /**
          *  @description
@@ -1302,6 +1382,11 @@ export const API_ENDPOINTS = {
             key: "MANGA-manga-manual-search",
             methods: ["POST"],
             endpoint: "/api/v1/manga/search",
+        },
+        PreviewMangaMapping: {
+            key: "MANGA-preview-manga-mapping",
+            methods: ["POST"],
+            endpoint: "/api/v1/manga/manual-mapping/preview",
         },
         /**
          *  @description
@@ -1501,6 +1586,16 @@ export const API_ENDPOINTS = {
             methods: ["POST"],
             endpoint: "/api/v1/mediastream/shutdown-transcode",
         },
+        /**
+         *  @description
+         *  Route get local subtitle files.
+         *  This returns same-directory subtitle files for a local video file.
+         */
+        MediastreamLocalSubtitles: {
+            key: "MEDIASTREAM-mediastream-local-subtitles",
+            methods: ["GET"],
+            endpoint: "/api/v1/mediastream/local-subtitles",
+        },
     },
     METADATA: {
         /**
@@ -1552,6 +1647,13 @@ export const API_ENDPOINTS = {
             key: "METADATA-delete-media-metadata-parent",
             methods: ["DELETE"],
             endpoint: "/api/v1/metadata/parent",
+        },
+    },
+    MPVCORE: {
+        MpvCoreInSightGetCharacterDetails: {
+            key: "MPVCORE-mpv-core-in-sight-get-character-details",
+            methods: ["GET"],
+            endpoint: "/api/v1/mpvcore/insight/character/{malId}",
         },
     },
     NAKAMA: {
@@ -2048,6 +2150,16 @@ export const API_ENDPOINTS = {
             methods: ["PATCH"],
             endpoint: "/api/v1/settings",
         },
+        /**
+         *  @description
+         *  Route patches a specific app setting.
+         *  This updates a single setting path and refreshes the server status.
+         */
+        PatchSetting: {
+            key: "SETTINGS-patch-setting",
+            methods: ["PATCH"],
+            endpoint: "/api/v1/settings/path",
+        },
         SaveAutoDownloaderSettings: {
             key: "SETTINGS-save-auto-downloader-settings",
             methods: ["PATCH"],
@@ -2214,6 +2326,11 @@ export const API_ENDPOINTS = {
             methods: ["POST"],
             endpoint: "/api/v1/torrent-client/action",
         },
+        GetBuiltInTorrentDetails: {
+            key: "TORRENT-CLIENT-get-built-in-torrent-details",
+            methods: ["GET"],
+            endpoint: "/api/v1/torrent-client/details",
+        },
         /**
          *  @description
          *  Route gets the files of a torrent.
@@ -2360,6 +2477,16 @@ export const API_ENDPOINTS = {
             methods: ["POST"],
             endpoint: "/api/v1/torrentstream/batch-history",
         },
+        /**
+         *  @description
+         *  Route deletes the saved batch selection.
+         *  This clears the saved previous batch selection for a media entry.
+         */
+        DeleteTorrentstreamBatchHistory: {
+            key: "TORRENTSTREAM-delete-torrentstream-batch-history",
+            methods: ["POST"],
+            endpoint: "/api/v1/torrentstream/batch-history/delete",
+        },
     },
     USER_AUTH: {
         SetupCheck: {
@@ -2371,6 +2498,11 @@ export const API_ENDPOINTS = {
             key: "USER-AUTH-admin-setup",
             methods: ["POST"],
             endpoint: "/api/v1/auth/setup",
+        },
+        ChangeAdminPassword: {
+            key: "USER-AUTH-change-admin-password",
+            methods: ["POST"],
+            endpoint: "/api/v1/auth/change-password",
         },
         AdminLogin: {
             key: "USER-AUTH-admin-login",
@@ -2413,6 +2545,11 @@ export const API_ENDPOINTS = {
             key: "VIDEOCORE-video-core-in-sight-get-character-details",
             methods: ["GET"],
             endpoint: "/api/v1/videocore/insight/character/{malId}",
+        },
+        VideoCoreSaveScreenshot: {
+            key: "VIDEOCORE-video-core-save-screenshot",
+            methods: ["POST"],
+            endpoint: "/api/v1/videocore/screenshot",
         },
     },
 } satisfies ApiEndpoints

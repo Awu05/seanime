@@ -16,9 +16,12 @@ type WSEventManagerInterface interface {
 	SendEvent(t string, payload interface{})
 	SendEventTo(clientId string, t string, payload interface{}, noLog ...bool)
 	SendToProfile(profileID string, t string, payload interface{})
+	GetClientIds() []string
+	GetClientPlatform(clientId string) string
 	SubscribeToClientEvents(id string) *ClientEventSubscriber
 	SubscribeToClientNativePlayerEvents(id string) *ClientEventSubscriber
 	SubscribeToClientVideoCoreEvents(id string) *ClientEventSubscriber
+	SubscribeToClientMpvCoreEvents(id string) *ClientEventSubscriber
 	SubscribeToClientNakamaEvents(id string) *ClientEventSubscriber
 	SubscribeToClientPlaylistEvents(id string) *ClientEventSubscriber
 	UnsubscribeFromClientEvents(id string)
@@ -51,6 +54,20 @@ func (w *GlobalWSEventManagerWrapper) SendToProfile(profileID string, t string, 
 	w.WSEventManager.SendToProfile(profileID, t, payload)
 }
 
+func (w *GlobalWSEventManagerWrapper) GetClientIds() []string {
+	if w.WSEventManager == nil {
+		return nil
+	}
+	return w.WSEventManager.GetClientIds()
+}
+
+func (w *GlobalWSEventManagerWrapper) GetClientPlatform(clientId string) string {
+	if w.WSEventManager == nil {
+		return ""
+	}
+	return w.WSEventManager.GetClientPlatform(clientId)
+}
+
 type (
 	// WSEventManager holds the websocket connection instance.
 	// It is attached to the App instance, so it is available to other handlers.
@@ -63,6 +80,7 @@ type (
 		clientEventSubscribers             *result.Map[string, *ClientEventSubscriber]
 		clientNativePlayerEventSubscribers *result.Map[string, *ClientEventSubscriber]
 		clientVideoCoreEventSubscribers    *result.Map[string, *ClientEventSubscriber]
+		clientMpvCoreEventSubscribers      *result.Map[string, *ClientEventSubscriber]
 		nakamaEventSubscribers             *result.Map[string, *ClientEventSubscriber]
 		playlistEventSubscribers           *result.Map[string, *ClientEventSubscriber]
 	}
@@ -76,6 +94,7 @@ type (
 	WSConn struct {
 		ID        string
 		ProfileID string
+		Platform  string
 		Conn      *websocket.Conn
 	}
 
@@ -93,6 +112,7 @@ func NewWSEventManager(logger *zerolog.Logger) *WSEventManager {
 		clientEventSubscribers:             result.NewMap[string, *ClientEventSubscriber](),
 		clientNativePlayerEventSubscribers: result.NewMap[string, *ClientEventSubscriber](),
 		clientVideoCoreEventSubscribers:    result.NewMap[string, *ClientEventSubscriber](),
+		clientMpvCoreEventSubscribers:      result.NewMap[string, *ClientEventSubscriber](),
 		nakamaEventSubscribers:             result.NewMap[string, *ClientEventSubscriber](),
 		playlistEventSubscribers:           result.NewMap[string, *ClientEventSubscriber](),
 	}
@@ -140,11 +160,16 @@ func (m *WSEventManager) ExitIfNoConnsAsDesktopSidecar() {
 	}()
 }
 
-func (m *WSEventManager) AddConn(id string, profileID string, conn *websocket.Conn) {
+func (m *WSEventManager) AddConn(id string, profileID string, conn *websocket.Conn, platform ...string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Conns = append(m.Conns, &WSConn{ID: id, ProfileID: profileID, Conn: conn})
+	clientPlatform := ""
+	if len(platform) > 0 {
+		clientPlatform = platform[0]
+	}
+
+	m.Conns = append(m.Conns, &WSConn{ID: id, ProfileID: profileID, Platform: clientPlatform, Conn: conn})
 	m.hasHadConnection = true
 }
 
@@ -247,6 +272,35 @@ func (m *WSEventManager) SendStringTo(clientId string, s string) {
 	}
 }
 
+func (m *WSEventManager) GetClientIds() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ret := make([]string, 0, len(m.Conns))
+	for _, conn := range m.Conns {
+		if conn == nil || conn.ID == "" {
+			continue
+		}
+		ret = append(ret, conn.ID)
+	}
+
+	return ret
+}
+
+func (m *WSEventManager) GetClientPlatform(clientId string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, conn := range m.Conns {
+		if conn == nil || conn.ID != clientId {
+			continue
+		}
+		return conn.Platform
+	}
+
+	return ""
+}
+
 func (m *WSEventManager) OnClientEvent(event *WebsocketClientEvent) {
 	m.eventMu.RLock()
 	defer m.eventMu.RUnlock()
@@ -273,6 +327,8 @@ func (m *WSEventManager) OnClientEvent(event *WebsocketClientEvent) {
 		m.clientNativePlayerEventSubscribers.Range(onEvent)
 	case VideoCoreEventType:
 		m.clientVideoCoreEventSubscribers.Range(onEvent)
+	case MpvCoreEventType:
+		m.clientMpvCoreEventSubscribers.Range(onEvent)
 	case NakamaEventType:
 		m.nakamaEventSubscribers.Range(onEvent)
 	case PlaylistEvent:
@@ -306,6 +362,14 @@ func (m *WSEventManager) SubscribeToClientVideoCoreEvents(id string) *ClientEven
 	return subscriber
 }
 
+func (m *WSEventManager) SubscribeToClientMpvCoreEvents(id string) *ClientEventSubscriber {
+	subscriber := &ClientEventSubscriber{
+		Channel: make(chan *WebsocketClientEvent, 100),
+	}
+	m.clientMpvCoreEventSubscribers.Set(id, subscriber)
+	return subscriber
+}
+
 func (m *WSEventManager) SubscribeToClientNakamaEvents(id string) *ClientEventSubscriber {
 	subscriber := &ClientEventSubscriber{
 		Channel: make(chan *WebsocketClientEvent, 100),
@@ -330,21 +394,23 @@ func (m *WSEventManager) UnsubscribeFromClientEvents(id string) {
 			m.Logger.Warn().Msg("ws: Failed to unsubscribe from client events")
 		}
 	}()
-	subscriber, ok := m.clientEventSubscribers.Get(id)
-	if !ok {
-		subscriber, ok = m.clientNativePlayerEventSubscribers.Get(id)
-		if !ok {
-			subscriber, ok = m.clientVideoCoreEventSubscribers.Get(id)
-			if !ok {
-				subscriber, ok = m.nakamaEventSubscribers.Get(id)
-			}
-		}
+	maps := []*result.Map[string, *ClientEventSubscriber]{
+		m.clientEventSubscribers,
+		m.clientNativePlayerEventSubscribers,
+		m.clientVideoCoreEventSubscribers,
+		m.clientMpvCoreEventSubscribers,
+		m.nakamaEventSubscribers,
+		m.playlistEventSubscribers,
 	}
-	if ok {
+	for _, subscribers := range maps {
+		subscriber, ok := subscribers.Pop(id)
+		if !ok {
+			continue
+		}
 		subscriber.mu.Lock()
-		defer subscriber.mu.Unlock()
 		subscriber.closed = true
-		m.clientEventSubscribers.Delete(id)
 		close(subscriber.Channel)
+		subscriber.mu.Unlock()
+		return
 	}
 }

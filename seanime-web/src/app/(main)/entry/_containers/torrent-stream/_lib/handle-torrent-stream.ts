@@ -1,4 +1,4 @@
-import { Anime_Entry, Anime_PlaylistEpisode, HibikeTorrent_AnimeTorrent, HibikeTorrent_BatchEpisodeFiles } from "@/api/generated/types"
+import { HibikeTorrent_AnimeTorrent, HibikeTorrent_BatchEpisodeFiles } from "@/api/generated/types"
 import { useTorrentstreamStartStream } from "@/api/hooks/torrentstream.hooks"
 import {
     ElectronPlaybackMethod,
@@ -7,6 +7,7 @@ import {
     useExternalPlayerLink,
 } from "@/app/(main)/_atoms/playback.atoms"
 import { useAutoPlaySelectedTorrent, useTorrentstreamAutoplay } from "@/app/(main)/_features/autoplay/autoplay"
+import { getBatchSelectionParams } from "@/app/(main)/_features/autoplay/batches.ts"
 import { usePlaylistManager } from "@/app/(main)/_features/playlists/_containers/global-playlist-manager"
 import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
@@ -14,7 +15,7 @@ import {
     __torrentstream__isLoadedAtom,
     __torrentstream__loadingStateAtom,
     TorrentStreamEvents,
-} from "@/app/(main)/entry/_containers/torrent-stream/torrent-stream-overlay"
+} from "@/app/(main)/entry/_containers/torrent-stream/playback-play-pill"
 import {
     __torrentStream_autoSelectFileAtom,
     __torrentStream_currentSessionAutoSelectAtom,
@@ -26,7 +27,7 @@ import { WSEvents } from "@/lib/server/ws-events"
 import { __isElectronDesktop__ } from "@/types/constants"
 import { useQueryClient } from "@tanstack/react-query"
 import { useAtomValue } from "jotai"
-import { useAtom, useSetAtom } from "jotai/react"
+import { useSetAtom } from "jotai/react"
 import React from "react"
 
 type ManualTorrentStreamSelectionProps = {
@@ -141,54 +142,50 @@ export function useTorrentStreamListener() {
     const { currentPlaylist, nextPlaylistEpisode } = usePlaylistManager()
     const { torrentstreamAutoplayInfo, autoplayNextTorrentstreamEpisode } = useTorrentstreamAutoplay()
     const { autoPlayTorrent } = useAutoPlaySelectedTorrent()
-
     const { handleStreamSelection, handleAutoSelectStream } = useHandleStartTorrentStream()
-    const [torrentStream_autoSelectFile] = useAtom(__torrentStream_autoSelectFileAtom)
+    const torrentStream_autoSelectFile = useAtomValue(__torrentStream_autoSelectFileAtom)
 
     const torrentStream_currentSessionAutoSelect = serverStatus?.torrentstreamSettings?.autoSelect
 
-    function sameTorrent(autoPlayTorrent: { entry: Anime_Entry, torrent: HibikeTorrent_AnimeTorrent } | null, episode: Anime_PlaylistEpisode) {
-        if (!autoPlayTorrent) return false
-
-        return autoPlayTorrent.entry.mediaId == episode.episode?.baseAnime?.id
-    }
-
     useWebsocketMessageListener({
         type: WSEvents.TORRENTSTREAM_STATE,
-        deps: [torrentstreamAutoplayInfo],
-        onMessage: ({ state, data }: { state: TorrentStreamEvents, data: any }) => {
+        onMessage: ({ state }: { state: TorrentStreamEvents }) => {
             switch (state) {
                 case TorrentStreamEvents.PreloadNextStream:
                     if (currentPlaylist && nextPlaylistEpisode) {
-                        const episode = nextPlaylistEpisode.episode!
+                        const episode = nextPlaylistEpisode.episode
+                        if (!episode) return
                         if (torrentStream_currentSessionAutoSelect) {
                             logger("TORRENT STREAM LISTENER").info("Auto select is enabled, preparing next stream with auto select")
                             handleAutoSelectStream({
-                                mediaId: episode?.baseAnime?.id!,
-                                episodeNumber: episode?.episodeNumber!,
-                                aniDBEpisode: episode?.aniDBEpisode!,
+                                mediaId: episode.baseAnime?.id!,
+                                episodeNumber: episode.episodeNumber!,
+                                aniDBEpisode: episode.aniDBEpisode!,
+                                preload: true,
                             })
                             return
-                        } else if (autoPlayTorrent?.torrent?.isBatch && torrentStream_autoSelectFile && sameTorrent(autoPlayTorrent,
-                            nextPlaylistEpisode)) {
+                        } else if (
+                            autoPlayTorrent?.torrent?.isBatch &&
+                            torrentStream_autoSelectFile &&
+                            autoPlayTorrent.entry.mediaId === episode.baseAnime?.id
+                        ) {
                             logger("TORRENT STREAM LISTENER")
                                 .info("Previous selection matches, preparing next stream by auto-selecting file for torrent stream")
+                            const batchParams = getBatchSelectionParams(autoPlayTorrent.batchFiles, episode.episodeNumber!, episode.aniDBEpisode!)
                             handleStreamSelection({
-                                mediaId: episode?.baseAnime?.id!,
-                                episodeNumber: episode?.episodeNumber!,
-                                aniDBEpisode: episode?.aniDBEpisode!,
+                                mediaId: episode.baseAnime?.id!,
+                                episodeNumber: episode.episodeNumber!,
+                                aniDBEpisode: episode.aniDBEpisode!,
                                 torrent: autoPlayTorrent.torrent,
-                                chosenFileIndex: undefined,
-                                batchEpisodeFiles: undefined,
+                                chosenFileIndex: batchParams.fileIndex,
+                                batchEpisodeFiles: batchParams.batchEpisodeFiles,
+                                preload: true,
                             })
                             return
                         }
-                    } else {
-                        // Preload the next episode if autoplay info is available
-                        if (torrentstreamAutoplayInfo) {
-                            logger("TORRENT STREAM LISTENER").info("Preparing next stream for episode", torrentstreamAutoplayInfo)
-                            autoplayNextTorrentstreamEpisode(true)
-                        }
+                    } else if (torrentstreamAutoplayInfo) {
+                        logger("TORRENT STREAM LISTENER").info("Preparing next stream for episode", torrentstreamAutoplayInfo)
+                        autoplayNextTorrentstreamEpisode(true)
                     }
                     break
             }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"seanime/internal/api/anilist"
@@ -71,6 +72,62 @@ func (h *Handler) HandleSaveDebridSettings(c echo.Context) error {
 	return h.RespondWithData(c, settings)
 }
 
+// HandleGetDummyDebridSettings
+//
+//	@summary get dummy debrid settings.
+//	@desc This returns the dummy debrid settings.
+//	@returns models.DummyDebridSettings
+//	@route /api/v1/debrid/dummy/settings [GET]
+func (h *Handler) HandleGetDummyDebridSettings(c echo.Context) error {
+	if !h.App.FeatureFlags.DummyDebrid {
+		return h.RespondWithStatusError(c, http.StatusNotFound, errors.New("dummy debrid is disabled"))
+	}
+
+	settings, found := h.App.Database.GetDummyDebridSettings()
+	if !found {
+		h.App.InitOrRefreshDummyDebridSettings()
+		settings, found = h.App.Database.GetDummyDebridSettings()
+		if !found {
+			return h.RespondWithError(c, errors.New("dummy debrid settings not found"))
+		}
+	}
+
+	return h.RespondWithData(c, settings)
+}
+
+// HandleSaveDummyDebridSettings
+//
+//	@summary save dummy debrid settings.
+//	@desc This saves the dummy debrid settings.
+//	@returns models.DummyDebridSettings
+//	@route /api/v1/debrid/dummy/settings [PATCH]
+func (h *Handler) HandleSaveDummyDebridSettings(c echo.Context) error {
+	if !h.App.FeatureFlags.DummyDebrid {
+		return h.RespondWithStatusError(c, http.StatusNotFound, errors.New("dummy debrid is disabled"))
+	}
+
+	type body struct {
+		Settings models.DummyDebridSettings `json:"settings"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	settings, err := h.App.Database.UpsertDummyDebridSettings(&b.Settings)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	h.App.SecondarySettings.DummyDebrid = settings
+	if debridSettings, found := h.App.Database.GetDebridSettings(); found && debridSettings.Enabled && debridSettings.Provider == "dummy" {
+		h.App.InitOrRefreshDebridSettings()
+	}
+
+	return h.RespondWithData(c, settings)
+}
+
 // HandleDebridAddTorrents
 //
 //	@summary add torrent to debrid.
@@ -92,18 +149,20 @@ func (h *Handler) HandleDebridAddTorrents(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
+	if err := h.guardStrictFilesystemPath(c, b.Destination); err != nil {
+		return err
+	}
+
 	if !h.App.DebridClientRepository.HasProvider() {
 		return h.RespondWithError(c, errors.New("debrid provider not set"))
 	}
 
 	for _, torrent := range b.Torrents {
-		// Get the torrent's provider extension
-		animeTorrentProviderExtension, ok := h.App.TorrentRepository.GetAnimeProviderExtension(torrent.Provider)
-		if !ok {
-			return h.RespondWithError(c, errors.New("provider extension not found for torrent"))
-		}
-
-		magnet, err := animeTorrentProviderExtension.GetProvider().GetTorrentMagnetLink(&torrent)
+		magnet, err := h.App.TorrentRepository.ResolveMagnetLink(&torrent)
 		if err != nil {
 			if len(b.Torrents) == 1 {
 				return h.RespondWithError(c, err)
@@ -119,6 +178,7 @@ func (h *Handler) HandleDebridAddTorrents(c echo.Context) error {
 		// Add the torrent to the debrid service
 		_, err = h.App.DebridClientRepository.AddAndQueueTorrent(debrid.AddTorrentOptions{
 			MagnetLink:   magnet,
+			InfoHash:     torrent.InfoHash,
 			SelectFileId: "all",
 		}, b.Destination, b.Media.ID)
 		if err != nil {
@@ -155,20 +215,34 @@ func (h *Handler) HandleDebridDownloadTorrent(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
+	if err := h.guardStrictFilesystemPath(c, b.Destination); err != nil {
+		return err
+	}
+
 	if !filepath.IsAbs(b.Destination) {
 		return h.RespondWithError(c, errors.New("destination must be an absolute path"))
 	}
 
-	// Remove the torrent from the database
-	// This is done so that the torrent is not downloaded automatically
-	// We ignore the error here because the torrent might not be in the database
-	_ = h.App.Database.DeleteDebridTorrentItemByTorrentItemId(b.TorrentItem.ID)
+	if err := h.guardStrictFilesystemPath(c, b.Destination); err != nil {
+		return err
+	}
 
 	// Download the torrent locally
 	err := h.App.DebridClientRepository.DownloadTorrent(b.TorrentItem, b.Destination)
 	if err != nil {
+		if errors.Is(err, debrid_client.ErrDownloadAlreadyActive) {
+			return h.RespondWithData(c, true)
+		}
 		return h.RespondWithError(c, err)
 	}
+
+	// Remove the torrent from the database after the local download starts
+	// This prevents the auto downloader from starting a duplicate download
+	_ = h.App.Database.DeleteDebridTorrentItemByTorrentItemId(b.TorrentItem.ID)
 
 	return h.RespondWithData(c, true)
 }
@@ -245,6 +319,31 @@ func (h *Handler) HandleDebridGetTorrents(c echo.Context) error {
 	if err != nil {
 		h.App.Logger.Err(err).Msg("debrid: Failed to get torrents")
 		return h.RespondWithError(c, err)
+	}
+
+	queuedItems, err := h.App.Database.GetDebridTorrentItems()
+	if err != nil {
+		h.App.Logger.Err(err).Msg("debrid: Failed to get queued torrent items")
+		return h.RespondWithError(c, err)
+	}
+
+	providerId := provider.GetSettings().ID
+	queuedIds := make(map[string]struct{}, len(queuedItems))
+	for _, item := range queuedItems {
+		if item == nil || (item.Provider != "" && item.Provider != providerId) {
+			continue
+		}
+
+		queuedIds[item.TorrentItemID] = struct{}{}
+	}
+
+	for _, torrent := range torrents {
+		if torrent == nil {
+			continue
+		}
+
+		_, torrent.IsQueuedForLocalDownload = queuedIds[torrent.ID]
+		torrent.IsDownloadingLocally = h.App.DebridClientRepository.IsDownloadActive(torrent.ID)
 	}
 
 	return h.RespondWithData(c, torrents)
@@ -473,12 +572,7 @@ func (h *Handler) HandleDebridGetTorrentInfo(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	animeTorrentProviderExtension, ok := h.App.TorrentRepository.GetAnimeProviderExtension(b.Torrent.Provider)
-	if !ok {
-		return h.RespondWithError(c, errors.New("provider extension not found for torrent"))
-	}
-
-	magnet, err := animeTorrentProviderExtension.GetProvider().GetTorrentMagnetLink(&b.Torrent)
+	magnet, err := h.App.TorrentRepository.ResolveMagnetLink(&b.Torrent)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -513,12 +607,7 @@ func (h *Handler) HandleDebridGetTorrentFilePreviews(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	animeTorrentProviderExtension, ok := h.App.TorrentRepository.GetAnimeProviderExtension(b.Torrent.Provider)
-	if !ok {
-		return h.RespondWithError(c, errors.New("provider extension not found for torrent"))
-	}
-
-	magnet, err := animeTorrentProviderExtension.GetProvider().GetTorrentMagnetLink(b.Torrent)
+	magnet, err := h.App.TorrentRepository.ResolveMagnetLink(b.Torrent)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -571,15 +660,12 @@ func (h *Handler) HandleDebridStartStream(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	b.ClientId = getRequestClientId(c, b.ClientId)
+
 	userAgent := c.Request().Header.Get("User-Agent")
 
 	if b.Torrent != nil {
-		animeTorrentProviderExtension, ok := h.App.TorrentRepository.GetAnimeProviderExtension(b.Torrent.Provider)
-		if !ok {
-			return h.RespondWithError(c, errors.New("provider extension not found for torrent"))
-		}
-
-		magnet, err := animeTorrentProviderExtension.GetProvider().GetTorrentMagnetLink(b.Torrent)
+		magnet, err := h.App.TorrentRepository.ResolveMagnetLink(b.Torrent)
 		if err != nil {
 			return h.RespondWithError(c, err)
 		}

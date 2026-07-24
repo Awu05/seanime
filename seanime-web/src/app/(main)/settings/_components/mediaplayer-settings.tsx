@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/alert"
 import { Field } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
 import { TextInput } from "@/components/ui/text-input"
-import { getDefaultIinaSocket, getDefaultMpvSocket } from "@/lib/server/settings"
+import { getDefaultIinaSocket } from "@/lib/server/settings"
 import React from "react"
 import { useWatch } from "react-hook-form"
 import { FcClapperboard, FcVideoCall, FcVlc } from "react-icons/fc"
@@ -55,7 +55,7 @@ export function MediaplayerSettings(props: MediaplayerSettingsProps) {
                     description={<p>For IINA to work correctly with Seanime, make sure <strong>Quit after all windows are closed</strong> is <span
                         className="underline"
                     >checked</span> and <strong>Keep window open after playback finishes</strong> is <span className="underline">unchecked</span> in
-                                    your IINA general settings.</p>}
+                        your IINA general settings.</p>}
                 />}
             </SettingsCard>
 
@@ -82,7 +82,7 @@ export function MediaplayerSettings(props: MediaplayerSettingsProps) {
                     className=""
                     triggerClass="text-[--muted] dark:data-[state=open]:text-white px-0 dark:hover:bg-transparent hover:bg-transparent dark:hover:text-white hover:text-black"
                     itemClass=""
-                    contentClass="p-4 border rounded-[--radius-md]"
+                    contentClass="p-4 border rounded-[--radius-md] bg-[--paper]"
                     collapsible
                     defaultValue={serverStatus?.settings?.mediaPlayer?.defaultPlayer}
                 >
@@ -148,7 +148,8 @@ export function MediaplayerSettings(props: MediaplayerSettingsProps) {
                                 <Field.Text
                                     name="mpvSocket"
                                     label="Socket"
-                                    placeholder={`Default: '${getDefaultMpvSocket(serverStatus?.os ?? "")}'`}
+                                    placeholder="Leave empty for an auto-generated socket"
+                                    help="Set this only if you want Seanime to attach to a specific mpv IPC socket."
                                 />
                                 <Field.Text
                                     name="mpvPath"
@@ -159,7 +160,7 @@ export function MediaplayerSettings(props: MediaplayerSettingsProps) {
                                     help="Leave empty to use the CLI."
                                 />
                             </div>
-                            <div>
+                            <div className="mt-4">
                                 <Field.Text
                                     name="mpvArgs"
                                     label="Options"
@@ -219,17 +220,19 @@ export function ExternalPlayerLinkSettings() {
 
             <Alert
                 intent="info" description={<>
-                Only applies to this device.
-            </>}
+                    Only applies to this device.
+                </>}
             />
 
             <SettingsCard>
-                <TextInput
-                    label="Custom scheme"
-                    placeholder="Example: outplayer://{url}"
-                    value={externalPlayerLink}
-                    onValueChange={setExternalPlayerLink}
-                />
+                <div data-settings-external-player-link-scheme>
+                    <TextInput
+                        label="Custom scheme"
+                        placeholder="Example: outplayer://{url}"
+                        value={externalPlayerLink}
+                        onValueChange={setExternalPlayerLink}
+                    />
+                </div>
             </SettingsCard>
 
             <SettingsCard>

@@ -1,5 +1,7 @@
 import { useServerMutation } from "@/api/client/requests"
+import { UpdateTheme_Variables } from "@/api/generated/endpoint.types"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
+import { Models_Theme } from "@/api/generated/types"
 import { useOpenInExplorer } from "@/api/hooks/explorer.hooks"
 import { useAnimeListTorrentProviderExtensions } from "@/api/hooks/extensions.hooks"
 import { useCheckForUpdates } from "@/api/hooks/releases.hooks"
@@ -26,15 +28,18 @@ import { UISettings } from "@/app/(main)/settings/_containers/ui-settings"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { SeaLink } from "@/components/shared/sea-link"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/components/ui/core/styling"
 import { defineSchema, Field, Form } from "@/components/ui/form"
+import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import { ANILIST_PIN_URL } from "@/lib/server/config"
 import { DEFAULT_TORRENT_CLIENT, DEFAULT_TORRENT_PROVIDER, settingsSchema, TORRENT_PROVIDER } from "@/lib/server/settings"
+import { THEME_DEFAULT_VALUES } from "@/lib/theme/theme-hooks"
 import { __isElectronDesktop__ } from "@/types/constants"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSetAtom } from "jotai"
@@ -78,7 +83,7 @@ import { ProfileManagementSettings } from "./_containers/profile-management-sett
 import { ProfileOverrideSettings } from "./_containers/profile-override-settings"
 
 const tabContentClass = cn(
-    "space-y-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300",
+    "space-y-8 animate-in fade-in-0 duration-400",
 )
 
 
@@ -91,7 +96,7 @@ export default function Page() {
 
     const searchParams = useSearchParams()
 
-    const { mutate, data, isPending } = useSaveSettings()
+    const { mutateAsync: saveSettings, data, isPending } = useSaveSettings()
 
     const [tab, setTab] = useAtom(__settings_tabAtom)
     const formRef = React.useRef<UseFormReturn<any>>(null)
@@ -134,6 +139,15 @@ export default function Page() {
         },
         onError: () => {
             toast.error("Failed to link AniList account. Check that the token is valid.")
+        },
+    })
+
+    const { mutateAsync: saveThemeSettings } = useServerMutation<Models_Theme, UpdateTheme_Variables>({
+        endpoint: API_ENDPOINTS.THEME.UpdateTheme.endpoint,
+        method: API_ENDPOINTS.THEME.UpdateTheme.methods[0],
+        mutationKey: [API_ENDPOINTS.THEME.UpdateTheme.key, "settings-page"],
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: [API_ENDPOINTS.STATUS.GetStatus.key] })
         },
     })
 
@@ -181,6 +195,8 @@ export default function Page() {
         }
     }, [searchParams])
 
+    if (!status?.settings) return <LoadingSpinner />
+
     return (
         <>
             <CustomLibraryBanner discrete />
@@ -199,10 +215,11 @@ export default function Page() {
                 <Tabs
                     value={tab}
                     onValueChange={setTab}
+                    variant="pill"
                     className={cn("w-full grid grid-cols-1 lg:grid lg:grid-cols-[300px,1fr] gap-4")}
                     triggerClass={cn(
-                        "text-base px-6 rounded-[--radius-md] w-fit lg:w-full rounded-lg border-0 data-[state=active]:bg-[--subtle] data-[state=active]:text-white dark:hover:text-white",
-                        "h-9 lg:justify-start px-3 transition-all duration-200 hover:bg-[--subtle]/50 hover:transform",
+                        "text-base font-medium w-fit lg:w-full border-0 data-[state=active]:bg-[--subtle] data-[state=active]:text-white dark:hover:text-white py-0",
+                        "h-9 lg:justify-start px-3 transition-all duration-200 hover:bg-[--subtle]/50 hover:transform rounded-lg",
                     )}
                     listClass={cn(
                         "w-full flex flex-wrap lg:flex-nowrap h-fit",
@@ -210,108 +227,103 @@ export default function Page() {
                     )}
                     data-settings-page-tabs
                 >
-                    <TabsList className="flex-wrap max-w-full lg:space-y-2 lg:sticky lg:top-10">
+                    <TabsList variant="none" className="flex-wrap max-w-full lg:space-y-2 lg:sticky lg:top-10">
                         <SettingsNavCard>
-                            <div className="flex flex-col gap-4 md:flex-row justify-between items-center">
+                            <div className="overflow-x-none overflow-y-hidden rounded-[--radius-md] space-y-1 lg:space-y-3 lg:block">
 
-                            </div>
-                            <div className="overflow-x-none overflow-y-hidden rounded-[--radius-md] space-y-1 lg:space-y-3 flex justify-center flex-wrap lg:block">
+                                <Card className="bg-transparent border-transparent">
+                                    <div className="space-y-2 p-0 w-full">
+                                        <h4 className=" text-xl font-bold text-center">Settings</h4>
 
-                                <Card className="lg:p-2 contents lg:block border-0 bg-transparent lg:border lg:bg-gray-950/80">
-                                    <div className="space-y-2 p-4 w-full">
-                                        <h4 className="text-center text-xl font-bold">Settings</h4>
-                                        <div className="space-y-1">
-                                            <p className="text-[--muted] text-sm text-center w-full">
-                                                {status?.version} {status?.versionName}
-                                            </p>
-                                            <p className="text-[--muted] text-sm text-center w-full">
-                                                {capitalize(status?.os)}{__isElectronDesktop__ &&
-                                                <span className="font-medium"> - Denshi</span>}
-                                            </p>
-                                        </div>
                                     </div>
                                 </Card>
-                                <Card className="lg:p-2 contents lg:block border-0 bg-transparent lg:border lg:bg-gray-950/80">
+                                <Card className="block border-0 bg-transparent lg:border lg:bg-[--paper] overflow-clip p-1">
                                     <TabsTrigger
                                         value="seanime"
                                         className="group"
-                                    ><LuWandSparkles className="text-xl mr-3 transition-transform duration-200" /> App</TabsTrigger>
+                                    ><LuWandSparkles className="text-base mr-2 transition-transform duration-200" /> App</TabsTrigger>
+                                    <TabsTrigger
+                                        value="ui"
+                                        className="group"
+                                    ><MdOutlinePalette className="text-base mr-2 transition-transform duration-200" /> User Interface</TabsTrigger>
                                     {isAdmin && (
                                     <TabsTrigger
                                         value="profiles"
                                         className="group"
-                                    ><LuUsers className="text-xl mr-3 transition-transform duration-200" /> Profiles</TabsTrigger>
+                                    ><LuUsers className="text-base mr-2 transition-transform duration-200" /> Profiles</TabsTrigger>
                                     )}
                                     {currentProfile && (
                                     <TabsTrigger
                                         value="my-settings"
                                         className="group"
-                                    ><LuTabletSmartphone className="text-xl mr-3 transition-transform duration-200" /> My Settings</TabsTrigger>
+                                    ><LuTabletSmartphone className="text-base mr-2 transition-transform duration-200" /> My Settings</TabsTrigger>
                                     )}
                                     {/* <TabsTrigger
                                      value="local"
                                      className="group"
-                                     ><LuUserCog className="text-xl mr-3 transition-transform duration-200" /> Local Account</TabsTrigger> */}
+                                     ><LuUserCog className="text-base mr-2 transition-transform duration-200" /> Local Account</TabsTrigger> */}
                                     <TabsTrigger
                                         value="library"
                                         className="group"
-                                    ><LuLibrary className="text-xl mr-3 transition-transform duration-200" /> Local Anime Library</TabsTrigger>
-                                    <TabsTrigger
-                                        value="playback"
-                                        className="group"
-                                    ><LuCirclePlay className="text-xl mr-3 transition-transform duration-200" /> Video Playback</TabsTrigger>
+                                    ><LuLibrary className="text-base mr-2 transition-transform duration-200" /> Local Anime Library</TabsTrigger>
                                 </Card>
 
-                                {/*<div className="text-xs lg:text-[--muted] text-center py-1.5 uppercase px-3 border-gray-800 tracking-wide font-medium">*/}
+                                {/*<div className="text-sm lg:text-[--foreground] py-1.5 px-3 tracking-wide font-medium hidden lg:block">*/}
                                 {/*    Anime playback*/}
                                 {/*</div>*/}
 
-                                <Card className="lg:p-2 contents lg:block border-0 bg-transparent lg:border lg:bg-gray-950/80">
+                                <Card className="contents lg:block border-0 bg-transparent lg:border lg:bg-[--paper] overflow-clip p-1">
+                                    <TabsTrigger
+                                        value="playback"
+                                        className="group"
+                                    ><LuCirclePlay className="text-base mr-2 transition-transform duration-200" /> Video Playback</TabsTrigger>
 
                                     <TabsTrigger
                                         value="media-player"
                                         className="group"
-                                    ><LuMonitorPlay className="text-xl mr-3 transition-transform duration-200" /> Desktop Media Player</TabsTrigger>
+                                    ><LuMonitorPlay className="text-base mr-2 transition-transform duration-200" /> Desktop Media Player</TabsTrigger>
                                     <TabsTrigger
                                         value="external-player-link"
                                         className="group"
-                                    ><LuCircleArrowOutUpRight className="text-xl mr-3 transition-transform duration-200" /> External Player
-                                                                                                                            Link</TabsTrigger>
+                                    ><LuCircleArrowOutUpRight className="text-base mr-2 transition-transform duration-200" /> External Player
+                                                                                                                              Link</TabsTrigger>
                                     <TabsTrigger
                                         value="mediastream"
                                         className="relative group"
-                                    ><LuTabletSmartphone className="text-xl mr-3 transition-transform duration-200" /> Transcoding / Direct
-                                                                                                                       Play</TabsTrigger>
+                                    ><LuTabletSmartphone className="text-base mr-2 transition-transform duration-200" /> Transcoding / Direct
+                                                                                                                         Play</TabsTrigger>
                                 </Card>
 
-                                {/*<div className="text-xs lg:text-[--muted] text-center py-1.5 uppercase px-3 border-gray-800 tracking-wide font-medium">*/}
+                                {/*<div className="text-sm lg:text-[--foreground] py-1.5 px-3 tracking-wide font-medium hidden lg:block">*/}
                                 {/*    Torrenting*/}
                                 {/*</div>*/}
 
-                                <Card className="lg:p-2 contents lg:block border-0 bg-transparent lg:border lg:bg-gray-950/80">
+                                <Card className="contents lg:block border-0 bg-transparent lg:border lg:bg-[--paper] overflow-clip p-1">
                                     <TabsTrigger
                                         value="torrent"
                                         className="group"
-                                    ><LuFileSearch className="text-xl mr-3 transition-transform duration-200" /> Torrent Provider</TabsTrigger>
+                                    ><LuFileSearch className="text-base mr-2 transition-transform duration-200" /> Torrent Provider</TabsTrigger>
                                     <TabsTrigger
                                         value="torrent-client"
                                         className="group"
-                                    ><MdOutlineDownloading className="text-xl mr-3 transition-transform duration-200" /> Torrent Client</TabsTrigger>
+                                    ><MdOutlineDownloading className="text-base mr-2 transition-transform duration-200" /> Torrent
+                                                                                                                           Client</TabsTrigger>
                                     <TabsTrigger
                                         value="torrentstream"
                                         className="relative group"
-                                    ><SiBittorrent className="text-xl mr-3 transition-transform duration-200" /> Torrent Streaming</TabsTrigger>
+                                    ><SiBittorrent className="text-base mr-2 transition-transform duration-200" /> Torrent Streaming</TabsTrigger>
                                     <TabsTrigger
                                         value="debrid"
                                         className="group"
-                                    ><HiOutlineServerStack className="text-xl mr-3 transition-transform duration-200" /> Debrid Service</TabsTrigger>
+                                    ><HiOutlineServerStack className="text-base mr-2 transition-transform duration-200" /> Debrid
+                                                                                                                           Service</TabsTrigger>
                                 </Card>
 
-                                {/*<div className="text-xs lg:text-[--muted] text-center py-1.5 uppercase px-3 border-gray-800 tracking-wide font-medium">*/}
+                                {/*<div className="text-sm lg:text-[--foreground] py-1.5 px-3 tracking-wide font-medium hidden lg:block">*/}
                                 {/*    Other features*/}
                                 {/*</div>*/}
 
-                                <Card className="lg:p-2 contents lg:block border-0 bg-transparent lg:border lg:bg-gray-950/80">
+                                <Card className="contents lg:block border-0 bg-transparent lg:border lg:bg-[--paper] overflow-clip p-1">
                                     <TabsTrigger
                                         value="anime-tracker"
                                         className="group"
@@ -319,72 +331,81 @@ export default function Page() {
                                     <TabsTrigger
                                         value="onlinestream"
                                         className="group"
-                                    ><CgMediaPodcast className="text-xl mr-3 transition-transform duration-200" /> Online Streaming</TabsTrigger>
+                                    ><CgMediaPodcast className="text-base mr-2 transition-transform duration-200" /> Online Streaming</TabsTrigger>
 
                                     <TabsTrigger
                                         value="manga"
                                         className="group"
-                                    ><LuBookOpen className="text-xl mr-3 transition-transform duration-200" /> Manga</TabsTrigger>
+                                    ><LuBookOpen className="text-base mr-2 transition-transform duration-200" /> Manga</TabsTrigger>
                                     <TabsTrigger
                                         value="nakama"
                                         className="group relative"
-                                    ><MdOutlineConnectWithoutContact className="text-xl mr-3 transition-transform duration-200" /> Nakama</TabsTrigger>
+                                    ><MdOutlineConnectWithoutContact className="text-base mr-2 transition-transform duration-200" /> Nakama</TabsTrigger>
                                     <TabsTrigger
                                         value="discord"
                                         className="group"
-                                    ><FaDiscord className="text-xl mr-3 transition-transform duration-200" /> Discord</TabsTrigger>
+                                    ><FaDiscord className="text-base mr-2 transition-transform duration-200" /> Discord</TabsTrigger>
                                 </Card>
 
-                                {/*<div className="text-xs lg:text-[--muted] text-center py-1.5 uppercase px-3 border-gray-800 tracking-wide font-medium">*/}
-                                {/*    Server & Interface*/}
+                                {/*<div className="text-sm lg:text-[--foreground] py-1.5 px-3 tracking-wide font-medium hidden lg:block">*/}
+                                {/*    App*/}
                                 {/*</div>*/}
 
-                                <Card className="lg:p-2 contents lg:block border-0 bg-transparent lg:border lg:bg-gray-950/80">
+                                <Card className="contents lg:block border-0 bg-transparent lg:border lg:bg-[--paper] overflow-clip p-1">
                                     {__isElectronDesktop__ && (
                                         <TabsTrigger
                                             value="denshi"
                                             className="group"
-                                        ><LuMonitor className="text-xl mr-3 transition-transform duration-200" /> Denshi</TabsTrigger>
+                                        ><LuMonitor className="text-base mr-2 transition-transform duration-200" /> Denshi</TabsTrigger>
                                     )}
-                                    <TabsTrigger
-                                        value="ui"
-                                        className="group"
-                                    ><MdOutlinePalette className="text-xl mr-3 transition-transform duration-200" /> User Interface</TabsTrigger>
                                     {/* <TabsTrigger
                                      value="cache"
                                      className="group"
-                                     ><TbDatabaseExclamation className="text-xl mr-3 transition-transform duration-200" /> Cache</TabsTrigger> */}
+                                     ><TbDatabaseExclamation className="text-base mr-2 transition-transform duration-200" /> Cache</TabsTrigger> */}
                                     <TabsTrigger
                                         value="logs"
                                         className="group"
-                                    ><LuBookKey className="text-xl mr-3 transition-transform duration-200" /> Logs & Cache</TabsTrigger>
+                                    ><LuBookKey className="text-base mr-2 transition-transform duration-200" /> Logs & Cache</TabsTrigger>
                                 </Card>
                             </div>
                         </SettingsNavCard>
 
-                        <div className="flex justify-center !mt-0 pb-4">
-                            <SeaLink
-                                href="https://github.com/sponsors/5rahim"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                <Button
-                                    intent="gray-link"
-                                    size="md"
-                                    leftIcon={<BiDonateHeart className="text-lg" />}
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <p className="text-[--muted] text-xs w-full text-center">
+                                    <span className="font-semibold">{status?.version}</span> {status?.versionName} • {capitalize(status?.os)}{__isElectronDesktop__ &&
+                                    <span className="font-medium"> • Denshi</span>}
+                                </p>
+                                <p className="text-[--muted] text-sm w-full">
+
+                                </p>
+                            </div>
+
+                            <div className="flex justify-center !mt-0 pb-4">
+                                <SeaLink
+                                    href="https://github.com/sponsors/5rahim"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                 >
-                                    Donate
-                                </Button>
-                            </SeaLink>
+                                    <Button
+                                        intent="gray-link"
+                                        size="md"
+                                        leftIcon={<BiDonateHeart className="text-lg" />}
+                                    >
+                                        Donate
+                                    </Button>
+                                </SeaLink>
+                            </div>
                         </div>
                     </TabsList>
 
                     <div className="">
                         <Form
+                            key={`${status?.settings?.updatedAt ?? "settings"}:${status?.themeSettings?.updatedAt ?? "theme"}`}
                             schema={settingsSchema}
                             mRef={formRef}
-                            onSubmit={data => {
-                                mutate({
+                            onSubmit={async data => {
+                                await saveSettings({
                                     library: {
                                         libraryPath: data.libraryPath,
                                         autoUpdateProgress: data.autoUpdateProgress,
@@ -412,6 +433,9 @@ export default function Page() {
                                         scannerUseLegacyMatching: data.scannerUseLegacyMatching ?? false,
                                         scannerConfig: data.scannerConfig ?? "",
                                         updateChannel: data.updateChannel || "github",
+                                        enableExtensionSecureMode: data.enableExtensionSecureMode ?? false,
+                                        defaultPlaybackSource: data.defaultPlaybackSource === "-" ? "" : data.defaultPlaybackSource,
+                                        showTorrentAvailability: data.showTorrentAvailability ?? false,
                                     },
                                     nakama: {
                                         enabled: data.nakamaEnabled ?? false,
@@ -449,6 +473,11 @@ export default function Page() {
                                         vcTranslateApiKey: data.vcTranslateApiKey || "",
                                         vcTranslateProvider: data.vcTranslateProvider || "",
                                         vcTranslateTargetLanguage: data.vcTranslateTargetLanguage || "",
+                                        vcTranslateBaseUrl: data.vcTranslateBaseUrl || "",
+                                        vcTranslateModel: data.vcTranslateModel || "",
+                                        mpvPrismLogging: data.mpvPrismLogging ?? false,
+                                        mpvPrismEnabled: data.mpvPrismEnabled ?? false,
+                                        screenshotDir: data.screenshotDir || "",
                                     },
                                     torrent: {
                                         defaultTorrentClient: data.defaultTorrentClient,
@@ -464,6 +493,11 @@ export default function Page() {
                                         transmissionPort: data.transmissionPort,
                                         transmissionUsername: data.transmissionUsername,
                                         transmissionPassword: data.transmissionPassword,
+                                        seanimePort: data.seanimePort,
+                                        seanimeMaxConnections: data.seanimeMaxConnections,
+                                        seanimeDownloadLimit: data.seanimeDownloadLimit,
+                                        seanimeUploadLimit: data.seanimeUploadLimit,
+                                        seanimeMaxActiveDownloads: data.seanimeMaxActiveDownloads,
                                         showActiveTorrentCount: data.showActiveTorrentCount ?? false,
                                         hideTorrentList: data.hideTorrentList ?? false,
                                     },
@@ -487,21 +521,38 @@ export default function Page() {
                                         disableAutoDownloaderNotifications: data?.disableAutoDownloaderNotifications ?? false,
                                         disableAutoScannerNotifications: data?.disableAutoScannerNotifications ?? false,
                                     },
-                                }, {
-                                    onSuccess: () => {
-                                        formRef.current?.reset(formRef.current.getValues())
-
-                                        // Sync updateChannel to Denshi
-                                        if (__isElectronDesktop__ && window.electron?.denshiSettings) {
-                                            window.electron.denshiSettings.get().then((denshiSettings) => {
-                                                window.electron!.denshiSettings.set({
-                                                    ...denshiSettings,
-                                                    updateChannel: data.updateChannel || "github",
-                                                })
-                                            })
-                                        }
-                                    },
                                 })
+
+                                const prevTheme = status?.themeSettings ?? { id: 0, ...THEME_DEFAULT_VALUES }
+                                const shouldSaveSpoilerSettings =
+                                    data.hideAnimeSpoilers !== prevTheme.hideAnimeSpoilers
+                                    || data.hideAnimeSpoilerThumbnails !== prevTheme.hideAnimeSpoilerThumbnails
+                                    || data.hideAnimeSpoilerTitles !== prevTheme.hideAnimeSpoilerTitles
+                                    || data.hideAnimeSpoilerDescriptions !== prevTheme.hideAnimeSpoilerDescriptions
+                                    || data.hideAnimeSpoilerSkipNextEpisode !== prevTheme.hideAnimeSpoilerSkipNextEpisode
+
+                                if (shouldSaveSpoilerSettings) {
+                                    await saveThemeSettings({
+                                        theme: {
+                                            ...prevTheme,
+                                            hideAnimeSpoilers: data.hideAnimeSpoilers ?? false,
+                                            hideAnimeSpoilerThumbnails: data.hideAnimeSpoilerThumbnails ?? true,
+                                            hideAnimeSpoilerTitles: data.hideAnimeSpoilerTitles ?? true,
+                                            hideAnimeSpoilerDescriptions: data.hideAnimeSpoilerDescriptions ?? true,
+                                            hideAnimeSpoilerSkipNextEpisode: data.hideAnimeSpoilerSkipNextEpisode ?? false,
+                                        },
+                                    })
+                                }
+
+                                formRef.current?.reset(formRef.current.getValues())
+
+                                if (__isElectronDesktop__ && window.electron?.denshiSettings) {
+                                    const denshiSettings = await window.electron.denshiSettings.get()
+                                    await window.electron.denshiSettings.set({
+                                        ...denshiSettings,
+                                        updateChannel: data.updateChannel || "github",
+                                    })
+                                }
                             }}
                             defaultValues={{
                                 libraryPath: status?.settings?.library?.libraryPath,
@@ -538,6 +589,11 @@ export default function Page() {
                                 transmissionPort: status?.settings?.torrent?.transmissionPort,
                                 transmissionUsername: status?.settings?.torrent?.transmissionUsername,
                                 transmissionPassword: status?.settings?.torrent?.transmissionPassword,
+                                seanimePort: status?.settings?.torrent?.seanimePort || 50007,
+                                seanimeMaxConnections: status?.settings?.torrent?.seanimeMaxConnections || 50,
+                                seanimeDownloadLimit: status?.settings?.torrent?.seanimeDownloadLimit ?? 0,
+                                seanimeUploadLimit: status?.settings?.torrent?.seanimeUploadLimit ?? 0,
+                                seanimeMaxActiveDownloads: status?.settings?.torrent?.seanimeMaxActiveDownloads || 3,
                                 hideAudienceScore: status?.settings?.anilist?.hideAudienceScore ?? false,
                                 autoUpdateProgress: status?.settings?.library?.autoUpdateProgress ?? false,
                                 disableUpdateCheck: status?.settings?.library?.disableUpdateCheck ?? false,
@@ -587,78 +643,96 @@ export default function Page() {
                                 vcTranslateApiKey: status?.settings?.mediaPlayer?.vcTranslateApiKey ?? "",
                                 vcTranslateProvider: status?.settings?.mediaPlayer?.vcTranslateProvider ?? "",
                                 vcTranslateTargetLanguage: status?.settings?.mediaPlayer?.vcTranslateTargetLanguage ?? "",
+                                vcTranslateBaseUrl: status?.settings?.mediaPlayer?.vcTranslateBaseUrl ?? "",
+                                vcTranslateModel: status?.settings?.mediaPlayer?.vcTranslateModel ?? "",
+                                mpvPrismLogging: status?.settings?.mediaPlayer?.mpvPrismLogging ?? false,
+                                mpvPrismEnabled: status?.settings?.mediaPlayer?.mpvPrismEnabled ?? false,
+                                screenshotDir: status?.settings?.mediaPlayer?.screenshotDir ?? "",
                                 scannerUseLegacyMatching: status?.settings?.library?.scannerUseLegacyMatching ?? false,
                                 scannerConfig: status?.settings?.library?.scannerConfig ?? "",
                                 updateChannel: status?.settings?.library?.updateChannel || "github",
+                                enableExtensionSecureMode: status?.settings?.library?.enableExtensionSecureMode ?? false,
+                                defaultPlaybackSource: status?.settings?.library?.defaultPlaybackSource || "-",
+                                hideAnimeSpoilers: status?.themeSettings?.hideAnimeSpoilers ?? THEME_DEFAULT_VALUES.hideAnimeSpoilers,
+                                hideAnimeSpoilerThumbnails: status?.themeSettings?.hideAnimeSpoilerThumbnails ?? THEME_DEFAULT_VALUES.hideAnimeSpoilerThumbnails,
+                                hideAnimeSpoilerTitles: status?.themeSettings?.hideAnimeSpoilerTitles ?? THEME_DEFAULT_VALUES.hideAnimeSpoilerTitles,
+                                hideAnimeSpoilerDescriptions: status?.themeSettings?.hideAnimeSpoilerDescriptions ?? THEME_DEFAULT_VALUES.hideAnimeSpoilerDescriptions,
+                                hideAnimeSpoilerSkipNextEpisode: status?.themeSettings?.hideAnimeSpoilerSkipNextEpisode ?? THEME_DEFAULT_VALUES.hideAnimeSpoilerSkipNextEpisode,
+                                showTorrentAvailability: status?.settings?.library?.showTorrentAvailability ?? false,
                             }}
                             stackClass="space-y-0 relative"
                         >
                             {(f) => {
+                                const selectedTorrentProvider = torrentProviderExtensions?.find(ext => ext.id === f.watch("torrentProvider"))
+                                const torrentProviderMissing = !!torrentProviderExtensions && !selectedTorrentProvider
+
                                 return <>
                                     <SettingsIsDirty />
                                     <TabsContent value="seanime" className={tabContentClass}>
 
-                                        <SettingsPageHeader
-                                            title="App"
-                                            description="General app settings"
-                                            icon={LuWandSparkles}
-                                        />
+                                        <div className="space-y-3">
+                                            <SettingsPageHeader
+                                                title="App"
+                                                description="General app settings"
+                                                icon={LuWandSparkles}
+                                            />
 
-                                        <div className="flex flex-wrap gap-2 slide-in-from-bottom duration-500 delay-150">
-                                            {!!status?.dataDir && <Button
-                                                size="sm"
-                                                intent="gray-outline"
-                                                onClick={() => openInExplorer({
-                                                    path: status?.dataDir,
-                                                })}
-                                                className="transition-all duration-200 hover:scale-105 hover:shadow-md"
-                                                leftIcon={
-                                                    <RiFolderDownloadFill className="transition-transform duration-200 group-hover:scale-110" />}
-                                            >
-                                                Open Data directory
-                                            </Button>}
-                                            <Button
-                                                size="sm"
-                                                intent="gray-outline"
-                                                onClick={handleOpenIssueRecorder}
-                                                leftIcon={<VscDebugAlt className="transition-transform duration-200 group-hover:scale-110" />}
-                                                className="transition-all duration-200 hover:scale-105 hover:shadow-md group"
-                                                data-open-issue-recorder-button
-                                            >
-                                                Record an issue
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                intent="gray-outline"
-                                                onClick={() => {
-                                                    checkForUpdates(undefined, {
-                                                        onSuccess: (data) => {
-                                                            if (data?.release) {
-                                                                queryClient.setQueryData([API_ENDPOINTS.RELEASES.GetLatestUpdate.key], data)
+                                            <div className="flex flex-wrap gap-2 slide-in-from-bottom duration-500 delay-150">
+                                                {!!status?.dataDir && <Button
+                                                    size="sm"
+                                                    intent="gray-outline"
+                                                    onClick={() => openInExplorer({
+                                                        path: status?.dataDir,
+                                                    })}
+                                                    className="transition-all duration-200 hover:scale-105 hover:shadow-md"
+                                                    leftIcon={
+                                                        <RiFolderDownloadFill className="transition-transform duration-200 group-hover:scale-110" />}
+                                                >
+                                                    Open Data directory
+                                                </Button>}
+                                                <Button
+                                                    size="sm"
+                                                    intent="gray-outline"
+                                                    onClick={handleOpenIssueRecorder}
+                                                    leftIcon={<VscDebugAlt className="transition-transform duration-200 group-hover:scale-110" />}
+                                                    className="transition-all duration-200 hover:scale-105 hover:shadow-md group"
+                                                    data-open-issue-recorder-button
+                                                >
+                                                    Record an issue
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    intent="gray-outline"
+                                                    onClick={() => {
+                                                        checkForUpdates(undefined, {
+                                                            onSuccess: (data) => {
+                                                                if (data?.release) {
+                                                                    queryClient.setQueryData([API_ENDPOINTS.RELEASES.GetLatestUpdate.key], data)
 
-                                                                if (__isElectronDesktop__) {
-                                                                    // Also trigger Electron update
-                                                                    if (window.electron) {
-                                                                        window.electron.checkForUpdates().catch(() => { })
+                                                                    if (__isElectronDesktop__) {
+                                                                        // Also trigger Electron update
+                                                                        if (window.electron) {
+                                                                            window.electron.checkForUpdates().catch(() => { })
+                                                                        }
+                                                                        setElectronUpdateModalOpen(true)
+                                                                    } else {
+                                                                        setWebUpdateModalOpen(true)
                                                                     }
-                                                                    setElectronUpdateModalOpen(true)
                                                                 } else {
-                                                                    setWebUpdateModalOpen(true)
+                                                                    toast.success("You are running the latest version")
                                                                 }
-                                                            } else {
-                                                                toast.success("You are running the latest version")
-                                                            }
 
-                                                        },
-                                                    })
-                                                }}
-                                                loading={isCheckingForUpdates}
-                                                leftIcon={<LuRefreshCw className="transition-transform duration-200 group-hover:rotate-180" />}
-                                                className="transition-all duration-200 hover:scale-105 hover:shadow-md group"
-                                                data-check-for-updates-button
-                                            >
-                                                Check for updates
-                                            </Button>
+                                                            },
+                                                        })
+                                                    }}
+                                                    loading={isCheckingForUpdates}
+                                                    leftIcon={<LuRefreshCw className="transition-transform duration-200 group-hover:rotate-180" />}
+                                                    className="transition-all duration-200 hover:scale-105 hover:shadow-md group"
+                                                    data-check-for-updates-button
+                                                >
+                                                    Check for updates
+                                                </Button>
+                                            </div>
                                         </div>
 
                                         <ServerSettings isPending={isPending} />
@@ -748,20 +822,22 @@ export default function Page() {
                                         />
 
                                         <SettingsCard>
-                                            <Field.Switch
-                                                side="right"
-                                                name="enableOnlinestream"
-                                                label="Enable"
-                                                help="Watch anime episodes from online sources."
-                                            />
+                                            <div data-settings-enable-onlinestream>
+                                                <Field.Switch
+                                                    side="right"
+                                                    name="enableOnlinestream"
+                                                    label="Enable"
+                                                    help="Watch anime episodes from online sources."
+                                                />
+                                            </div>
                                         </SettingsCard>
 
                                         <SettingsCard title="Home Screen">
                                             <Field.Switch
                                                 side="right"
                                                 name="includeOnlineStreamingInLibrary"
-                                                label="Include in anime library"
-                                                help="Add non-downloaded shows that are in your currently watching list to the anime library."
+                                                label="Include streaming in anime lists"
+                                                help="Show currently watching streaming titles in your anime lists."
                                             />
                                         </SettingsCard>
 
@@ -805,6 +881,18 @@ export default function Page() {
                                                     { label: "None", value: TORRENT_PROVIDER.NONE },
                                                 ]}
                                             />
+                                            <Field.Switch
+                                                data-settings-show-torrent-availability
+                                                side="right"
+                                                name="showTorrentAvailability"
+                                                label="Show torrent availability on recent episodes"
+                                                help="Adds a badge to recent episodes missing from your library, and to Continue Watching when using torrent or Debrid streaming."
+                                                disabled={torrentProviderMissing}
+                                            />
+                                            {torrentProviderMissing && <Alert
+                                                intent="warning"
+                                                description="Choose a torrent provider to check episode availability."
+                                            />}
                                         </SettingsCard>
 
 
@@ -856,6 +944,7 @@ export default function Page() {
                                                 options={[
                                                     { label: "qBittorrent", value: "qbittorrent" },
                                                     { label: "Transmission", value: "transmission" },
+                                                    ...(status?.featureFlags?.builtinTorrentClient ? [{ label: "Built-in", value: "seanime" }] : []),
                                                     { label: "None", value: "none" },
                                                 ]}
                                             />
@@ -864,9 +953,9 @@ export default function Page() {
                                         {/*<SettingsCard>*/}
                                         <Accordion
                                             type="single"
-                                            className="group/settings-card relative bg-gray-950/70 rounded-xl border overflow-hidden"
+                                            className="group/settings-card relative bg-[--paper] rounded-xl border overflow-hidden"
                                             triggerClass="px-4 py-3 text-[--muted] dark:data-[state=open]:text-white dark:hover:bg-transparent hover:bg-transparent dark:hover:text-white !font-medium transition-all duration-200 hover:translate-x-1"
-                                            itemClass="border-b border-[--border] rounded-none transition-all duration-200 hover:border-[--brand]/30"
+                                            itemClass="border-b border-[--border] rounded-none transition-all duration-200 hover:border-[--brand]/30 hover:bg-gray-900"
                                             contentClass="!p-4 animate-in duration-300"
                                             collapsible
                                             defaultValue={status?.settings?.torrent?.defaultTorrentClient}
@@ -950,6 +1039,38 @@ export default function Page() {
                                                     />
                                                 </AccordionContent>
                                             </AccordionItem>
+                                            {status?.featureFlags?.builtinTorrentClient && (
+                                                <AccordionItem value="seanime">
+                                                    <AccordionTrigger>
+                                                        <h4 className="flex gap-2 items-center">
+                                                            <SiBittorrent className="text-[--brand]" /> Built-in
+                                                        </h4>
+                                                    </AccordionTrigger>
+                                                    <AccordionContent className="p-0 py-4 space-y-4">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            <Field.Number
+                                                                name="seanimePort"
+                                                                label="Listening port"
+                                                                formatOptions={{ useGrouping: false }}
+                                                            />
+                                                            <Field.Number name="seanimeMaxConnections" label="Connections per torrent" />
+                                                            <Field.Number name="seanimeMaxActiveDownloads" label="Active downloads" />
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            <Field.Number
+                                                                name="seanimeDownloadLimit"
+                                                                label="Download limit (KB/s)"
+                                                                help="Set to 0 for no limit."
+                                                            />
+                                                            <Field.Number
+                                                                name="seanimeUploadLimit"
+                                                                label="Upload limit (KB/s)"
+                                                                help="Set to 0 for no limit."
+                                                            />
+                                                        </div>
+                                                    </AccordionContent>
+                                                </AccordionItem>
+                                            )}
                                         </Accordion>
                                         {/*</SettingsCard>*/}
 

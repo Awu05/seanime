@@ -17,6 +17,29 @@ import (
 	lop "github.com/samber/lo/parallel"
 )
 
+var missingEpisodesCache = struct {
+	sync.Mutex
+	value *MissingEpisodes
+}{}
+
+func GetMissingEpisodesCache() (*MissingEpisodes, bool) {
+	missingEpisodesCache.Lock()
+	defer missingEpisodesCache.Unlock()
+
+	return missingEpisodesCache.value, missingEpisodesCache.value != nil
+}
+
+func SetMissingEpisodesCache(missing *MissingEpisodes) {
+	missingEpisodesCache.Lock()
+	defer missingEpisodesCache.Unlock()
+
+	missingEpisodesCache.value = missing
+}
+
+func ClearMissingEpisodesCache() {
+	SetMissingEpisodesCache(nil)
+}
+
 type (
 	MissingEpisodes struct {
 		Episodes         []*Episode `json:"episodes"`
@@ -123,6 +146,7 @@ func NewMissingEpisodes(ctx context.Context, opts *NewMissingEpisodesOptions) *M
 			if len(episodes) > 1 {
 				episodes = episodes[:1] // keep the first episode
 				if episodes[0].Episode != nil {
+					episodes[0].Episode.IsMissingGroup = true
 					episodes[0].Episode.DisplayTitle = episodes[0].Episode.DisplayTitle + fmt.Sprintf(" & %d more", len(downloadInfo.EpisodesToDownload)-1)
 				}
 			}

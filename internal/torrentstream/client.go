@@ -359,7 +359,7 @@ func (c *Client) GetExternalPlayerStreamingUrl() string {
 	return ret
 }
 
-func (c *Client) AddTorrent(id string) (*torrent.Torrent, error) {
+func (c *Client) AddTorrent(ctx context.Context, id string) (*torrent.Torrent, error) {
 	if c.torrentClient.IsAbsent() {
 		return nil, errors.New("torrent client is not initialized")
 	}
