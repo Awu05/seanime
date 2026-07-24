@@ -95,14 +95,32 @@ func (h *Handler) HandleDirectstreamConvertSubs(c echo.Context) error {
 	return h.RespondWithData(c, ret)
 }
 
-func (h *Handler) HandleDirectstreamGetStream(c echo.Context) error {
+// directStreamManagerFor returns whichever DirectStreamManager owns the
+// request's clientId stream. Local-file and direct debrid-URL plays register
+// into the per-profile session's manager, but debrid StartStream, Nakama, and
+// playlist playback register into the App singleton manager — serving only
+// from the session manager would 404 those. Falls back to the session
+// manager for requests with no matching stream anywhere (e.g. still loading).
+func (h *Handler) directStreamManagerFor(c echo.Context) *directstream.Manager {
+	clientId := c.QueryParam("clientId")
 	session := h.getStreamSession(c)
-	handler := session.DirectStreamManager.ServeEchoStream()
+	if session.DirectStreamManager.HasStream(clientId) {
+		return session.DirectStreamManager
+	}
+	if h.App.DirectStreamManager != nil && h.App.DirectStreamManager.HasStream(clientId) {
+		return h.App.DirectStreamManager
+	}
+	return session.DirectStreamManager
+}
+
+func (h *Handler) HandleDirectstreamGetStream(c echo.Context) error {
+	dsm := h.directStreamManagerFor(c)
+	handler := dsm.ServeEchoStream()
 	handler.ServeHTTP(c.Response(), c.Request())
 	return nil
 }
 
 func (h *Handler) HandleDirectstreamGetAttachments(c echo.Context) error {
-	session := h.getStreamSession(c)
-	return session.DirectStreamManager.ServeEchoAttachments(c)
+	dsm := h.directStreamManagerFor(c)
+	return dsm.ServeEchoAttachments(c)
 }

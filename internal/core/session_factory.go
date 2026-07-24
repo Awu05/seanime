@@ -131,6 +131,9 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 			}
 			return qp
 		},
+		// Without this, debrid-torrent play through this session silently loses
+		// HLS transcode, background download, and switchover support.
+		TranscodeRequester: &mediastreamTranscodeAdapter{repo: a.MediastreamRepository},
 	})
 
 	// Create per-session TorrentstreamRepository with its own Client wrapper,

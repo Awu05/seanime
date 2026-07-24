@@ -59,24 +59,40 @@ type Stream interface {
 	OnSubtitleFileUploaded(filename string, content string)
 }
 
+// HasStream reports whether this manager has a stream registered for clientId.
+// Used by handlers to route a request to whichever manager instance
+// (per-profile session vs. the App singleton used by debrid/Nakama/playlist)
+// actually owns the client's stream.
+func (m *Manager) HasStream(clientId string) bool {
+	if clientId == "" {
+		return false
+	}
+	_, ok := m.streams.Get(clientId)
+	return ok
+}
+
 func (m *Manager) getStreamHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Look up the stream by clientId query param
 		clientId := r.URL.Query().Get("clientId")
 		if clientId != "" {
+			// A clientId was specified: only serve that exact stream. Falling
+			// back to "any active stream" here could serve a different
+			// client's (or a different tab's) video.
 			if stream, ok := m.streams.Get(clientId); ok {
 				stream.GetStreamHandler().ServeHTTP(w, r)
 				return
 			}
+			http.Error(w, "no stream", http.StatusNotFound)
+			return
 		}
-		// Fallback: try to find any active stream (backward compatibility for single-stream)
+		// No clientId: backward compatibility for single-stream setups.
 		var activeStream Stream
 		m.streams.Range(func(_ string, s Stream) bool {
 			activeStream = s
 			return false
 		})
 		if activeStream == nil {
-			http.Error(w, "no stream", http.StatusInternalServerError)
+			http.Error(w, "no stream", http.StatusNotFound)
 			return
 		}
 		activeStream.GetStreamHandler().ServeHTTP(w, r)
