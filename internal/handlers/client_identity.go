@@ -105,7 +105,7 @@ func canAcceptClaimedClientId(app *core.App, req *http.Request) bool {
 		return false
 	}
 
-	return isRequestPermitted(req, "", app.Config.Server.AccessAllowlist)
+	return isRequestPermitted(req, "", app.Config.Server.AccessAllowlist, isAuthenticatedMultiUserSession(app, req))
 }
 
 func resolveClientIdFromRequest(app *core.App, req *http.Request, cookieValue string) string {

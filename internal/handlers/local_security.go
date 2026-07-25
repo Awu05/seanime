@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"runtime"
+	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/security"
 	"strings"
@@ -42,6 +43,39 @@ func respondWithAbort(c echo.Context, code int, err error) error {
 
 func isStrictModeSensitive(req *http.Request, serverPassword string) bool {
 	return serverPassword == "" && security.IsStrict() && !isRequestFromTrustedLocal(req)
+}
+
+// isAuthenticatedMultiUserSession reports whether the request carries a valid profile or
+// admin session token. This is checked independently of MultiUserAuthMiddleware because
+// trustedLocalRequestMiddleware (and other request-boundary checks) run earlier in the
+// middleware chain, before that middleware has parsed the token into the request context.
+// A valid session here is treated as equivalent to a configured server password: it still
+// goes through the same strict-mode local-only gates as password auth, it just proves the
+// request isn't an anonymous/CSRF-style request on a multi-user instance.
+func isAuthenticatedMultiUserSession(app *core.App, req *http.Request) bool {
+	if app == nil || !app.MultiUserEnabled || req == nil {
+		return false
+	}
+
+	var tokenString string
+	if cookie, err := req.Cookie("seanime-auth"); err == nil && cookie.Value != "" {
+		tokenString = cookie.Value
+	} else if auth := strings.TrimSpace(req.Header.Get("Authorization")); strings.HasPrefix(auth, "Bearer ") {
+		tokenString = strings.TrimPrefix(auth, "Bearer ")
+	}
+	if tokenString == "" && req.URL != nil {
+		tokenString = req.URL.Query().Get("auth_token")
+	}
+	if tokenString == "" {
+		return false
+	}
+
+	claims, err := core.ParseToken(app.JWTSecret, tokenString)
+	if err != nil {
+		return false
+	}
+
+	return claims.Scope == "profile" || claims.Scope == "admin"
 }
 
 func reqHasOriginMetadata(req *http.Request) bool {
@@ -178,9 +212,10 @@ func isTrustedRequestHost(req *http.Request) bool {
 	return addr.IsLoopback() || addr.IsPrivate() || isTailscaleIP(addr)
 }
 
-// isRequestPermitted determines if an HTTP request is permitted based on server password, access allowlist, and request origin metadata.
-func isRequestPermitted(req *http.Request, serverPassword string, accessAllowlist []string) bool {
-	if serverPassword != "" || security.IsLax() {
+// isRequestPermitted determines if an HTTP request is permitted based on server password, an authenticated
+// multi-user session, access allowlist, and request origin metadata.
+func isRequestPermitted(req *http.Request, serverPassword string, accessAllowlist []string, isAuthenticatedSession bool) bool {
+	if serverPassword != "" || isAuthenticatedSession || security.IsLax() {
 		return true
 	}
 
@@ -266,7 +301,7 @@ func (h *Handler) trustedLocalRequestMiddleware(next echo.HandlerFunc) echo.Hand
 			return next(c)
 		}
 
-		if isRequestPermitted(req, h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist) {
+		if isRequestPermitted(req, h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist, isAuthenticatedMultiUserSession(h.App, req)) {
 			return next(c)
 		}
 
@@ -274,9 +309,10 @@ func (h *Handler) trustedLocalRequestMiddleware(next echo.HandlerFunc) echo.Hand
 	}
 }
 
-// isTrustedRequest determines whether the request is from a trusted source based on server password, security mode, or request origin.
-func isTrustedRequest(req *http.Request, serverPassword string) bool {
-	if serverPassword != "" || security.IsLax() {
+// isTrustedRequest determines whether the request is from a trusted source based on server password, an
+// authenticated multi-user session, security mode, or request origin.
+func isTrustedRequest(req *http.Request, serverPassword string, isAuthenticatedSession bool) bool {
+	if serverPassword != "" || isAuthenticatedSession || security.IsLax() {
 		return true
 	}
 	if security.IsHardened() {
@@ -292,7 +328,7 @@ func (h *Handler) guardPrivilegedSettingsMutation(c echo.Context, prev *models.S
 		return nil
 	}
 
-	if canMutatePrivilegedSettings(c.Request(), h.App.Config.Server.Password, prev, nextMedia, nextTorrent) {
+	if canMutatePrivilegedSettings(c.Request(), h.App.Config.Server.Password, prev, nextMedia, nextTorrent, isAuthenticatedMultiUserSession(h.App, c.Request())) {
 		return nil
 	}
 
@@ -309,7 +345,7 @@ func (h *Handler) guardPrivilegedExtensionManagement(c echo.Context) error {
 		return respondWithAbort(c, http.StatusForbidden, errStrictLocalOnlyDenied)
 	}
 
-	if canUsePrivilegedExtensionManagement(c.Request(), h.App.Config.Server.Password) {
+	if canUsePrivilegedExtensionManagement(c.Request(), h.App.Config.Server.Password, isAuthenticatedMultiUserSession(h.App, c.Request())) {
 		return nil
 	}
 
@@ -322,20 +358,20 @@ func (h *Handler) guardPrivilegedMediastreamSettingsMutation(c echo.Context, pre
 		return nil
 	}
 
-	if canMutatePrivilegedMediastreamSettings(c.Request(), h.App.Config.Server.Password, prev, next) {
+	if canMutatePrivilegedMediastreamSettings(c.Request(), h.App.Config.Server.Password, prev, next, isAuthenticatedMultiUserSession(h.App, c.Request())) {
 		return nil
 	}
 
 	return respondWithAbort(c, http.StatusForbidden, errPrivilegedExecutionDenied)
 }
 
-// canMutatePrivilegedSettings determines if privileged settings modifications can proceed based on request origin, server password, and settings changes.
-func canMutatePrivilegedSettings(req *http.Request, serverPassword string, prev *models.Settings, nextMedia *models.MediaPlayerSettings, nextTorrent *models.TorrentSettings) bool {
+// canMutatePrivilegedSettings determines if privileged settings modifications can proceed based on request origin, server password, an authenticated multi-user session, and settings changes.
+func canMutatePrivilegedSettings(req *http.Request, serverPassword string, prev *models.Settings, nextMedia *models.MediaPlayerSettings, nextTorrent *models.TorrentSettings, isAuthenticatedSession bool) bool {
 	if security.IsStrict() && !isRequestFromTrustedLocal(req) && privilegedSettingsChanged(prev, nextMedia, nextTorrent) {
 		return false
 	}
 
-	if isTrustedRequest(req, serverPassword) {
+	if isTrustedRequest(req, serverPassword, isAuthenticatedSession) {
 		return true
 	}
 
@@ -347,12 +383,12 @@ func canMutatePrivilegedSettings(req *http.Request, serverPassword string, prev 
 }
 
 // canMutatePrivilegedMediastreamSettings determines if privileged mediastream settings can be modified based on request trust and setting changes.
-func canMutatePrivilegedMediastreamSettings(req *http.Request, serverPassword string, prev *models.MediastreamSettings, next *models.MediastreamSettings) bool {
+func canMutatePrivilegedMediastreamSettings(req *http.Request, serverPassword string, prev *models.MediastreamSettings, next *models.MediastreamSettings, isAuthenticatedSession bool) bool {
 	if security.IsStrict() && !isRequestFromTrustedLocal(req) && privilegedMediastreamSettingsChanged(prev, next) {
 		return false
 	}
 
-	if isTrustedRequest(req, serverPassword) {
+	if isTrustedRequest(req, serverPassword, isAuthenticatedSession) {
 		return true
 	}
 
@@ -363,17 +399,17 @@ func canMutatePrivilegedMediastreamSettings(req *http.Request, serverPassword st
 	return false
 }
 
-// canUsePrivilegedExtensionManagement determines if the request can access privileged extension management based on security mode, origin, and server password.
-func canUsePrivilegedExtensionManagement(req *http.Request, serverPassword string) bool {
+// canUsePrivilegedExtensionManagement determines if the request can access privileged extension management based on security mode, origin, server password, and an authenticated multi-user session.
+func canUsePrivilegedExtensionManagement(req *http.Request, serverPassword string, isAuthenticatedSession bool) bool {
 	if security.IsStrict() && !isRequestFromTrustedLocal(req) {
 		return false
 	}
 
-	return isTrustedRequest(req, serverPassword)
+	return isTrustedRequest(req, serverPassword, isAuthenticatedSession)
 }
 
-func canConsumeMedia(req *http.Request, serverPassword string, accessAllowlist []string) bool {
-	return isRequestPermitted(req, serverPassword, accessAllowlist)
+func canConsumeMedia(req *http.Request, serverPassword string, accessAllowlist []string, isAuthenticatedSession bool) bool {
+	return isRequestPermitted(req, serverPassword, accessAllowlist, isAuthenticatedSession)
 }
 
 func (h *Handler) guardMediaConsumption(c echo.Context) error {
@@ -381,7 +417,7 @@ func (h *Handler) guardMediaConsumption(c echo.Context) error {
 		return nil
 	}
 
-	if canConsumeMedia(c.Request(), h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist) {
+	if canConsumeMedia(c.Request(), h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist, isAuthenticatedMultiUserSession(h.App, c.Request())) {
 		return nil
 	}
 
@@ -394,7 +430,7 @@ func (h *Handler) guardPrivilegedMediaPlayer(c echo.Context, settings *models.Se
 		return nil
 	}
 
-	if isTrustedRequest(c.Request(), h.App.Config.Server.Password) || !isPrivilegedMediaPlayer(settings) {
+	if isTrustedRequest(c.Request(), h.App.Config.Server.Password, isAuthenticatedMultiUserSession(h.App, c.Request())) || !isPrivilegedMediaPlayer(settings) {
 		return nil
 	}
 
@@ -411,20 +447,20 @@ func (h *Handler) guardPrivilegedTorrentClient(c echo.Context, settings *models.
 		return respondWithAbort(c, http.StatusForbidden, errStrictLocalOnlyDenied)
 	}
 
-	if isTrustedRequest(c.Request(), h.App.Config.Server.Password) || !isPrivilegedTorrentClient(settings) {
+	if isTrustedRequest(c.Request(), h.App.Config.Server.Password, isAuthenticatedMultiUserSession(h.App, c.Request())) || !isPrivilegedTorrentClient(settings) {
 		return nil
 	}
 
 	return respondWithAbort(c, http.StatusForbidden, errPrivilegedExecutionDenied)
 }
 
-// guardPrivilegedMediastream ensures that privileged mediastream actions are restricted to trusted requests or server password authorization.
+// guardPrivilegedMediastream ensures that privileged mediastream actions are restricted to trusted requests, server password authorization, or an authenticated multi-user session.
 func (h *Handler) guardPrivilegedMediastream(c echo.Context, settings *models.MediastreamSettings) error {
 	if h == nil || h.App == nil || h.App.Config == nil {
 		return nil
 	}
 
-	if isTrustedRequest(c.Request(), h.App.Config.Server.Password) || !isPrivilegedMediastream(settings) {
+	if isTrustedRequest(c.Request(), h.App.Config.Server.Password, isAuthenticatedMultiUserSession(h.App, c.Request())) || !isPrivilegedMediastream(settings) {
 		return nil
 	}
 
@@ -441,7 +477,7 @@ func (h *Handler) guardPrivilegedLocalExecution(c echo.Context) error {
 		return respondWithAbort(c, http.StatusForbidden, errStrictLocalOnlyDenied)
 	}
 
-	if isTrustedRequest(c.Request(), h.App.Config.Server.Password) {
+	if isTrustedRequest(c.Request(), h.App.Config.Server.Password, isAuthenticatedMultiUserSession(h.App, c.Request())) {
 		return nil
 	}
 
