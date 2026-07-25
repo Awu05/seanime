@@ -40,12 +40,6 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 
 	contextClientId := getContextClientId(c)
 
-	if h.App.Config.Server.Password == "" {
-		if !security.IsLax() && reqHasOriginMetadata(req) && !isRequestFromTrustedOrigin(req) && !isRequestFromAllowlistedOrigin(req, h.App.Config.Server.AccessAllowlist) {
-			return c.JSON(http.StatusForbidden, NewErrorResponse(errPrivilegedExecutionDenied))
-		}
-	}
-
 	// Extract profile identity before upgrading.
 	// Browsers send the session cookie on same-origin upgrade requests; query params are a fallback.
 	profileID := ""
@@ -65,6 +59,15 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 		if err == nil && (claims.Scope == "profile" || claims.Scope == "admin") {
 			profileID = claims.ProfileID
 			authenticated = true
+		}
+	}
+
+	// An authenticated multi-user session carries the same trust as a configured server
+	// password - without this, a valid session hosted through a reverse proxy/custom domain
+	// would still get rejected here since the origin isn't local/private/tailscale.
+	if h.App.Config.Server.Password == "" && !authenticated {
+		if !security.IsLax() && reqHasOriginMetadata(req) && !isRequestFromTrustedOrigin(req) && !isRequestFromAllowlistedOrigin(req, h.App.Config.Server.AccessAllowlist) {
+			return c.JSON(http.StatusForbidden, NewErrorResponse(errPrivilegedExecutionDenied))
 		}
 	}
 
