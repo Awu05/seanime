@@ -75,7 +75,25 @@ func isAuthenticatedMultiUserSession(app *core.App, req *http.Request) bool {
 		return false
 	}
 
-	return claims.Scope == "profile" || claims.Scope == "admin"
+	// "access" is the intermediate scope issued after admin-login/access-code but before a
+	// profile is selected (see MultiUserAuthMiddleware) - still a real, credential-checked
+	// session, not an anonymous request.
+	return claims.Scope == "profile" || claims.Scope == "admin" || claims.Scope == "access"
+}
+
+// isMultiUserBootstrapPath reports whether path is one of the credential-checked, rate-limited
+// endpoints a multi-user client must be able to reach with no session at all yet (status check,
+// initial admin setup, login, access code). These already validate their own credentials and
+// don't need the trusted-host/origin boundary on top - requiring it would make it impossible to
+// ever log in to a multi-user instance hosted behind a reverse proxy or custom domain without a
+// server password.
+func isMultiUserBootstrapPath(path string) bool {
+	for _, p := range publicPaths {
+		if path == p {
+			return true
+		}
+	}
+	return false
 }
 
 func reqHasOriginMetadata(req *http.Request) bool {
@@ -298,6 +316,10 @@ func (h *Handler) trustedLocalRequestMiddleware(next echo.HandlerFunc) echo.Hand
 
 		req := c.Request()
 		if req == nil || req.URL == nil || !isPathNeedingTrustedLocalBoundary(req.URL.Path) {
+			return next(c)
+		}
+
+		if h.App.MultiUserEnabled && isMultiUserBootstrapPath(req.URL.Path) {
 			return next(c)
 		}
 
