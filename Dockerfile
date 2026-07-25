@@ -54,7 +54,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM --platform=$TARGETPLATFORM alpine:latest AS common-base
 
 # Install common dependencies
-RUN apk add --no-cache ca-certificates tzdata curl qbittorrent-nox supervisor python3
+RUN apk add --no-cache ca-certificates tzdata curl libtorrent-rasterbar qbittorrent-nox supervisor python3
 
 # Create directories for supervisord
 RUN mkdir -p /var/log/supervisor
@@ -74,7 +74,7 @@ WORKDIR /app
 EXPOSE 43211 8081
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:43211 || exit 1
+    CMD curl -f http://localhost:43211 || exit 1
 
 CMD ["/app/entrypoint.sh"]
 
@@ -101,7 +101,7 @@ WORKDIR /app
 EXPOSE 43211 8081
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:43211 || exit 1
+    CMD curl -f http://localhost:43211 || exit 1
 
 CMD ["/app/entrypoint.sh"]
 
@@ -109,7 +109,7 @@ CMD ["/app/entrypoint.sh"]
 FROM --platform=$TARGETPLATFORM alpine:edge AS hwaccel
 
 # Install common dependencies
-RUN apk add --no-cache ca-certificates tzdata curl qbittorrent-nox supervisor python3
+RUN apk add --no-cache ca-certificates tzdata curl libtorrent-rasterbar qbittorrent-nox supervisor python3
 
 # Create directories for supervisord
 RUN mkdir -p /var/log/supervisor
@@ -145,6 +145,6 @@ WORKDIR /app
 EXPOSE 43211 8081
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:43211 || exit 1
+    CMD curl -f http://localhost:43211 || exit 1
 
 CMD ["/app/entrypoint.sh"]
