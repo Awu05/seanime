@@ -8,7 +8,6 @@ import (
 	"seanime/internal/extension"
 	"seanime/internal/manga"
 	manga_providers "seanime/internal/manga/providers"
-	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/util/result"
 	"strconv"
 	"strings"
@@ -23,6 +22,131 @@ var (
 	baseMangaCache    = result.NewCache[int, *anilist.BaseManga]()
 	mangaDetailsCache = result.NewCache[int, *anilist.MangaDetailsById_Media]()
 )
+
+// HandleGetMangaPreferences
+//
+//	@summary returns server-backed manga source preferences.
+//	@route /api/v1/manga/preferences [GET]
+//	@returns manga.MangaPreferences
+func (h *Handler) HandleGetMangaPreferences(c echo.Context) error {
+	preferences, err := h.App.MangaRepository.GetMangaPreferences()
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, preferences)
+}
+
+// HandleImportMangaPreferences
+//
+//	@summary imports client manga preferences missing from the server.
+//	@route /api/v1/manga/preferences/import [POST]
+//	@returns manga.MangaPreferences
+func (h *Handler) HandleImportMangaPreferences(c echo.Context) error {
+	var body manga.MangaPreferences
+	if err := c.Bind(&body); err != nil {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, err)
+	}
+	preferences, err := h.App.MangaRepository.ImportPreferences(&body)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, preferences)
+}
+
+// HandlePatchMangaPreference
+//
+//	@summary updates a manga source preference.
+//	@route /api/v1/manga/preferences/{mediaId} [PATCH]
+//	@returns manga.MangaEntryPreference
+func (h *Handler) HandlePatchMangaPreference(c echo.Context) error {
+	mediaId, err := strconv.Atoi(c.Param("mediaId"))
+	if err != nil || mediaId <= 0 {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, errors.New("invalid media id"))
+	}
+
+	var body manga.MangaPreferencePatch
+	if err := c.Bind(&body); err != nil {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, err)
+	}
+	preference, err := h.App.MangaRepository.PatchPreference(mediaId, &body, true)
+	if err != nil {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, err)
+	}
+	return h.RespondWithData(c, preference)
+}
+
+// HandleStartMangaSourceRefresh
+//
+//	@summary starts a background manga source refresh.
+//	@route /api/v1/manga/source-refresh [POST]
+//	@returns manga.MangaSourceRefreshJob
+func (h *Handler) HandleStartMangaSourceRefresh(c echo.Context) error {
+	type body struct {
+		Mode     manga.MangaSourceRefreshMode `json:"mode"`
+		MediaIds []int                        `json:"mediaIds,omitempty"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, err)
+	}
+	if !manga.IsMangaSourceRefreshModeValid(b.Mode) {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, errors.New("invalid manga source refresh mode"))
+	}
+	for _, mediaId := range b.MediaIds {
+		if mediaId <= 0 {
+			return h.RespondWithStatusError(c, http.StatusBadRequest, errors.New("invalid media id"))
+		}
+	}
+	clientId := getContextClientId(c)
+	job, err := h.App.MangaRepository.GetActiveMangaSourceRefresh(clientId)
+	if err != nil {
+		return h.RespondWithStatusError(c, http.StatusConflict, err)
+	}
+	if job != nil {
+		return h.RespondWithData(c, job)
+	}
+	collection, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	job, err = h.App.MangaRepository.StartMangaSourceRefresh(clientId, b.Mode, collection, b.MediaIds...)
+	if err != nil {
+		if errors.Is(err, manga.ErrMangaSourceRefreshConflict) {
+			return h.RespondWithStatusError(c, http.StatusConflict, err)
+		}
+		if errors.Is(err, manga.ErrNoMangaProviders) {
+			return h.RespondWithStatusError(c, http.StatusBadRequest, err)
+		}
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, job)
+}
+
+// HandleGetMangaSourceRefresh
+//
+//	@summary returns the client's active or latest manga source refresh.
+//	@route /api/v1/manga/source-refresh [GET]
+//	@returns manga.MangaSourceRefreshJob
+func (h *Handler) HandleGetMangaSourceRefresh(c echo.Context) error {
+	return h.RespondWithData(c, h.App.MangaRepository.GetMangaSourceRefresh(getContextClientId(c)))
+}
+
+// HandleStopMangaSourceRefresh
+//
+//	@summary stops or dismisses the client's manga source refresh.
+//	@route /api/v1/manga/source-refresh [DELETE]
+//	@returns manga.MangaSourceRefreshJob
+func (h *Handler) HandleStopMangaSourceRefresh(c echo.Context) error {
+	job, err := h.App.MangaRepository.StopMangaSourceRefresh(getContextClientId(c))
+	if err != nil {
+		if errors.Is(err, manga.ErrMangaSourceRefreshConflict) {
+			return h.RespondWithStatusError(c, http.StatusConflict, err)
+		}
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, job)
+}
 
 // HandleGetAnilistMangaCollection
 //
@@ -64,6 +188,39 @@ func (h *Handler) HandleGetRawAnilistMangaCollection(c echo.Context) error {
 	}
 
 	return h.RespondWithData(c, mangaCollection)
+}
+
+var mangaTagsCache *anilist.MediaTagMap
+
+// HandleGetRawAnilistMangaCollectionTags
+//
+//	@summary returns the AniList tags for the user's raw manga collection.
+//	@desc This runs a dedicated AniList tags query used by the lists page filters.
+//	@route /api/v1/manga/anilist/collection/raw/tags [GET]
+//	@returns anilist.MediaTagMap
+func (h *Handler) HandleGetRawAnilistMangaCollectionTags(c echo.Context) error {
+	h.App.OnRefreshAnilistCollectionFuncs.Set("HandleGetRawAnilistMangaCollectionTags", func() {
+		mangaTagsCache = nil
+	})
+
+	if mangaTagsCache != nil {
+		return h.RespondWithData(c, *mangaTagsCache)
+	}
+
+	userName := h.App.GetUsername()
+	if userName == "" || h.App.GetUser().IsSimulated {
+		return h.RespondWithData(c, anilist.MediaTagMap{})
+	}
+
+	ret, err := h.App.AnilistPlatformRef.Get().GetAnilistClient().MangaCollectionTags(c.Request().Context(), &userName)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	tags := anilist.MediaTagMapFromMangaCollectionTags(ret)
+	mangaTagsCache = &tags
+
+	return h.RespondWithData(c, tags)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -359,6 +516,7 @@ func (h *Handler) HandleAnilistListManga(c echo.Context) error {
 		Sort                []*anilist.MediaSort   `json:"sort,omitempty"`
 		Status              []*anilist.MediaStatus `json:"status,omitempty"`
 		Genres              []*string              `json:"genres,omitempty"`
+		Tags                []*string              `json:"tags,omitempty"`
 		AverageScoreGreater *int                   `json:"averageScore_greater,omitempty"`
 		Year                *int                   `json:"year,omitempty"`
 		CountryOfOrigin     *string                `json:"countryOfOrigin,omitempty"`
@@ -376,13 +534,14 @@ func (h *Handler) HandleAnilistListManga(c echo.Context) error {
 		*p.PerPage = 20
 	}
 
-	isAdult := false
+	var isAdult *bool = nil
 	if p.IsAdult != nil {
 		enableAdult := false
 		if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil && currentSettings.GetAnilist() != nil {
 			enableAdult = currentSettings.GetAnilist().EnableAdultContent
 		}
-		isAdult = *p.IsAdult && enableAdult
+		val := *p.IsAdult && enableAdult
+		isAdult = &val
 	}
 
 	cacheKey := anilist.ListMangaCacheKey(
@@ -392,12 +551,13 @@ func (h *Handler) HandleAnilistListManga(c echo.Context) error {
 		p.Sort,
 		p.Status,
 		p.Genres,
+		p.Tags,
 		p.AverageScoreGreater,
 		nil,
 		p.Year,
 		p.Format,
 		p.CountryOfOrigin,
-		&isAdult,
+		isAdult,
 	)
 
 	cached, ok := anilistListMangaCache.Get(cacheKey)
@@ -406,18 +566,19 @@ func (h *Handler) HandleAnilistListManga(c echo.Context) error {
 	}
 
 	ret, err := anilist.ListMangaM(
-		shared_platform.NewCacheLayer(h.App.AnilistClientRef),
+		h.App.AnilistPlatformRef.Get().GetAnilistClient(),
 		p.Page,
 		p.Search,
 		p.PerPage,
 		p.Sort,
 		p.Status,
 		p.Genres,
+		p.Tags,
 		p.AverageScoreGreater,
 		p.Year,
 		p.Format,
 		p.CountryOfOrigin,
-		&isAdult,
+		isAdult,
 		h.App.Logger,
 		h.App.GetUserAnilistToken(),
 	)
@@ -494,6 +655,32 @@ func (h *Handler) HandleMangaManualSearch(c echo.Context) error {
 	}
 
 	return h.RespondWithData(c, ret)
+}
+
+// HandlePreviewMangaMapping
+//
+//	@summary returns a chapter summary for a manual manga mapping.
+//	@route /api/v1/manga/manual-mapping/preview [POST]
+//	@returns manga.MappingPreview
+func (h *Handler) HandlePreviewMangaMapping(c echo.Context) error {
+	type body struct {
+		Provider string `json:"provider"`
+		MangaId  string `json:"mangaId"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, err)
+	}
+	if b.Provider == "" || b.MangaId == "" {
+		return h.RespondWithStatusError(c, http.StatusBadRequest, errors.New("provider and manga id are required"))
+	}
+
+	preview, err := h.App.MangaRepository.PreviewMapping(b.Provider, b.MangaId)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, preview)
 }
 
 // HandleMangaManualMapping
@@ -582,6 +769,9 @@ func (h *Handler) HandleRemoveMangaMapping(c echo.Context) error {
 //	@route /api/v1/manga/local-page/{path} [GET]
 //	@returns manga.PageContainer
 func (h *Handler) HandleGetLocalMangaPage(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
 
 	path := c.Param("path")
 	path, err := url.PathUnescape(path)
@@ -605,6 +795,10 @@ func (h *Handler) HandleGetLocalMangaPage(c echo.Context) error {
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
+
+	headers := c.Response().Header()
+	headers.Set("Access-Control-Allow-Origin", "*")
+	headers.Set("Cross-Origin-Resource-Policy", "cross-origin")
 
 	return c.Stream(http.StatusOK, "image/jpeg", reader)
 }

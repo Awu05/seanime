@@ -10,6 +10,7 @@ export const DEFAULT_DOH_PROVIDER = ""
 export const DEFAULT_MPV_TYPE = "socket"
 
 export const enum TORRENT_CLIENT {
+    SEANIME = "seanime",
     QBITTORRENT = "qbittorrent",
     TRANSMISSION = "transmission",
     NONE = "none",
@@ -23,6 +24,7 @@ export const enum DEBRID_SERVICE {
     TORBOX = "torbox",
     REALDEBRID = "realdebrid",
     ALLDEBRID = "alldebrid",
+    PREMIUMIZE = "premiumize",
 }
 
 export const _gettingStartedSchema = z.object({
@@ -65,6 +67,11 @@ export const settingsSchema = z.object({
     transmissionPort: z.number().optional().default(9091),
     transmissionUsername: z.string().optional().default(""),
     transmissionPassword: z.string().optional().default(""),
+    seanimePort: z.number().optional().default(50007),
+    seanimeMaxConnections: z.number().optional().default(50),
+    seanimeDownloadLimit: z.number().optional().default(0),
+    seanimeUploadLimit: z.number().optional().default(0),
+    seanimeMaxActiveDownloads: z.number().optional().default(3),
     hideAudienceScore: z.boolean().optional().default(false),
     autoUpdateProgress: z.boolean().optional().default(false),
     disableUpdateCheck: z.boolean().optional().default(false),
@@ -117,9 +124,22 @@ export const settingsSchema = z.object({
     vcTranslateApiKey: z.string().optional().default(""),
     vcTranslateProvider: z.string().optional().default(""),
     vcTranslateTargetLanguage: z.string().optional().default(""),
+    vcTranslateBaseUrl: z.string().optional().default(""),
+    vcTranslateModel: z.string().optional().default(""),
+    mpvPrismLogging: z.boolean().optional().default(false),
+    mpvPrismEnabled: z.boolean().optional().default(false),
+    screenshotDir: z.string().optional().default(""),
     scannerUseLegacyMatching: z.boolean().optional().default(false),
     scannerConfig: z.string().optional().default(""),
     updateChannel: z.string().optional().default("github"),
+    enableExtensionSecureMode: z.boolean().optional().default(false),
+    defaultPlaybackSource: z.string().optional().default(""),
+    showTorrentAvailability: z.boolean().optional().default(false),
+    hideAnimeSpoilers: z.boolean().optional().default(false),
+    hideAnimeSpoilerThumbnails: z.boolean().optional().default(true),
+    hideAnimeSpoilerTitles: z.boolean().optional().default(true),
+    hideAnimeSpoilerDescriptions: z.boolean().optional().default(true),
+    hideAnimeSpoilerSkipNextEpisode: z.boolean().optional().default(false),
 })
 
 export const gettingStartedSchema = _gettingStartedSchema.extend(settingsSchema.shape)
@@ -152,6 +172,9 @@ export const getDefaultSettings = (data: z.infer<typeof gettingStartedSchema>): 
         scannerUseLegacyMatching: false,
         scannerConfig: "",
         updateChannel: "github",
+        enableExtensionSecureMode: false,
+        defaultPlaybackSource: "",
+        showTorrentAvailability: false,
     },
     nakama: {
         enabled: false,
@@ -189,6 +212,11 @@ export const getDefaultSettings = (data: z.infer<typeof gettingStartedSchema>): 
         vcTranslateApiKey: "",
         vcTranslateProvider: "",
         vcTranslateTargetLanguage: "",
+        vcTranslateBaseUrl: "",
+        vcTranslateModel: "",
+        mpvPrismLogging: data.mpvPrismLogging ?? false,
+        mpvPrismEnabled: data.mpvPrismEnabled ?? false,
+        screenshotDir: data.screenshotDir || "",
     },
     discord: {
         enableRichPresence: data.enableRichPresence,
@@ -213,6 +241,11 @@ export const getDefaultSettings = (data: z.infer<typeof gettingStartedSchema>): 
         transmissionPort: data.transmissionPort,
         transmissionUsername: data.transmissionUsername,
         transmissionPassword: data.transmissionPassword,
+        seanimePort: data.seanimePort,
+        seanimeMaxConnections: data.seanimeMaxConnections,
+        seanimeDownloadLimit: data.seanimeDownloadLimit,
+        seanimeUploadLimit: data.seanimeUploadLimit,
+        seanimeMaxActiveDownloads: data.seanimeMaxActiveDownloads,
         showActiveTorrentCount: false,
         hideTorrentList: false,
     },

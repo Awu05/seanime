@@ -1,4 +1,6 @@
-import { useGetDebridSettings, useSaveDebridSettings } from "@/api/hooks/debrid.hooks"
+import { Models_DummyDebridSettings } from "@/api/generated/types"
+import { useGetDebridSettings, useGetDummyDebridSettings, useSaveDebridSettings, useSaveDummyDebridSettings } from "@/api/hooks/debrid.hooks"
+import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets.ts"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { AutoSelectProfileButton } from "@/app/(main)/settings/_components/autoselect-profile-form"
 import { SettingsCard, SettingsPageHeader } from "@/app/(main)/settings/_components/settings-card"
@@ -7,6 +9,7 @@ import { SeaLink } from "@/components/shared/sea-link"
 import { Alert } from "@/components/ui/alert"
 import { defineSchema, Field, Form } from "@/components/ui/form"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { WSEvents } from "@/lib/server/ws-events.ts"
 import React from "react"
 import { UseFormReturn } from "react-hook-form"
 import { HiOutlineServerStack } from "react-icons/hi2"
@@ -25,6 +28,30 @@ const debridSettingsSchema = defineSchema(({ z }) => z.object({
     streamPreferredResolution: z.string(),
 }))
 
+const dummyDebridSettingsSchema = defineSchema(({ z }) => z.object({
+    enabled: z.boolean().default(true),
+    profileName: z.string().default(""),
+    fallbackFilePath: z.string().default(""),
+    filesJson: z.string().superRefine((value, ctx) => {
+        try {
+            const parsed = JSON.parse(value || "[]")
+            if (!Array.isArray(parsed)) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Expected a JSON array" })
+            }
+        }
+        catch {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid JSON" })
+        }
+    }),
+    cached: z.boolean().default(true),
+    readyDelayMs: z.number().min(0).default(0),
+    progressIntervalMs: z.number().min(0).default(0),
+    firstByteDelayMs: z.number().min(0).default(0),
+    bandwidthBytesPerSecond: z.number().min(0).default(0),
+    chunkSize: z.number().min(0).default(0),
+    jitterMs: z.number().min(0).default(0),
+}))
+
 type DebridSettingsProps = {
     children?: React.ReactNode
 }
@@ -37,10 +64,32 @@ export function DebridSettings(props: DebridSettingsProps) {
     } = props
 
     const serverStatus = useServerStatus()
-    const { data: settings, isLoading } = useGetDebridSettings()
+    const { data: settings, isLoading, refetch } = useGetDebridSettings()
     const { mutate, isPending } = useSaveDebridSettings()
+    const dummyDebridEnabled = !!serverStatus?.featureFlags?.dummyDebrid
+    const [selectedProvider, setSelectedProvider] = React.useState(settings?.provider || "-")
+    const providerOptions = React.useMemo(() => [
+        { label: "None", value: "-" },
+        { label: "TorBox", value: "torbox" },
+        { label: "Real-Debrid", value: "realdebrid" },
+        { label: "AllDebrid", value: "alldebrid" },
+        { label: "StremThru", value: "stremthru" },
+        { label: "Premiumize", value: "premiumize" },
+        ...(dummyDebridEnabled ? [{ label: "Dummy Debrid", value: "dummy" }] : []),
+    ], [dummyDebridEnabled])
+
+    useWebsocketMessageListener({
+        type: WSEvents.SETTINGS_CHANGED,
+        onMessage: () => {
+            refetch()
+        },
+    })
 
     const formRef = React.useRef<UseFormReturn<any>>(null)
+
+    React.useEffect(() => {
+        setSelectedProvider(settings?.provider || "-")
+    }, [settings?.provider])
 
     if (isLoading) return <LoadingSpinner />
 
@@ -54,6 +103,7 @@ export function DebridSettings(props: DebridSettingsProps) {
             />
 
             <Form
+                key={settings?.updatedAt ?? "debrid-settings"}
                 schema={debridSettingsSchema}
                 mRef={formRef}
                 onSubmit={data => {
@@ -69,6 +119,7 @@ export function DebridSettings(props: DebridSettingsProps) {
                                 ...settings,
                                 ...data,
                                 provider,
+                                apiKey: provider === "dummy" ? "" : data.apiKey,
                                 apiUrl: isStremthru ? data.apiUrl : "",
                                 storeName: isStremthru ? (data.storeName === "-" ? "" : data.storeName) : "",
                                 storeApiKey: isStremthru ? data.storeApiKey : "",
@@ -95,10 +146,11 @@ export function DebridSettings(props: DebridSettingsProps) {
                     streamAutoSelect: settings?.streamAutoSelect ?? false,
                     streamPreferredResolution: settings?.streamPreferredResolution || "-",
                 }}
-                stackClass="space-y-4"
+                stackClass="space-y-8"
             >
                 {(f) => (
                     <>
+                        <ProviderWatch provider={f.watch("provider")} onChange={setSelectedProvider} />
                         <SettingsIsDirty />
                         <SettingsCard>
                             <Field.Switch
@@ -121,15 +173,9 @@ export function DebridSettings(props: DebridSettingsProps) {
                         </SettingsCard>
 
 
-                        <SettingsCard>
+                        <SettingsCard title="Provider">
                             <Field.Select
-                                options={[
-                                    { label: "None", value: "-" },
-                                    { label: "TorBox", value: "torbox" },
-                                    { label: "Real-Debrid", value: "realdebrid" },
-                                    { label: "AllDebrid", value: "alldebrid" },
-                                    { label: "StremThru", value: "stremthru" },
-                                ]}
+                                options={providerOptions}
                                 name="provider"
                                 label="Provider"
                             />
@@ -177,7 +223,7 @@ export function DebridSettings(props: DebridSettingsProps) {
                                 </>
                             )}
 
-                            {f.watch("provider") !== "stremthru" && (
+                            {f.watch("provider") !== "stremthru" && f.watch("provider") !== "dummy" && (
                                 <Field.Text
                                     name="apiKey"
                                     label="API Key"
@@ -196,8 +242,8 @@ export function DebridSettings(props: DebridSettingsProps) {
                             <Field.Switch
                                 side="right"
                                 name="includeDebridStreamInLibrary"
-                                label="Include in anime library"
-                                help="Add non-downloaded shows that are in your currently watching list to the anime library."
+                                label="Include streaming in anime lists"
+                                help="Show currently watching streaming titles in your anime lists."
                             />
                         </SettingsCard>
 
@@ -242,6 +288,140 @@ export function DebridSettings(props: DebridSettingsProps) {
                 )}
             </Form>
 
+            {dummyDebridEnabled && selectedProvider === "dummy" && <DummyDebridProfileEditor />}
+
         </div>
     )
+}
+
+function ProviderWatch(props: { provider: string, onChange: (provider: string) => void }) {
+    React.useEffect(() => {
+        props.onChange(props.provider)
+    }, [props.provider, props.onChange])
+
+    return null
+}
+
+function DummyDebridProfileEditor() {
+    const { data: settings, isLoading } = useGetDummyDebridSettings(true)
+    const { mutate, isPending } = useSaveDummyDebridSettings()
+    const formRef = React.useRef<UseFormReturn<any>>(null)
+
+    if (isLoading) return <LoadingSpinner />
+    if (!settings) return null
+
+    return (
+        <Form
+            key={settings.updatedAt ?? "dummy-debrid-settings"}
+            schema={dummyDebridSettingsSchema}
+            mRef={formRef}
+            onSubmit={data => {
+                const { filesJson, ...values } = data
+                const nextSettings: Models_DummyDebridSettings = {
+                    ...settings,
+                    ...values,
+                    files: JSON.parse(filesJson || "[]") as Models_DummyDebridSettings["files"],
+                }
+
+                mutate({ settings: nextSettings }, {
+                    onSuccess: () => {
+                        formRef.current?.reset(formRef.current.getValues())
+                        toast.success("Dummy profile saved")
+                    },
+                })
+            }}
+            defaultValues={dummyDebridDefaultValues(settings)}
+            stackClass="space-y-4"
+        >
+            {() => (
+                <>
+                    <SettingsIsDirty />
+                    <SettingsCard title="Dummy Debrid Profile">
+                        <Field.Switch
+                            side="right"
+                            name="enabled"
+                            label="Enable profile"
+                        />
+                        <Field.Text
+                            name="profileName"
+                            label="Profile name"
+                        />
+                        <Field.Text
+                            name="fallbackFilePath"
+                            label="Fallback MKV path"
+                        />
+                        <Field.Switch
+                            side="right"
+                            name="cached"
+                            label="Cache available"
+                        />
+                        <Field.Textarea
+                            name="filesJson"
+                            label="Files"
+                            className="min-h-[220px] font-mono text-sm"
+                        />
+                    </SettingsCard>
+
+                    <SettingsCard title="Dummy Network">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Field.Number
+                                name="readyDelayMs"
+                                label="Ready delay (ms)"
+                                min={0}
+                                step={100}
+                            />
+                            <Field.Number
+                                name="progressIntervalMs"
+                                label="Progress interval (ms)"
+                                min={0}
+                                step={50}
+                            />
+                            <Field.Number
+                                name="firstByteDelayMs"
+                                label="First byte delay (ms)"
+                                min={0}
+                                step={50}
+                            />
+                            <Field.Number
+                                name="bandwidthBytesPerSecond"
+                                label="Bandwidth (B/s)"
+                                min={0}
+                                step={1024}
+                            />
+                            <Field.Number
+                                name="chunkSize"
+                                label="Chunk size (bytes)"
+                                min={0}
+                                step={1024}
+                            />
+                            <Field.Number
+                                name="jitterMs"
+                                label="Jitter (ms)"
+                                min={0}
+                                step={10}
+                            />
+                        </div>
+                    </SettingsCard>
+
+                    <SettingsSubmitButton isPending={isPending} />
+                </>
+            )}
+        </Form>
+    )
+}
+
+function dummyDebridDefaultValues(settings: Models_DummyDebridSettings) {
+    return {
+        enabled: settings.enabled,
+        profileName: settings.profileName,
+        fallbackFilePath: settings.fallbackFilePath,
+        filesJson: JSON.stringify(settings.files ?? [], null, 2),
+        cached: settings.cached,
+        readyDelayMs: settings.readyDelayMs,
+        progressIntervalMs: settings.progressIntervalMs,
+        firstByteDelayMs: settings.firstByteDelayMs,
+        bandwidthBytesPerSecond: settings.bandwidthBytesPerSecond,
+        chunkSize: settings.chunkSize,
+        jitterMs: settings.jitterMs,
+    }
 }

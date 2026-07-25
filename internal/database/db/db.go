@@ -108,8 +108,10 @@ func migrateTables(db *gorm.DB) error {
 		&models.MangaMapping{},
 		&models.OnlinestreamMapping{},
 		&models.DebridSettings{},
+		&models.DummyDebridSettings{},
 		&models.DebridTorrentItem{},
 		&models.DebridLocalDownload{},
+		&models.DebridTransferHash{},
 		&models.PluginData{},
 		&models.CustomSourceCollection{},
 		&models.CustomSourceIdentifier{},
@@ -119,6 +121,7 @@ func migrateTables(db *gorm.DB) error {
 		&models.InstanceConfig{},
 		&models.ProfileSettings{},
 		&models.LibraryPath{},
+		&models.LocalTorrent{},
 		//&models.MangaChapterContainer{},
 	)
 	if err != nil {

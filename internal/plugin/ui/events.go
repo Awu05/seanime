@@ -37,15 +37,21 @@ const (
 	ClientActionRenderAnimePageButtonsEvent            ClientEventType = "action:anime-page-buttons:render"              // When the client requests the buttons to display on the anime page
 	ClientActionRenderAnimePageDropdownItemsEvent      ClientEventType = "action:anime-page-dropdown-items:render"       // When the client requests the dropdown items to display on the anime page
 	ClientActionRenderMangaPageButtonsEvent            ClientEventType = "action:manga-page-buttons:render"              // When the client requests the buttons to display on the manga page
+	ClientActionRenderMangaPageDropdownItemsEvent      ClientEventType = "action:manga-page-dropdown-items:render"       // When the client requests the dropdown items to display on the manga page
+	ClientActionRenderMangaLibraryDropdownItemsEvent   ClientEventType = "action:manga-library-dropdown-items:render"    // When the client requests the dropdown items to display on the manga library
 	ClientActionRenderMediaCardContextMenuItemsEvent   ClientEventType = "action:media-card-context-menu-items:render"   // When the client requests the context menu items to display on the media card
 	ClientActionRenderAnimeLibraryDropdownItemsEvent   ClientEventType = "action:anime-library-dropdown-items:render"    // When the client requests the dropdown items to display on the anime library
 	ClientActionRenderEpisodeCardContextMenuItemsEvent ClientEventType = "action:episode-card-context-menu-items:render" // When the client requests the context menu items to display on the episode card
 	ClientActionRenderEpisodeGridItemMenuItemsEvent    ClientEventType = "action:episode-grid-item-menu-items:render"    // When the client requests the context menu items to display on the episode grid item
 	ClientActionClickedEvent                           ClientEventType = "action:clicked"                                // When the user clicks on an action
-	ClientFormSubmittedEvent                           ClientEventType = "form:submitted"                                // When the form registered by the tray is submitted
-	ClientScreenChangedEvent                           ClientEventType = "screen:changed"                                // When the current screen changes
-	ClientEventHandlerTriggeredEvent                   ClientEventType = "handler:triggered"                             // When a custom event registered by the plugin is triggered
-	ClientFieldRefSendValueEvent                       ClientEventType = "field-ref:send-value"                          // When the client sends the value of a field that has a ref
+	ClientAnimeEntryEpisodeTabsRenderEvent             ClientEventType = "anime:entry-episode-tabs:render"
+	ClientAnimeEntryEpisodeTabOpenEvent                ClientEventType = "anime:entry-episode-tab:open"
+	ClientAnimeEntryEpisodeTabSelectEpisodeEvent       ClientEventType = "anime:entry-episode-tab:select-episode"
+	ClientAnimeEntryEpisodeTabStateChangedEvent        ClientEventType = "anime:entry-episode-tab:state-changed"
+	ClientFormSubmittedEvent                           ClientEventType = "form:submitted"       // When the form registered by the tray is submitted
+	ClientScreenChangedEvent                           ClientEventType = "screen:changed"       // When the current screen changes
+	ClientEventHandlerTriggeredEvent                   ClientEventType = "handler:triggered"    // When a custom event registered by the plugin is triggered
+	ClientFieldRefSendValueEvent                       ClientEventType = "field-ref:send-value" // When the client sends the value of a field that has a ref
 
 	ClientDOMQueryResultEvent    ClientEventType = "dom:query-result"     // Result of a DOM query
 	ClientDOMQueryOneResultEvent ClientEventType = "dom:query-one-result" // Result of a DOM query for one element
@@ -82,10 +88,30 @@ type ClientWebviewPostMessageEventPayload struct {
 type ClientActionRenderAnimePageButtonsEventPayload struct{}
 type ClientActionRenderAnimePageDropdownItemsEventPayload struct{}
 type ClientActionRenderMangaPageButtonsEventPayload struct{}
+type ClientActionRenderMangaPageDropdownItemsEventPayload struct{}
+type ClientActionRenderMangaLibraryDropdownItemsEventPayload struct{}
 type ClientActionRenderMediaCardContextMenuItemsEventPayload struct{}
 type ClientActionRenderAnimeLibraryDropdownItemsEventPayload struct{}
 type ClientActionRenderEpisodeCardContextMenuItemsEventPayload struct{}
 type ClientActionRenderEpisodeGridItemMenuItemsEventPayload struct{}
+type ClientAnimeEntryEpisodeTabsRenderEventPayload struct {
+	MediaID int `json:"mediaId"`
+}
+
+type ClientAnimeEntryEpisodeTabOpenEventPayload struct {
+	MediaID int `json:"mediaId"`
+}
+
+type ClientAnimeEntryEpisodeTabSelectEpisodeEventPayload struct {
+	MediaID       int         `json:"mediaId"`
+	EpisodeNumber int         `json:"episodeNumber"`
+	AniDbEpisode  string      `json:"aniDbEpisode,omitempty"`
+	Episode       interface{} `json:"episode,omitempty"`
+}
+
+type ClientAnimeEntryEpisodeTabStateChangedEventPayload struct {
+	IsOpen bool `json:"isOpen"`
+}
 
 type ClientListCommandPalettesEventPayload struct{}
 
@@ -211,10 +237,14 @@ const (
 	ServerActionRenderAnimePageButtonsEvent            ServerEventType = "action:anime-page-buttons:updated"              // When the server renders the anime page buttons
 	ServerActionRenderAnimePageDropdownItemsEvent      ServerEventType = "action:anime-page-dropdown-items:updated"       // When the server renders the anime page dropdown items
 	ServerActionRenderMangaPageButtonsEvent            ServerEventType = "action:manga-page-buttons:updated"              // When the server renders the manga page buttons
+	ServerActionRenderMangaPageDropdownItemsEvent      ServerEventType = "action:manga-page-dropdown-items:updated"       // When the server renders the manga page dropdown items
+	ServerActionRenderMangaLibraryDropdownItemsEvent   ServerEventType = "action:manga-library-dropdown-items:updated"    // When the server renders the manga library dropdown items
 	ServerActionRenderMediaCardContextMenuItemsEvent   ServerEventType = "action:media-card-context-menu-items:updated"   // When the server renders the media card context menu items
 	ServerActionRenderEpisodeCardContextMenuItemsEvent ServerEventType = "action:episode-card-context-menu-items:updated" // When the server renders the episode card context menu items
 	ServerActionRenderEpisodeGridItemMenuItemsEvent    ServerEventType = "action:episode-grid-item-menu-items:updated"    // When the server renders the episode grid item menu items
 	ServerActionRenderAnimeLibraryDropdownItemsEvent   ServerEventType = "action:anime-library-dropdown-items:updated"    // When the server renders the anime library dropdown items
+	ServerAnimeEntryEpisodeTabsUpdatedEvent            ServerEventType = "anime:entry-episode-tabs:updated"
+	ServerAnimeEntryEpisodeTabEpisodeCollectionEvent   ServerEventType = "anime:entry-episode-tab:episode-collection"
 	ServerFormResetEvent                               ServerEventType = "form:reset"
 	ServerFormSetValuesEvent                           ServerEventType = "form:set-values"
 	ServerFieldRefSetValueEvent                        ServerEventType = "field-ref:set-value" // Set the value of a field (not in a form)
@@ -231,6 +261,10 @@ const (
 	ServerDOMManipulateEvent      ServerEventType = "dom:manipulate"   // When the server manipulates a DOM element
 	ServerDOMObserveInViewEvent   ServerEventType = "dom:observe-in-view"
 	ServerDOMGetViewportSizeEvent ServerEventType = "dom:get-viewport-size"
+
+	ServerDOMClipboardWriteEvent ServerEventType = "dom:clipboard:write"
+	ServerDebugLogEvent          ServerEventType = "debug:log"
+	ServerDebugClearEvent        ServerEventType = "debug:clear"
 )
 
 type ServerTrayUpdatedEventPayload struct {
@@ -335,6 +369,14 @@ type ServerActionRenderMangaPageButtonsEventPayload struct {
 	Buttons interface{} `json:"buttons"`
 }
 
+type ServerActionRenderMangaPageDropdownItemsEventPayload struct {
+	Items interface{} `json:"items"`
+}
+
+type ServerActionRenderMangaLibraryDropdownItemsEventPayload struct {
+	Items interface{} `json:"items"`
+}
+
 type ServerActionRenderMediaCardContextMenuItemsEventPayload struct {
 	Items interface{} `json:"items"`
 }
@@ -349,6 +391,14 @@ type ServerActionRenderEpisodeCardContextMenuItemsEventPayload struct {
 
 type ServerActionRenderEpisodeGridItemMenuItemsEventPayload struct {
 	Items interface{} `json:"items"`
+}
+
+type ServerAnimeEntryEpisodeTabsUpdatedEventPayload struct {
+	Tabs interface{} `json:"tabs"`
+}
+
+type ServerAnimeEntryEpisodeTabEpisodeCollectionEventPayload struct {
+	EpisodeCollection interface{} `json:"episodeCollection"`
 }
 
 type ServerScreenReloadEventPayload struct{}
@@ -369,6 +419,19 @@ type ServerCommandPaletteSetInputEventPayload struct {
 }
 
 type ServerScreenGetCurrentEventPayload struct{}
+
+type ServerDOMClipboardWriteEventPayload struct {
+	Text string `json:"text"`
+}
+
+type ServerDebugLogEventPayload struct {
+	At      int64         `json:"at"`
+	Level   string        `json:"level"`
+	Message string        `json:"message"`
+	Values  []interface{} `json:"values,omitempty"`
+}
+
+type ServerDebugClearEventPayload struct{}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

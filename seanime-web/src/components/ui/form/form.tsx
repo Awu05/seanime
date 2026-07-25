@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { NoInfer } from "@tanstack/react-query"
 import * as React from "react"
 import { FieldErrors, FieldValues, FormProvider, useForm, UseFormProps, UseFormReturn, WatchObserver } from "react-hook-form"
 import { z } from "zod"
@@ -52,7 +51,7 @@ export type FormProps<Schema extends z.ZodObject<z.ZodRawShape> = z.ZodObject<z.
     /**
      * Ref to the form element.
      */
-    formRef?: React.RefObject<HTMLFormElement>
+    formRef?: React.RefObject<HTMLFormElement | null>
 
     children?: MaybeRenderProp<UseFormReturn<NoInfer<z.infer<Schema>>>>
     /**

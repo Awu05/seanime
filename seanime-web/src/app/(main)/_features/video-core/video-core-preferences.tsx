@@ -1,11 +1,15 @@
 import { useSaveMediaPlayerSettings } from "@/api/hooks/settings.hooks"
+import { getSkipPatternError } from "@/app/(main)/_features/media-core/media-core-chapters"
+import { mediaCoreDefaultPreferences, mediaCorePreferencesAtom } from "@/app/(main)/_features/media-core/media-core-preferences"
 import { vc_subtitleManager } from "@/app/(main)/_features/video-core/video-core"
 import { vc_mediaCaptionsManager } from "@/app/(main)/_features/video-core/video-core"
 import { vc_audioManager } from "@/app/(main)/_features/video-core/video-core"
 import { VideoCoreChapterCue } from "@/app/(main)/_features/video-core/video-core"
+import { vc_videoElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_isMuted } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_volume } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_isFullscreen } from "@/app/(main)/_features/video-core/video-core-atoms"
+import { vc_miniPlayer } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_containerElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_fullscreenManager } from "@/app/(main)/_features/video-core/video-core-fullscreen"
 import { useVideoCoreInSight } from "@/app/(main)/_features/video-core/video-core-in-sight"
@@ -25,7 +29,7 @@ import {
     VideoCoreKeybindings,
 } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { vc_dispatchAction } from "@/app/(main)/_features/video-core/video-core.utils"
-import { AlphaBadge } from "@/components/shared/beta-badge"
+import { DirectorySelector } from "@/components/shared/directory-selector"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/components/ui/core/styling"
 import { defineSchema, Field, Form } from "@/components/ui/form"
@@ -35,6 +39,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TextInput } from "@/components/ui/text-input"
 import { logger } from "@/lib/helpers/debug"
+import { upath } from "@/lib/helpers/upath"
 import { atom, useAtom, useAtomValue } from "jotai"
 import { useSetAtom } from "jotai/react"
 import React, { useCallback, useEffect, useRef, useState } from "react"
@@ -61,11 +66,20 @@ const tabContentClass = cn(
     "space-y-4 animate-in fade-in-0 duration-300",
 )
 
+function isEditableKeyboardTarget(target: EventTarget | null) {
+    if (!(target instanceof Element)) return false
+    if (target instanceof HTMLElement && target.isContentEditable) return true
+
+    return !!target.closest("input, textarea, select, [contenteditable='true'], [role='textbox']")
+}
+
 const translationSettingsSchema = defineSchema(({ z, presets }) => z.object({
     vcTranslate: z.boolean().default(false),
     vcTranslateProvider: z.string().default("google"),
     vcTranslateTargetLanguage: z.string().default("en"),
     vcTranslateApiKey: z.string().default(""),
+    vcTranslateBaseUrl: z.string().default(""),
+    vcTranslateModel: z.string().default(""),
 }))
 
 const KeybindingValueInput = ({
@@ -136,7 +150,7 @@ const KeybindingRow = ({
         </div>
         <div className="flex items-center gap-2">
             <Button
-                intent={recordingKey === actionKey ? "white-subtle" : "gray-glass"}
+                intent={recordingKey === actionKey ? "white-subtle" : "gray-subtle"}
                 size="sm"
                 onClick={() => handleKeyRecord(actionKey)}
                 className={cn(
@@ -164,6 +178,8 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
     const [tab, setTab] = useState("keybinds")
     const { mutate: saveMediaPlayerSettings } = useSaveMediaPlayerSettings()
     const serverStatus = useServerStatus()
+    const mediaPlayerSettings = serverStatus?.settings?.mediaPlayer
+    const translateProvider = mediaPlayerSettings?.vcTranslateProvider || "google"
     const translationFormRef = useRef<UseFormReturn<any>>(null)
 
     const [settings, setSettings] = useAtom(vc_settings)
@@ -171,6 +187,15 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
     const [editedAudioLanguage, setEditedAudioLanguage] = useState(settings.preferredAudioLanguage)
     const [editedSubsBlacklist, setEditedSubsBlacklist] = useState(settings.preferredSubtitleBlacklist)
     const [editedSubtitleDelay, setEditedSubtitleDelay] = useState(settings.subtitleDelay ?? 0)
+    const [editedScreenshotDir, setEditedScreenshotDir] = useState(mediaPlayerSettings?.screenshotDir ?? "")
+    const [preferences, setPreferences] = useAtom(mediaCorePreferencesAtom)
+    const [editedSkipPatterns, setEditedSkipPatterns] = useState(preferences.skipPatterns)
+    const skipPatternError = React.useMemo(() => getSkipPatternError(editedSkipPatterns), [editedSkipPatterns])
+
+    const isAbsolute = React.useMemo(() => {
+        if (!editedScreenshotDir) return true
+        return upath.isAbsolute(editedScreenshotDir)
+    }, [editedScreenshotDir])
     // const [editedSubCustomization, setEditedSubCustomization] = useState<VideoCoreSettings["subtitleCustomization"]>(
     //     settings.subtitleCustomization || vc_initialSettings.subtitleCustomization
     // )
@@ -186,9 +211,11 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
             setEditedSubsBlacklist(settings.preferredSubtitleBlacklist)
             setEditedSubtitleDelay(settings.subtitleDelay ?? 0)
             setEditedUseLibassRenderer(useLibassRenderer)
+            setEditedScreenshotDir(mediaPlayerSettings?.screenshotDir ?? "")
+            setEditedSkipPatterns(preferences.skipPatterns)
             // setEditedSubCustomization(settings.subtitleCustomization || vc_initialSettings.subtitleCustomization)
         }
-    }, [open, keybindings, settings, useLibassRenderer])
+    }, [open, keybindings, settings, useLibassRenderer, mediaPlayerSettings, preferences.skipPatterns])
 
     const handleKeyRecord = (actionKey: keyof VideoCoreKeybindings) => {
         setRecordingKey(actionKey)
@@ -214,6 +241,7 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
     }
 
     const handleSave = () => {
+        if (skipPatternError) return
         setKeybindings(editedKeybindings)
         const newSettings = {
             ...settings,
@@ -224,7 +252,19 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
             // subtitleCustomization: editedSubCustomization,
         }
         setSettings(newSettings)
+        setPreferences(current => ({ ...current, skipPatterns: editedSkipPatterns.trim() }))
         setUseLibassRenderer(editedUseLibassRenderer)
+
+        const currentMediaPlayer = serverStatus?.settings?.mediaPlayer
+        if (currentMediaPlayer) {
+            saveMediaPlayerSettings({
+                mediaPlayer: {
+                    ...currentMediaPlayer,
+                    screenshotDir: editedScreenshotDir,
+                },
+            })
+        }
+
         // Update subtitle manager with new settings
         subtitleManager?.updateSettings(newSettings)
         mediaCaptionsManager?.updateSettings(newSettings)
@@ -238,6 +278,8 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
         setEditedSubsBlacklist(vc_initialSettings.preferredSubtitleBlacklist)
         setEditedSubtitleDelay(vc_initialSettings.subtitleDelay)
         setEditedUseLibassRenderer(true)
+        setEditedScreenshotDir(mediaPlayerSettings?.screenshotDir ?? "")
+        setEditedSkipPatterns(mediaCoreDefaultPreferences.skipPatterns)
         // setEditedSubCustomization(vc_initialSettings.subtitleCustomization)
     }
 
@@ -257,14 +299,19 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
 
     function handleSaveTranslationSettings(data: z.infer<typeof translationSettingsSchema>) {
         const currentMediaPlayer = serverStatus?.settings?.mediaPlayer!
+        const translateModel = data.vcTranslateProvider === "openai" && (!data.vcTranslateModel || data.vcTranslateModel === "local-model")
+            ? "gpt-4o-mini"
+            : data.vcTranslateModel
 
         saveMediaPlayerSettings({
             mediaPlayer: {
                 ...currentMediaPlayer,
                 vcTranslate: data.vcTranslate,
-                vcTranslateTargetLanguage: data.vcTranslateTargetLanguage.toLowerCase(),
+                vcTranslateTargetLanguage: data.vcTranslateTargetLanguage,
                 vcTranslateProvider: data.vcTranslateProvider,
                 vcTranslateApiKey: data.vcTranslateApiKey,
+                vcTranslateBaseUrl: data.vcTranslateBaseUrl,
+                vcTranslateModel: translateModel,
             },
         }, {
             onSuccess: () => {
@@ -296,10 +343,57 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
             >
                 <TabsList className="flex-wrap max-w-full bg-[--paper] p-2 border rounded-xl">
                     <TabsTrigger value="keybinds">Keyboard Shortcuts</TabsTrigger>
-                    <TabsTrigger value="subtitles">Subtitles</TabsTrigger>
-                    <TabsTrigger value="translation">Translation <AlphaBadge /></TabsTrigger>
+                    <TabsTrigger value="subtitles">Subtitles & Audio</TabsTrigger>
+                    <TabsTrigger value="general">General</TabsTrigger>
+                    <TabsTrigger value="translation">Translation</TabsTrigger>
                     {/*<TabsTrigger value="browser-client">Rendering</TabsTrigger>*/}
                 </TabsList>
+
+                <TabsContent value="general" className={tabContentClass}>
+                    <div className="space-y-4">
+                        <TextInput
+                            label="Extra Chapters to Skip"
+                            value={editedSkipPatterns}
+                            onValueChange={setEditedSkipPatterns}
+                            placeholder="^Intro$,^Outro$,^Preview$"
+                            help="Comma-separated regular expressions matched case-insensitively. Existing opening and ending rules remain active."
+                            error={skipPatternError}
+                            onKeyDown={event => event.stopPropagation()}
+                            onInput={event => event.stopPropagation()}
+                        />
+                        <DirectorySelector
+                            value={editedScreenshotDir}
+                            onSelect={setEditedScreenshotDir}
+                            label="Screenshot Directory"
+                            help="Configure the directory where screenshots will be saved"
+                            error={!isAbsolute ? "Must be an absolute path" : ""}
+                        />
+
+                        <div className="flex items-center justify-between pt-6">
+                            <Button
+                                intent="gray-outline"
+                                onClick={handleReset}
+                            >
+                                Reset all
+                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    intent="gray-outline"
+                                    onClick={() => setOpen(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    intent="primary"
+                                    onClick={handleSave}
+                                    disabled={!isAbsolute || !!skipPatternError}
+                                >
+                                    Save
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </TabsContent>
 
                 <TabsContent value="keybinds" className={tabContentClass}>
                     <div className="space-y-3 hidden lg:block">
@@ -556,6 +650,7 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
                                 <Button
                                     intent="primary"
                                     onClick={handleSave}
+                                    disabled={!!skipPatternError}
                                 >
                                     Save
                                 </Button>
@@ -637,6 +732,7 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
                             <Button
                                 intent="primary"
                                 onClick={handleSave}
+                                disabled={!!skipPatternError}
                             >
                                 Save
                             </Button>
@@ -648,140 +744,173 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
                         schema={translationSettingsSchema}
                         onSubmit={handleSaveTranslationSettings}
                         defaultValues={{
-                            vcTranslate: serverStatus?.settings?.mediaPlayer?.vcTranslate ?? false,
-                            vcTranslateProvider: serverStatus?.settings?.mediaPlayer?.vcTranslateProvider || "deepl",
-                            vcTranslateTargetLanguage: serverStatus?.settings?.mediaPlayer?.vcTranslateTargetLanguage?.toLowerCase() || "en",
-                            vcTranslateApiKey: serverStatus?.settings?.mediaPlayer?.vcTranslateApiKey || "",
+                            vcTranslate: mediaPlayerSettings?.vcTranslate ?? false,
+                            vcTranslateProvider: translateProvider,
+                            vcTranslateTargetLanguage: mediaPlayerSettings?.vcTranslateTargetLanguage || "en",
+                            vcTranslateApiKey: mediaPlayerSettings?.vcTranslateApiKey || "",
+                            vcTranslateBaseUrl: mediaPlayerSettings?.vcTranslateBaseUrl || "http://localhost:1234/v1",
+                            vcTranslateModel: mediaPlayerSettings?.vcTranslateModel || (translateProvider === "openai"
+                                ? "gpt-4o-mini"
+                                : "local-model"),
                         }}
                         stackClass="space-y-4 relative"
                         mRef={translationFormRef}
                     >
-                        {(f) => (
-                            <div className="space-y-4">
+                        {(f) => {
+                            const provider = f.watch("vcTranslateProvider")
+                            const usesOpenAIProvider = provider === "openai" || provider === "openai-compatible"
+
+                            return (
                                 <div className="space-y-4">
-                                    <Field.Switch
-                                        name="vcTranslate"
-                                        side="right"
-                                        label="Enable Translation"
-                                        help="Automatically translate subtitle tracks to your selected language"
-                                    />
-                                    <div className="space-y-2">
-                                        <Field.Select
-                                            label="Provider"
-                                            name="vcTranslateProvider"
-                                            options={[
-                                                { value: "deepl", label: "DeepL" },
-                                                { value: "openai", label: "OpenAI" },
-                                            ]}
-                                            contentClass="z-[999]"
+                                    <div className="space-y-4">
+                                        <Field.Switch
+                                            name="vcTranslate"
+                                            side="right"
+                                            label="Enable Translation"
+                                            help="Automatically translate subtitle tracks to your selected language"
                                         />
+                                        <div className="space-y-2">
+                                            <Field.Select
+                                                label="Provider"
+                                                name="vcTranslateProvider"
+                                                options={[
+                                                    { value: "google", label: "Google Free" },
+                                                    { value: "deepl", label: "DeepL" },
+                                                    { value: "openai", label: "OpenAI" },
+                                                    { value: "openai-compatible", label: "OpenAI Compatible" },
+                                                ]}
+                                                contentClass="z-[999]"
+                                            />
+                                        </div>
+
+                                        {provider === "deepl" && (
+                                            <p>
+                                                DeepL does not support all target languages.
+                                            </p>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            <Field.Select
+                                                label="Target Language"
+                                                name="vcTranslateTargetLanguage"
+                                                options={[
+                                                    // DeepL
+                                                    { value: "en-US", label: "English (US)" },
+                                                    { value: "en-GB", label: "English (UK)" },
+                                                    { value: "es", label: "Spanish" },
+                                                    { value: "fr", label: "French" },
+                                                    { value: "de", label: "German" },
+                                                    { value: "it", label: "Italian" },
+                                                    { value: "pt-BR", label: "Portuguese (BR)" },
+                                                    { value: "pt-PT", label: "Portuguese (PT)" },
+                                                    { value: "ru", label: "Russian" },
+                                                    { value: "ja", label: "Japanese" },
+                                                    { value: "ko", label: "Korean" },
+                                                    { value: "zh-hans", label: "Chinese (Simplified)" },
+                                                    { value: "zh-hant", label: "Chinese (Traditional)" },
+                                                    { value: "ar", label: "Arabic" },
+                                                    { value: "tr", label: "Turkish" },
+                                                    { value: "pl", label: "Polish" },
+                                                    { value: "nl", label: "Dutch" },
+                                                    { value: "sv", label: "Swedish" },
+                                                    { value: "nb", label: "Norwegian" },
+                                                    { value: "da", label: "Danish" },
+                                                    { value: "fi", label: "Finnish" },
+                                                    { value: "el", label: "Greek" },
+                                                    { value: "cs", label: "Czech" },
+                                                    { value: "hu", label: "Hungarian" },
+                                                    { value: "ro", label: "Romanian" },
+                                                    { value: "id", label: "Indonesian" },
+                                                    { value: "uk", label: "Ukrainian" },
+                                                    { value: "bg", label: "Bulgarian" },
+                                                    { value: "sk", label: "Slovak" },
+                                                    { value: "sl", label: "Slovenian" },
+                                                    { value: "et", label: "Estonian" },
+                                                    { value: "lv", label: "Latvian" },
+                                                    { value: "lt", label: "Lithuanian" },
+                                                    // Not currently supported by DeepL
+                                                    { value: "hi", label: "Hindi" },
+                                                    { value: "bn", label: "Bengali" },
+                                                    { value: "ta", label: "Tamil" },
+                                                    { value: "te", label: "Telugu" },
+                                                    { value: "mr", label: "Marathi" },
+                                                    { value: "kn", label: "Kannada" },
+                                                    { value: "ml", label: "Malayalam" },
+                                                    { value: "pa", label: "Punjabi" },
+                                                    { value: "fa", label: "Persian" },
+                                                    { value: "ur", label: "Urdu" },
+                                                    { value: "sw", label: "Swahili" },
+                                                    { value: "af", label: "Afrikaans" },
+                                                    { value: "ms", label: "Malay" },
+                                                    { value: "hr", label: "Croatian" },
+                                                    { value: "sr", label: "Serbian" },
+                                                    { value: "he", label: "Hebrew" },
+                                                    { value: "th", label: "Thai" },
+                                                    { value: "vi", label: "Vietnamese" },
+                                                ]}
+                                                contentClass="z-[999]"
+                                                help="Select the language you want subtitles to be translated to"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {provider === "openai-compatible" && (
+                                                <Field.Text
+                                                    label="Base URL"
+                                                    name="vcTranslateBaseUrl"
+                                                    placeholder="http://localhost:1234/v1"
+                                                    onKeyDown={(e) => e.stopPropagation()}
+                                                    onInput={(e) => e.stopPropagation()}
+                                                    help="OpenAI-compatible /v1 endpoint, e.g. LM Studio or Ollama."
+                                                />
+                                            )}
+                                            {usesOpenAIProvider && (
+                                                <Field.Text
+                                                    label="Model"
+                                                    name="vcTranslateModel"
+                                                    placeholder={provider === "openai-compatible" ? "local-model" : "gpt-4o-mini"}
+                                                    onKeyDown={(e) => e.stopPropagation()}
+                                                    onInput={(e) => e.stopPropagation()}
+                                                />
+                                            )}
+                                            {provider !== "google" && (
+                                                <Field.Text
+                                                    label={provider === "openai-compatible" ? "API Key (optional)" : "API Key"}
+                                                    name="vcTranslateApiKey"
+                                                    placeholder="Enter your API key"
+                                                    onKeyDown={(e) => e.stopPropagation()}
+                                                    onInput={(e) => e.stopPropagation()}
+                                                    type="password"
+                                                />
+                                            )}
+                                        </div>
                                     </div>
 
-                                    {f.watch("vcTranslateProvider") === "deepl" && (
-                                        <p>
-                                            Note: DeepL does not support all target languages.
-                                        </p>
-                                    )}
+                                    <p className="text-[--muted]">
+                                        Reloading the player is required only when switching translation provider, language, endpoint, model, or API
+                                        key.
+                                    </p>
 
-                                    <div className="space-y-2">
-                                        <Field.Select
-                                            label="Target Language"
-                                            name="vcTranslateTargetLanguage"
-                                            options={[
-                                                // DeepL
-                                                { value: "en-US", label: "English (US)" },
-                                                { value: "en-GB", label: "English (UK)" },
-                                                { value: "es", label: "Spanish" },
-                                                { value: "fr", label: "French" },
-                                                { value: "de", label: "German" },
-                                                { value: "it", label: "Italian" },
-                                                { value: "pt-BR", label: "Portuguese (BR)" },
-                                                { value: "pt-PT", label: "Portuguese (PT)" },
-                                                { value: "ru", label: "Russian" },
-                                                { value: "ja", label: "Japanese" },
-                                                { value: "ko", label: "Korean" },
-                                                { value: "zh-hans", label: "Chinese (Simplified)" },
-                                                { value: "zh-hant", label: "Chinese (Traditional)" },
-                                                { value: "ar", label: "Arabic" },
-                                                { value: "tr", label: "Turkish" },
-                                                { value: "pl", label: "Polish" },
-                                                { value: "nl", label: "Dutch" },
-                                                { value: "sv", label: "Swedish" },
-                                                { value: "nb", label: "Norwegian" },
-                                                { value: "da", label: "Danish" },
-                                                { value: "fi", label: "Finnish" },
-                                                { value: "el", label: "Greek" },
-                                                { value: "cs", label: "Czech" },
-                                                { value: "hu", label: "Hungarian" },
-                                                { value: "ro", label: "Romanian" },
-                                                { value: "id", label: "Indonesian" },
-                                                { value: "uk", label: "Ukrainian" },
-                                                { value: "bg", label: "Bulgarian" },
-                                                { value: "sk", label: "Slovak" },
-                                                { value: "sl", label: "Slovenian" },
-                                                { value: "et", label: "Estonian" },
-                                                { value: "lv", label: "Latvian" },
-                                                { value: "lt", label: "Lithuanian" },
-                                                // Not currently supported by DeepL
-                                                { value: "hi", label: "Hindi" },
-                                                { value: "bn", label: "Bengali" },
-                                                { value: "ta", label: "Tamil" },
-                                                { value: "te", label: "Telugu" },
-                                                { value: "mr", label: "Marathi" },
-                                                { value: "kn", label: "Kannada" },
-                                                { value: "ml", label: "Malayalam" },
-                                                { value: "pa", label: "Punjabi" },
-                                                { value: "fa", label: "Persian" },
-                                                { value: "ur", label: "Urdu" },
-                                                { value: "sw", label: "Swahili" },
-                                                { value: "af", label: "Afrikaans" },
-                                                { value: "ms", label: "Malay" },
-                                                { value: "hr", label: "Croatian" },
-                                                { value: "sr", label: "Serbian" },
-                                                { value: "he", label: "Hebrew" },
-                                                { value: "th", label: "Thai" },
-                                                { value: "vi", label: "Vietnamese" },
-                                            ]}
-                                            contentClass="z-[999]"
-                                            help="Select the language you want subtitles to be translated to"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Field.Text
-                                            label="API Key"
-                                            name="vcTranslateApiKey"
-                                            placeholder="Enter your API key"
-                                            onKeyDown={(e) => e.stopPropagation()}
-                                            onInput={(e) => e.stopPropagation()}
-                                            type="password"
-                                        />
+                                    <div className="flex items-center justify-end pt-6">
+                                        <div className="flex gap-2">
+                                            <Button
+                                                type="button"
+                                                intent="gray-outline"
+                                                onClick={() => setOpen(false)}
+                                            >
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                type="submit"
+                                                intent="primary"
+                                            >
+                                                Save
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
-
-                                <p className="text-[--muted]">
-                                    Reloading the player is required only when switching languages or API Key.
-                                </p>
-
-                                <div className="flex items-center justify-end pt-6">
-                                    <div className="flex gap-2">
-                                        <Button
-                                            type="button"
-                                            intent="gray-outline"
-                                            onClick={() => setOpen(false)}
-                                        >
-                                            Cancel
-                                        </Button>
-                                        <Button
-                                            type="submit"
-                                            intent="primary"
-                                        >
-                                            Save
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                            )
+                        }}
                     </Form>
                 </TabsContent>
             </Tabs>
@@ -792,7 +921,7 @@ export function VideoCorePreferencesModal({ isWebPlayer }: { isWebPlayer: boolea
 
 export function VideoCoreKeybindingController(props: {
     active: boolean
-    videoRef: React.RefObject<HTMLVideoElement>,
+    videoRef: React.RefObject<HTMLVideoElement | null>,
     chapterCues: VideoCoreChapterCue[],
     introEndTime: number | undefined,
     introStartTime: number | undefined
@@ -801,7 +930,6 @@ export function VideoCoreKeybindingController(props: {
 }) {
     const {
         active,
-        videoRef,
         chapterCues,
         introEndTime,
         introStartTime,
@@ -812,11 +940,14 @@ export function VideoCoreKeybindingController(props: {
     const [keybindings] = useAtom(vc_keybindingsAtom)
     const isKeybindingsModalOpen = useAtomValue(videoCorePreferencesModalAtom)
     const fullscreen = useAtomValue(vc_isFullscreen)
+    const isMiniPlayer = useAtomValue(vc_miniPlayer)
     const pip = useAtomValue(vc_pip)
     const volume = useAtomValue(vc_volume)
+    const setMiniPlayer = useSetAtom(vc_miniPlayer)
     const setVolume = useSetAtom(vc_storedVolumeAtom)
     const muted = useAtomValue(vc_isMuted)
     const setMuted = useSetAtom(vc_storedMutedAtom)
+    const videoElement = useAtomValue(vc_videoElement)
     const { toggleOpen: toggleInSight } = useVideoCoreInSight()
     const { showOverlayFeedback } = useVideoCoreOverlayFeedback()
 
@@ -837,24 +968,24 @@ export function VideoCoreKeybindingController(props: {
     const SEEK_THROTTLE_MS = 100 // Minimum time between seek operations
 
     function seek(seconds: number) {
-        const isPaused = videoRef.current?.paused
+        const isPaused = videoElement?.paused
         if (!isPaused) {
-            videoRef.current?.pause()
+            videoElement?.pause()
         }
         action({ type: "seek", payload: { time: seconds, flashTime: true } })
         if (!isPaused) {
-            videoRef.current?.play()?.catch()
+            videoElement?.play()?.catch()
         }
     }
 
     function seekTo(to: number) {
-        const isPaused = videoRef.current?.paused
+        const isPaused = videoElement?.paused
         if (!isPaused) {
-            videoRef.current?.pause()
+            videoElement?.pause()
         }
         action({ type: "seekTo", payload: { time: to, flashTime: true } })
         if (!isPaused) {
-            videoRef.current?.play()?.catch()
+            videoElement?.play()?.catch()
         }
     }
 
@@ -865,192 +996,209 @@ export function VideoCoreKeybindingController(props: {
     //
 
     const handleKeyboardShortcuts = useCallback(async (e: KeyboardEvent) => {
-        // Don't handle shortcuts if in an input/textarea or while keybindings modal is open
-        if (isKeybindingsModalOpen || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-            return
-        }
-
-        // Ignore combinations with modifier keys
-        if (e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) {
-            return
-        }
-
-        if (!videoRef.current || !active) {
-            return
-        }
-
-        const video = videoRef.current
-
-
-        if (e.code === "Space" || e.code === "Enter") {
-            e.preventDefault()
-            if (video.paused) {
-                await video.play()
-                showOverlayFeedback({ message: "PLAY", type: "icon" })
-            } else {
-                video.pause()
-                showOverlayFeedback({ message: "PAUSE", type: "icon" })
-            }
-            return
-        }
-
-        // Home, go to beginning
-        if (e.code === "Home") {
-            e.preventDefault()
-            seekTo(0)
-            showOverlayFeedback({ message: "Beginning" })
-            return
-        }
-
-        // End, go to end
-        if (e.code === "End") {
-            e.preventDefault()
-            seekTo(video.duration)
-            showOverlayFeedback({ message: "End" })
-            return
-        }
-
-        // Escape - Exit fullscreen
-        if (e.code === "Escape" && fullscreen) {
-            e.preventDefault()
-            fullscreenManager?.exitFullscreen()
-            return
-        }
-
-        // Number keys 0-9, seek to percentage (0%, 10%, 20%, ..., 90%)
-        if (e.code.startsWith("Digit") && e.code.length === 6) {
-            e.preventDefault()
-            const digit = parseInt(e.code.slice(-1))
-            const percentage = digit * 10
-            const seekTime = Math.max(0, Math.min(video.duration, (video.duration * percentage) / 100))
-            seekTo(seekTime)
-            // showOverlayFeedback({ message: `${percentage}%` })
-            return
-        }
-
-        // frame-by-frame seeking, assuming 24fps
-        if (e.code === "Comma") {
-            e.preventDefault()
-            seek(-1 / 24)
-            showOverlayFeedback({ message: "Previous Frame" })
-            return
-        }
-
-        if (e.code === "Period") {
-            e.preventDefault()
-            seek(1 / 24)
-            showOverlayFeedback({ message: "Next Frame" })
-            return
-        }
-
-        // Helper function to check if seeking is rate limited
-        const canSeek = () => {
-            const now = Date.now()
-            if (now - lastSeekTime.current < SEEK_THROTTLE_MS) {
-                return false
-            }
-            lastSeekTime.current = now
-            return true
-        }
-
-        // Check which shortcut was pressed
-        if (e.code === keybindings.seekForward.key) {
-            e.preventDefault()
-            if (!canSeek()) return
-
-            if (props.introEndTime && props.introStartTime && video.currentTime < props.introEndTime && video.currentTime >= props.introStartTime) {
-                seekTo(props.introEndTime)
-                showOverlayFeedback({ message: "Skipped Opening" })
+            // Don't handle player shortcuts while typing or while keybindings modal is open.
+            if (
+                e.defaultPrevented ||
+                isKeybindingsModalOpen ||
+                isEditableKeyboardTarget(e.target) ||
+                isEditableKeyboardTarget(document.activeElement)
+            ) {
                 return
             }
-            if (props.endingEndTime && props.endingStartTime && video.currentTime < props.endingEndTime && video.currentTime >= props.endingStartTime) {
-                seekTo(props.endingEndTime)
-                showOverlayFeedback({ message: "Skipped Ending" })
+
+            // Ignore combinations with modifier keys
+            if (e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) {
                 return
             }
-            seek(keybindings.seekForward.value)
-            video.dispatchEvent(new Event("seeked"))
-        } else if (e.code === keybindings.seekBackward.key) {
-            e.preventDefault()
-            if (!canSeek()) return
-            seek(-keybindings.seekBackward.value)
-            video.dispatchEvent(new Event("seeked"))
-        } else if (e.code === keybindings.seekForwardFine.key) {
-            e.preventDefault()
-            // if (!canSeek()) return
-            video.dispatchEvent(new Event("seeking"))
-            seek(keybindings.seekForwardFine.value)
-            video.dispatchEvent(new Event("seeked"))
-        } else if (e.code === keybindings.seekBackwardFine.key) {
-            e.preventDefault()
-            // if (!canSeek()) return
-            video.dispatchEvent(new Event("seeking"))
-            seek(-keybindings.seekBackwardFine.value)
-            video.dispatchEvent(new Event("seeked"))
-        } else if (e.code === keybindings.nextChapter.key) {
-            e.preventDefault()
-            handleNextChapter()
-        } else if (e.code === keybindings.previousChapter.key) {
-            e.preventDefault()
-            handlePreviousChapter()
-        } else if (e.code === keybindings.volumeUp.key) {
-            e.preventDefault()
-            const newVolume = Math.min(1, volume + keybindings.volumeUp.value / 100)
-            setVolume(newVolume)
-        } else if (e.code === keybindings.volumeDown.key) {
-            e.preventDefault()
-            const newVolume = Math.max(0, volume - keybindings.volumeDown.value / 100)
-            setVolume(newVolume)
-        } else if (e.code === keybindings.mute.key) {
-            e.preventDefault()
-            setMuted(!muted)
-        } else if (e.code === keybindings.cycleSubtitles.key) {
-            e.preventDefault()
-            handleCycleSubtitles()
-        } else if (e.code === keybindings.cycleAudio.key) {
-            e.preventDefault()
-            handleCycleAudio()
-        } else if (e.code === keybindings.nextEpisode.key) {
-            e.preventDefault()
-            handleNextEpisode()
-        } else if (e.code === keybindings.previousEpisode.key) {
-            e.preventDefault()
-            handlePreviousEpisode()
-        } else if (e.code === keybindings.fullscreen.key) {
-            e.preventDefault()
-            handleToggleFullscreen()
-        } else if (e.code === keybindings.pictureInPicture.key) {
-            e.preventDefault()
-            handleTogglePictureInPicture()
-        } else if (e.code === keybindings.takeScreenshot.key) {
-            e.preventDefault()
-            takeScreenshot()
-        } else if (e.code === keybindings.openInSight.key) {
-            e.preventDefault()
-            toggleInSight()
-        } else if (e.code === keybindings.statsForNerds.key) {
-            e.preventDefault()
-            setShowStats(prev => !prev)
-        } else if (e.code === keybindings.increaseSpeed.key) {
-            e.preventDefault()
-            const newRate = Math.min(8, video.playbackRate + keybindings.increaseSpeed.value)
-            video.playbackRate = newRate
-            showOverlayFeedback({ message: `Speed: ${newRate.toFixed(2)}x` })
-        } else if (e.code === keybindings.decreaseSpeed.key) {
-            e.preventDefault()
-            const newRate = Math.max(0.20, video.playbackRate - keybindings.decreaseSpeed.value)
-            video.playbackRate = newRate
-            showOverlayFeedback({ message: `Speed: ${newRate.toFixed(2)}x` })
-        }
+
+            if (!videoElement || !active) {
+                return
+            }
+
+            const video = videoElement
+
+            if (isMiniPlayer) {
+                if (e.code === keybindings.fullscreen.key) {
+                    e.preventDefault()
+                    setMiniPlayer(false)
+                    window.requestAnimationFrame(() => {
+                        window.requestAnimationFrame(() => {
+                            handleToggleFullscreen()
+                        })
+                    })
+                }
+                return
+            }
+
+            if (e.code === "Space" || e.code === "Enter") {
+                e.preventDefault()
+                if (video.paused) {
+                    await video.play()
+                    showOverlayFeedback({ message: "PLAY", type: "icon" })
+                } else {
+                    video.pause()
+                    showOverlayFeedback({ message: "PAUSE", type: "icon" })
+                }
+                return
+            }
+
+            // Home, go to beginning
+            if (e.code === "Home") {
+                e.preventDefault()
+                seekTo(0)
+                showOverlayFeedback({ message: "Beginning" })
+                return
+            }
+
+            // End, go to end
+            if (e.code === "End") {
+                e.preventDefault()
+                seekTo(video.duration)
+                showOverlayFeedback({ message: "End" })
+                return
+            }
+
+            // Escape - Exit fullscreen
+            if (e.code === "Escape" && fullscreen) {
+                e.preventDefault()
+                fullscreenManager?.exitFullscreen()
+                return
+            }
+
+            // Number keys 0-9, seek to percentage (0%, 10%, 20%, ..., 90%)
+            if (e.code.startsWith("Digit") && e.code.length === 6) {
+                e.preventDefault()
+                const digit = parseInt(e.code.slice(-1))
+                const percentage = digit * 10
+                const seekTime = Math.max(0, Math.min(video.duration, (video.duration * percentage) / 100))
+                seekTo(seekTime)
+                // showOverlayFeedback({ message: `${percentage}%` })
+                return
+            }
+
+            // frame-by-frame seeking, assuming 24fps
+            if (e.code === "Comma") {
+                e.preventDefault()
+                seek(-1 / 24)
+                showOverlayFeedback({ message: "Previous Frame" })
+                return
+            }
+
+            if (e.code === "Period") {
+                e.preventDefault()
+                seek(1 / 24)
+                showOverlayFeedback({ message: "Next Frame" })
+                return
+            }
+
+            // Helper function to check if seeking is rate limited
+            const canSeek = () => {
+                const now = Date.now()
+                if (now - lastSeekTime.current < SEEK_THROTTLE_MS) {
+                    return false
+                }
+                lastSeekTime.current = now
+                return true
+            }
+
+            // Check which shortcut was pressed
+            if (e.code === keybindings.seekForward.key) {
+                e.preventDefault()
+                if (!canSeek()) return
+
+                if (props.introEndTime && props.introStartTime && video.currentTime < props.introEndTime && video.currentTime >= props.introStartTime) {
+                    seekTo(props.introEndTime)
+                    showOverlayFeedback({ message: "Skipped Opening" })
+                    return
+                }
+                if (props.endingEndTime && props.endingStartTime && video.currentTime < props.endingEndTime && video.currentTime >= props.endingStartTime) {
+                    seekTo(props.endingEndTime)
+                    showOverlayFeedback({ message: "Skipped Ending" })
+                    return
+                }
+                seek(keybindings.seekForward.value)
+                video.dispatchEvent(new Event("seeked"))
+            } else if (e.code === keybindings.seekBackward.key) {
+                e.preventDefault()
+                if (!canSeek()) return
+                seek(-keybindings.seekBackward.value)
+                video.dispatchEvent(new Event("seeked"))
+            } else if (e.code === keybindings.seekForwardFine.key) {
+                e.preventDefault()
+                // if (!canSeek()) return
+                video.dispatchEvent(new Event("seeking"))
+                seek(keybindings.seekForwardFine.value)
+                video.dispatchEvent(new Event("seeked"))
+            } else if (e.code === keybindings.seekBackwardFine.key) {
+                e.preventDefault()
+                // if (!canSeek()) return
+                video.dispatchEvent(new Event("seeking"))
+                seek(-keybindings.seekBackwardFine.value)
+                video.dispatchEvent(new Event("seeked"))
+            } else if (e.code === keybindings.nextChapter.key) {
+                e.preventDefault()
+                handleNextChapter()
+            } else if (e.code === keybindings.previousChapter.key) {
+                e.preventDefault()
+                handlePreviousChapter()
+            } else if (e.code === keybindings.volumeUp.key) {
+                e.preventDefault()
+                const newVolume = Math.min(1, volume + keybindings.volumeUp.value / 100)
+                setVolume(newVolume)
+            } else if (e.code === keybindings.volumeDown.key) {
+                e.preventDefault()
+                const newVolume = Math.max(0, volume - keybindings.volumeDown.value / 100)
+                setVolume(newVolume)
+            } else if (e.code === keybindings.mute.key) {
+                e.preventDefault()
+                setMuted(!muted)
+            } else if (e.code === keybindings.cycleSubtitles.key) {
+                e.preventDefault()
+                handleCycleSubtitles()
+            } else if (e.code === keybindings.cycleAudio.key) {
+                e.preventDefault()
+                handleCycleAudio()
+            } else if (e.code === keybindings.nextEpisode.key) {
+                e.preventDefault()
+                handleNextEpisode()
+            } else if (e.code === keybindings.previousEpisode.key) {
+                e.preventDefault()
+                handlePreviousEpisode()
+            } else if (e.code === keybindings.fullscreen.key) {
+                e.preventDefault()
+                handleToggleFullscreen()
+            } else if (e.code === keybindings.pictureInPicture.key) {
+                e.preventDefault()
+                handleTogglePictureInPicture()
+            } else if (e.code === keybindings.takeScreenshot.key) {
+                e.preventDefault()
+                takeScreenshot()
+            } else if (e.code === keybindings.openInSight.key) {
+                e.preventDefault()
+                toggleInSight()
+            } else if (e.code === keybindings.statsForNerds.key) {
+                e.preventDefault()
+                setShowStats(prev => !prev)
+            } else if (e.code === keybindings.increaseSpeed.key) {
+                e.preventDefault()
+                const newRate = Math.min(8, video.playbackRate + keybindings.increaseSpeed.value)
+                video.playbackRate = newRate
+                showOverlayFeedback({ message: `Speed: ${newRate.toFixed(2)}x` })
+            } else if (e.code === keybindings.decreaseSpeed.key) {
+                e.preventDefault()
+                const newRate = Math.max(0.20, video.playbackRate - keybindings.decreaseSpeed.value)
+                video.playbackRate = newRate
+                showOverlayFeedback({ message: `Speed: ${newRate.toFixed(2)}x` })
+            }
         },
         [keybindings, volume, muted, seek, active, fullscreen, pip, showOverlayFeedback, introEndTime, introStartTime, isKeybindingsModalOpen,
-            toggleInSight])
+            toggleInSight, videoElement, isMiniPlayer, setMiniPlayer])
 
     // Keyboard shortcut handlers
     const handleNextChapter = useCallback(() => {
-        if (!videoRef.current || !chapterCues) return
+        if (!videoElement || !chapterCues) return
 
-        const currentTime = videoRef.current.currentTime
+        const currentTime = videoElement.currentTime
 
         // Sort chapters by start time to ensure proper order
         const sortedChapters = [...chapterCues].sort((a, b) => a.startTime - b.startTime)
@@ -1073,9 +1221,9 @@ export function VideoCoreKeybindingController(props: {
     }, [chapterCues, seekTo, showOverlayFeedback])
 
     const handlePreviousChapter = useCallback(() => {
-        if (!videoRef.current || !chapterCues) return
+        if (!videoElement || !chapterCues) return
 
-        const currentTime = videoRef.current.currentTime
+        const currentTime = videoElement.currentTime
 
         // Sort chapters by start time to ensure proper order
         const sortedChapters = [...chapterCues].sort((a, b) => a.startTime - b.startTime)
@@ -1107,7 +1255,7 @@ export function VideoCoreKeybindingController(props: {
 
 
     const handleCycleSubtitles = useCallback(() => {
-        if (!videoRef.current) return
+        if (!videoElement) return
         // TODO: make it work when both types are combined
         let found = false
         if (subtitleManager) {
@@ -1144,7 +1292,7 @@ export function VideoCoreKeybindingController(props: {
     }, [subtitleManager, mediaCaptionsManager])
 
     const handleCycleAudio = useCallback(() => {
-        if (!videoRef.current || !audioManager) return
+        if (!videoElement || !audioManager) return
 
         // HLS stream
         if (audioManager.isHlsStream()) {
@@ -1167,7 +1315,7 @@ export function VideoCoreKeybindingController(props: {
             return
         }
 
-        const audioTracks = videoRef.current.audioTracks
+        const audioTracks = videoElement.audioTracks
         if (!audioTracks || audioTracks.length <= 1) {
             showOverlayFeedback({ message: "No additional audio tracks" })
             return
@@ -1192,7 +1340,8 @@ export function VideoCoreKeybindingController(props: {
 
         // Enable next track
         audioTracks[nextIndex].enabled = true
-        audioManager?.selectTrack(nextIndex)
+        audioTracks.dispatchEvent?.(new Event("change"))
+        audioManager.syncSelectedTrack()
 
         const trackName = audioTracks[nextIndex].label || audioTracks[nextIndex].language || `Track ${nextIndex + 1}`
         showOverlayFeedback({ message: `Audio: ${trackName}` })
@@ -1227,7 +1376,7 @@ export function VideoCoreKeybindingController(props: {
 
         React.startTransition(() => {
             setTimeout(() => {
-                videoRef.current?.focus()
+                videoElement?.focus()
             }, 100)
         })
     }, [fullscreenManager])
@@ -1237,31 +1386,31 @@ export function VideoCoreKeybindingController(props: {
 
         React.startTransition(() => {
             setTimeout(() => {
-                videoRef.current?.focus()
+                videoElement?.focus()
             }, 100)
         })
     }, [pip, pipManager])
 
     // Add keyboard event listeners
     useEffect(() => {
-        if (!active) return
+        if (!active || !videoElement) return
 
         document.addEventListener("keydown", handleKeyboardShortcuts)
 
         return () => {
             document.removeEventListener("keydown", handleKeyboardShortcuts)
         }
-    }, [handleKeyboardShortcuts, active])
+    }, [handleKeyboardShortcuts, active, videoElement])
 
     // Handle fullscreen state changes to ensure video gets focused
     useEffect(() => {
-        if (!active) return
+        if (!active || !videoElement) return
 
         const handleFullscreenChange = () => {
             // Small delay to ensure fullscreen transition is complete
             setTimeout(() => {
-                if (document.fullscreenElement && videoRef.current) {
-                    videoRef.current.focus()
+                if (document.fullscreenElement && videoElement) {
+                    videoElement.focus()
                 }
             }, 100)
         }
@@ -1271,7 +1420,7 @@ export function VideoCoreKeybindingController(props: {
         return () => {
             document.removeEventListener("fullscreenchange", handleFullscreenChange)
         }
-    }, [active])
+    }, [active, videoElement])
 
     return null
 }

@@ -10,6 +10,7 @@ import {
 } from "@/api/generated/endpoint.types"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import { AL_BaseAnime, Anime_Entry, Anime_LocalFile, Anime_MissingEpisodes, Anime_UpcomingEpisodes, Nullish } from "@/api/generated/types"
+import { getEntryPreloadStaleTime } from "@/lib/entry-preloader"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -19,6 +20,7 @@ export function useGetAnimeEntry(id: Nullish<string | number>) {
         method: API_ENDPOINTS.ANIME_ENTRIES.GetAnimeEntry.methods[0],
         queryKey: [API_ENDPOINTS.ANIME_ENTRIES.GetAnimeEntry.key, String(id)],
         enabled: !!id,
+        staleTime: getEntryPreloadStaleTime("anime", id),
     })
 }
 
@@ -82,6 +84,12 @@ export function useGetMissingEpisodes(enabled?: boolean) {
         method: API_ENDPOINTS.ANIME_ENTRIES.GetMissingEpisodes.methods[0],
         queryKey: [API_ENDPOINTS.ANIME_ENTRIES.GetMissingEpisodes.key],
         enabled: enabled ?? true, // Default to true if not provided
+        refetchInterval: query => [
+            ...(query.state.data?.episodes ?? []),
+            ...(query.state.data?.silencedEpisodes ?? []),
+        ].some(episode => episode.torrentAvailability === "checking")
+            ? 1_000
+            : false,
     })
 }
 

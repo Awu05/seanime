@@ -857,6 +857,8 @@ func (wpm *WatchPartyManager) handleWatchPartyRelayModeOriginStreamStartedEvent(
 			err := wpm.manager.debridClientRepository.StartStream(context.Background(), &options)
 			if err != nil {
 				wpm.logger.Error().Err(err).Msg("nakama: Failed to start debrid stream")
+				wpm.manager.wsEventManager.SendEvent(events.ErrorToast, "Watch party: Failed to prepare debrid stream")
+				return
 			}
 		} else {
 			wpm.logger.Warn().Msg("nakama: Received debrid stream started event without debrid stream params")

@@ -2,14 +2,21 @@ package util
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/nwaples/rardecode/v2"
+)
+
+var (
+	ErrArchivePathTraversal    = errors.New("archive entry path escapes destination")
+	ErrUnsupportedArchiveEntry = errors.New("unsupported archive entry")
 )
 
 func DirSize(path string) (uint64, error) {
@@ -44,11 +51,16 @@ func IsValidVideoExtension(ext string) bool {
 }
 
 func IsSubdirectory(parent, child string) bool {
-	rel, err := filepath.Rel(parent, child)
+	parentPath, err := normalizeComparablePath(parent)
 	if err != nil {
 		return false
 	}
-	return rel != "." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+	childPath, err := normalizeComparablePath(child)
+	if err != nil {
+		return false
+	}
+
+	return isStrictDescendantPath(parentPath, childPath)
 }
 
 func IsSubdirectoryOfAny(dirs []string, child string) bool {
@@ -61,42 +73,100 @@ func IsSubdirectoryOfAny(dirs []string, child string) bool {
 }
 
 func IsSameDir(dir1, dir2 string) bool {
-	if runtime.GOOS == "windows" {
-		dir1 = strings.ToLower(dir1)
-		dir2 = strings.ToLower(dir2)
+	normalizedDir1, err := normalizeComparablePath(dir1)
+	if err != nil {
+		return false
+	}
+	normalizedDir2, err := normalizeComparablePath(dir2)
+	if err != nil {
+		return false
 	}
 
-	absDir1, err := filepath.Abs(dir1)
-	if err != nil {
-		return false
-	}
-	absDir2, err := filepath.Abs(dir2)
-	if err != nil {
-		return false
-	}
-	return absDir1 == absDir2
+	return normalizedDir1 == normalizedDir2
 }
 
 func IsFileUnderDir(filePath, dir string) bool {
-	// Get the absolute path of the file
-	absFilePath, err := filepath.Abs(filePath)
+	normalizedDir, err := normalizeComparablePath(dir)
+	if err != nil {
+		return false
+	}
+	normalizedFile, err := normalizeComparablePath(filePath)
 	if err != nil {
 		return false
 	}
 
-	// Get the absolute path of the directory
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
+	return isStrictDescendantPath(normalizedDir, normalizedFile)
+}
+
+func isStrictDescendantPath(parent, child string) bool {
+	if parent == child {
 		return false
 	}
 
+	prefix := parent
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
+	return strings.HasPrefix(child, prefix)
+}
+
+func normalizeComparablePath(input string) (string, error) {
+	if looksLikeWindowsPath(input) {
+		normalized := strings.ReplaceAll(input, `\`, "/")
+		if len(normalized) >= 2 && normalized[1] == ':' {
+			volume := strings.ToLower(normalized[:2])
+			tail := path.Clean("/" + strings.TrimPrefix(normalized[2:], "/"))
+			return volume + strings.ToLower(tail), nil
+		}
+
+		return strings.ToLower(path.Clean(normalized)), nil
+	}
+
+	absPath, err := filepath.Abs(input)
+	if err != nil {
+		return "", err
+	}
+
+	normalized := filepath.ToSlash(filepath.Clean(absPath))
 	if runtime.GOOS == "windows" {
-		absFilePath = strings.ToLower(absFilePath)
-		absDir = strings.ToLower(absDir)
+		normalized = strings.ToLower(normalized)
 	}
 
-	// Check if the file path starts with the directory path
-	return strings.HasPrefix(absFilePath, absDir+string(os.PathSeparator))
+	return normalized, nil
+}
+
+func looksLikeWindowsPath(input string) bool {
+	if len(input) >= 2 && input[1] == ':' {
+		return true
+	}
+
+	return strings.Contains(input, `\`)
+}
+
+func ResolveArchiveEntryPath(destRoot, entryName string) (string, error) {
+	normalizedEntry := strings.ReplaceAll(entryName, `\`, "/")
+	cleanedEntry := path.Clean(normalizedEntry)
+	if normalizedEntry == "" || cleanedEntry == "." || cleanedEntry == "/" {
+		return "", fmt.Errorf("invalid archive entry path: %q", entryName)
+	}
+
+	resolvedPath := filepath.Join(destRoot, filepath.FromSlash(normalizedEntry))
+	normalizedDestRoot, err := normalizeComparablePath(destRoot)
+	if err != nil {
+		return "", err
+	}
+
+	normalizedResolvedPath, err := normalizeComparablePath(resolvedPath)
+	if err != nil {
+		return "", err
+	}
+
+	if normalizedResolvedPath != normalizedDestRoot && !isStrictDescendantPath(normalizedDestRoot, normalizedResolvedPath) {
+		return "", fmt.Errorf("%w: %s", ErrArchivePathTraversal, entryName)
+	}
+
+	return resolvedPath, nil
 }
 
 // UnzipFile unzips a file to the destination.
@@ -122,8 +192,15 @@ func UnzipFile(src, dest string) error {
 
 	// Iterate through the files in the archive
 	for _, f := range r.File {
-		// Get the full path of the file in the destination
-		fpath := filepath.Join(extractedDir, f.Name)
+		mode := f.Mode()
+		if mode&os.ModeSymlink != 0 || (!mode.IsRegular() && !f.FileInfo().IsDir()) {
+			return fmt.Errorf("%w: %s", ErrUnsupportedArchiveEntry, f.Name)
+		}
+
+		fpath, err := ResolveArchiveEntryPath(extractedDir, f.Name)
+		if err != nil {
+			return fmt.Errorf("failed to resolve archive path: %w", err)
+		}
 		// If the file is a directory, create it in the destination
 		if f.FileInfo().IsDir() {
 			_ = os.MkdirAll(fpath, os.ModePerm)
@@ -208,8 +285,10 @@ func UnrarFile(src, dest string) error {
 			return fmt.Errorf("failed to get next file in archive: %w", err)
 		}
 
-		// Get the full path of the file in the destination
-		fpath := filepath.Join(extractedDir, header.Name)
+		fpath, err := ResolveArchiveEntryPath(extractedDir, header.Name)
+		if err != nil {
+			return fmt.Errorf("failed to resolve archive path: %w", err)
+		}
 		// If the file is a directory, create it in the destination
 		if header.IsDir {
 			_ = os.MkdirAll(fpath, os.ModePerm)

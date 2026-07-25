@@ -7,14 +7,12 @@
 <h1 align="center"><b>Seanime</b></h1>
 
 <p align="center">
-<img src="https://seanime.app/bucket/gh-showcase.webp" alt="preview" width="100%"/>
+<img src="https://s3.seanime.app/sea/img-20260508-090529-ioc20pjr--sq2.webp" alt="preview" width="100%"/>
 </p>
 
 <p align="center">
   <a href="https://seanime.app/docs">Documentation</a> |
   <a href="https://github.com/5rahim/seanime/releases">Latest release</a> |
-  <a href="https://www.youtube.com/playlist?list=PLgQO-Ih6JClhFFdEVuNQJejyX_8iH82gl">Tutorials</a> |
-  <a href="https://discord.gg/Sbr7Phzt6m">Discord</a> |
   <a href="https://seanime.app/docs/policies">Copyright</a>
 </p>
 
@@ -54,13 +52,14 @@ Seanime is a **media server** with a **web interface** and **desktop app** for m
 
 ## Features
 
-- **Cross-platform**: Web interface and desktop app for Windows, Linux, and macOS
-- **Seanime Denshi**: Desktop client with built-in video player (support for SSA/ASS subtitles, Anime4K sharpening, auto translation, and more)
+- **Cross-platform**: Web interface and desktop app for Windows, Linux, and macOS, companion and mobile server apps for iOS and Android
+- **Seanime Denshi**: Desktop client with built-in libmpv-based video player (support for SSA/ASS subtitles, shaders, and more)
+- **Seanime Tenji**: Companion app for iOS and Android to browse your library, manage your AniList, stream content, and enjoy offline access. Connect to your existing Seanime server or host your own directly on your mobile device with the Mobile Server app
 - **AniList Integration**: Browse and manage your lists, discover anime and manga
 - **Custom Sources**: Support for adding non-AniList anime and manga series 
 - **Library Management**: Fast and smart scanning of local files without strict naming conventions or folder structures
-- **Torrent Integration**: Built-in torrent search engine via extensions and downloading support with Qbittorrent, Transmission, Torbox, and Real-Debrid
-- **Torrent Streaming**: Stream torrents directly to the media player without waiting for downloads (supports Bittorrent, Torbox and Real-Debrid)
+- **Torrent Integration**: Built-in torrent search engine via extensions and downloading support with qBittorrent, Transmission, Torbox, Real-Debrid, AllDebrid and Premiumize
+- **Torrent Streaming**: Stream torrents directly to the media player without waiting for downloads (supports Bittorrent, Torbox, Real-Debrid, AllDebrid and Premiumize)
 - **Online Streaming**: Watch anime from online sources directly within the app via extensions
 - **Auto Downloader**: Automatically track and download new episodes with customizable filters and advanced features (prioritization, scoring, delay, etc.)
 - **Extension Marketplace**: In-app repository to install and manage extensions for online streaming, manga sources, and torrent providers
@@ -188,7 +187,6 @@ This is a one-person project and may not meet every use case. If it doesn’t fu
 
 ### Not planned
 
-- Android, iOS, AndroidTV, tvOS, ... apps
 - Built-in support for other trackers such as MyAnimeList, Trakt, SIMKL, etc.
 - Built-in support for other media players
 - Built-in localization (translations)

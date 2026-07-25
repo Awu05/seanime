@@ -138,6 +138,11 @@ func (r *Repository) GetClient() *Client {
 	return r.client
 }
 
+// GetAutoSelect returns the underlying auto-select instance.
+func (r *Repository) GetAutoSelect() *autoselect.AutoSelect {
+	return r.autoSelect
+}
+
 // SetSettings sets the torrentstream settings without initializing the torrent client.
 // Used by per-session repositories that share the anacrolix engine.
 func (r *Repository) SetSettings(settings *models.TorrentstreamSettings, host string, port int) {

@@ -1,15 +1,19 @@
 import { Torrentstream_TorrentStatus } from "@/api/generated/types"
 import { useTorrentstreamStopStream } from "@/api/hooks/torrentstream.hooks"
+import { mpvCore_stateAtom } from "@/app/(main)/_features/mpv-core/mpv-core.atoms"
 import { nativePlayer_stateAtom } from "@/app/(main)/_features/native-player/native-player.atoms"
+import { vc_miniPlayer, vc_videoElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 
+import { useWebsocketSender } from "@/app/(main)/_hooks/handle-websockets"
 import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets"
+import { clientIdAtom } from "@/app/websocket-provider"
 import { IconButton } from "@/components/ui/button"
 import { cn } from "@/components/ui/core/styling"
 import { Spinner } from "@/components/ui/loading-spinner"
 import { Tooltip } from "@/components/ui/tooltip"
 import { WSEvents } from "@/lib/server/ws-events"
 import { atom } from "jotai"
-import { useAtom } from "jotai/react"
+import { useAtom, useAtomValue, useSetAtom } from "jotai/react"
 import React, { useRef, useState } from "react"
 import { BiDownArrow, BiGroup, BiStop, BiUpArrow } from "react-icons/bi"
 
@@ -37,7 +41,13 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
     show?: boolean
 }) {
 
+    const [mpvCoreState, setMpvCoreState] = useAtom(mpvCore_stateAtom)
     const [nativePlayerState, setNativePlayerState] = useAtom(nativePlayer_stateAtom)
+    const videoElement = useAtomValue(vc_videoElement)
+    const setMiniPlayer = useSetAtom(vc_miniPlayer)
+    const builtInPlayerActive = mpvCoreState.active || nativePlayerState.active
+    const clientId = useAtomValue(clientIdAtom)
+    const { sendMessage } = useWebsocketSender()
 
     const [loadingState, setLoadingState] = useAtom(__torrentstream__loadingStateAtom)
     const [isLoaded, setIsLoaded] = useAtom(__torrentstream__isLoadedAtom)
@@ -49,6 +59,67 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
     const { mutate: stop, isPending } = useTorrentstreamStopStream()
 
     const t = useRef<NodeJS.Timeout | null>(null)
+
+    const handleStopStream = React.useCallback(() => {
+        if (mpvCoreState.active && clientId) {
+            const playbackId = mpvCoreState.playbackInfo?.id || ""
+            const playbackType = mpvCoreState.playbackInfo?.playbackType || ""
+
+            setMpvCoreState(draft => {
+                draft.playbackInfo = null
+                draft.playbackError = null
+                draft.loadingState = "Ending stream..."
+                draft.miniPlayer = false
+            })
+
+            setTimeout(() => {
+                setMpvCoreState(draft => {
+                    draft.active = false
+                })
+            }, 700)
+
+            sendMessage({
+                type: WSEvents.MPVCORE,
+                payload: {
+                    clientId,
+                    type: "terminated",
+                    payload: {
+                        id: playbackId,
+                        clientId,
+                        playbackType,
+                    },
+                },
+            })
+
+            return
+        }
+
+        if (nativePlayerState.active && clientId) {
+            const playbackId = nativePlayerState.playbackInfo?.id || ""
+            const playbackType = nativePlayerState.playbackInfo?.streamType || ""
+            videoElement?.pause()
+            setMiniPlayer(true)
+            setNativePlayerState(draft => {
+                draft.playbackInfo = null
+                draft.playbackError = null
+                draft.loadingState = "Ending stream..."
+            })
+            setTimeout(() => setNativePlayerState(draft => {
+                draft.active = false
+            }), 700)
+            sendMessage({
+                type: WSEvents.VIDEOCORE,
+                payload: {
+                    clientId,
+                    type: "video-terminated",
+                    payload: { id: playbackId, clientId, playerType: "native", playbackType },
+                },
+            })
+            return
+        }
+
+        stop()
+    }, [clientId, mpvCoreState, nativePlayerState, sendMessage, setMiniPlayer, setMpvCoreState, setNativePlayerState, stop, videoElement])
 
     useWebsocketMessageListener({
         type: WSEvents.TORRENTSTREAM_STATE,
@@ -104,7 +175,7 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
             <>
                 {/* Native player is fullscreen */}
                 {/* It's integrated into the media controller */}
-                {(isLoaded && nativePlayerState.active && status) &&
+                {(isLoaded && builtInPlayerActive && status) &&
                     <div
                         className={cn(
                             "absolute left-0 top-8 w-full flex justify-center z-[100] pointer-events-none",
@@ -144,7 +215,7 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
 
                             {isNativePlayerComponent === "overlay" && <Tooltip
                                 trigger={<IconButton
-                                    onClick={() => stop()}
+                                    onClick={handleStopStream}
                                     loading={isPending}
                                     intent="alert-basic"
                                     icon={<BiStop />}
@@ -177,11 +248,11 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
     if (isLoaded && status) {
         return (
             <>
-                {/*{!mediaPlayerStartedPlaying && !nativePlayerState.active && <div className="w-full bg-gray-950 fixed top-0 left-0 z-[100]">*/}
+                {/*{!mediaPlayerStartedPlaying && !builtInPlayerActive && <div className="w-full bg-gray-950 fixed top-0 left-0 z-[100]">*/}
                 {/*    <ProgressBar size="xs" isIndeterminate />*/}
                 {/*</div>}*/}
                 {/* Normal overlay / Native player is not fullscreen */}
-                {(!nativePlayerState.active) &&
+                {(!builtInPlayerActive) &&
                     <div className="fixed left-0 top-8 w-full flex justify-center z-[100] pointer-events-none">
                         <div className="bg-gray-950 flex-wrap rounded-full border lg:max-w-[50%] w-fit h-14 px-6 flex gap-3 items-center text-sm lg:text-base pointer-events-auto">
 
@@ -207,7 +278,7 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
 
                             <Tooltip
                                 trigger={<IconButton
-                                    onClick={() => stop()}
+                                    onClick={handleStopStream}
                                     loading={isPending}
                                     intent="alert-basic"
                                     icon={<BiStop />}
@@ -221,7 +292,7 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
         )
     }
 
-    if (loadingState && !nativePlayerState.active) {
+    if (loadingState && !builtInPlayerActive) {
         return <>
             {/*<div className="w-full bg-gray-950 fixed top-0 left-0 z-[100]">*/}
             {/*    <ProgressBar size="xs" isIndeterminate />*/}

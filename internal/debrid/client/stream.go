@@ -144,7 +144,7 @@ func (s *StreamManager) startStream(ctx context.Context, opts *StartStreamOption
 			Message:     "Selecting best torrent...",
 		})
 
-		pt, err := s.repository.findBestTorrent(provider, media, opts.EpisodeNumber)
+		pt, err := s.repository.findBestTorrent(ctx, provider, media, opts.EpisodeNumber)
 		if err != nil {
 			if opts.PlaybackType == PlaybackTypeNativePlayer {
 				s.repository.directStreamManager.AbortOpen(opts.ClientId, err)

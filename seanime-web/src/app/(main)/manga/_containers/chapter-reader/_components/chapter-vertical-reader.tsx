@@ -1,6 +1,6 @@
 import { Manga_PageContainer } from "@/api/generated/types"
 import { ChapterPage } from "@/app/(main)/manga/_containers/chapter-reader/_components/chapter-page"
-import { useHandleChapterPageStatus, useHydrateMangaPaginationMap } from "@/app/(main)/manga/_lib/handle-chapter-reader"
+import { useHandleChapterPageStatus, useHydrateMangaPaginationMap, useMangaReaderZoomWheel } from "@/app/(main)/manga/_lib/handle-chapter-reader"
 import {
     __manga_currentPageIndexAtom,
     __manga_hiddenBarAtom,
@@ -11,6 +11,7 @@ import {
     __manga_pageGapAtom,
     __manga_pageOverflowContainerWidthAtom,
     __manga_pageStretchAtom,
+    __manga_pageZoomAtom,
     __manga_paginationMapAtom,
     MangaPageFit,
     MangaPageStretch,
@@ -44,6 +45,7 @@ export function MangaVerticalReader({ pageContainer }: MangaVerticalReaderProps)
     const pageStretch = useAtomValue(__manga_pageStretchAtom)
     const pageGap = useAtomValue(__manga_pageGapAtom)
     const pageOverflowContainerWidth = useAtomValue(__manga_pageOverflowContainerWidthAtom)
+    const pageZoom = useAtomValue(__manga_pageZoomAtom)
     const [currentPageIndex, setCurrentPageIndex] = useAtom(__manga_currentPageIndexAtom)
     const paginationMap = useAtom(__manga_paginationMapAtom)
 
@@ -53,6 +55,7 @@ export function MangaVerticalReader({ pageContainer }: MangaVerticalReaderProps)
     const kbsPageRight = useAtomValue(__manga_kbsPageRight)
 
     useHydrateMangaPaginationMap(pageContainer)
+    useMangaReaderZoomWheel(containerRef)
 
     const { handlePageLoad } = useHandleChapterPageStatus(pageContainer)
 
@@ -75,6 +78,11 @@ export function MangaVerticalReader({ pageContainer }: MangaVerticalReaderProps)
         const pageDiv = containerRef.current?.querySelector(`#page-${currentPageIndex}`)
         pageDiv?.scrollIntoView()
     }, [scrollSignal])
+
+    useUpdateEffect(() => {
+        const pageDiv = containerRef.current?.querySelector(`#page-${currentPageIndex}`)
+        pageDiv?.scrollIntoView()
+    }, [pageContainer?.pages])
 
     /**
      * Function to handle scroll event
@@ -172,7 +180,8 @@ export function MangaVerticalReader({ pageContainer }: MangaVerticalReaderProps)
             <div
                 data-chapter-vertical-reader-inner-container
                 className={cn(
-                    "w-full h-[calc(100dvh-3rem)] overflow-y-auto overflow-x-hidden px-4 select-none relative focus-visible:outline-none",
+                    "w-full h-[calc(100dvh-3rem)] overflow-y-auto px-4 select-none relative focus-visible:outline-none",
+                    pageZoom !== 1 ? "overflow-x-auto" : "overflow-x-hidden",
                     hiddenBar && "h-dvh",
                     pageGap && "space-y-4",
                     isMobile() && "hide-scrollbar",
@@ -197,7 +206,7 @@ export function MangaVerticalReader({ pageContainer }: MangaVerticalReaderProps)
                         onFinishedLoading={() => {
                             // If the first page is loaded, set the current page index to 0
                             // This is to avoid the current page index to remain incorrect when multiple pages are loading
-                            if (index === 0) {
+                            if (index === 0 && currentPageIndex === 0) {
                                 setCurrentPageIndex(0)
                             }
                             handlePageLoad(index)
@@ -209,6 +218,8 @@ export function MangaVerticalReader({ pageContainer }: MangaVerticalReaderProps)
                             pageFit === MangaPageFit.COVER && "max-w-full",
                         )}
                         containerMaxWidth={pageFit === MangaPageFit.LARGER ? pageOverflowContainerWidth + "%" : undefined}
+                        pageZoom={pageZoom}
+                        pageFit={pageFit}
                         imageClass={cn(
                             "max-w-full h-auto mx-auto select-none z-[4] relative focus-visible:outline-none",
 

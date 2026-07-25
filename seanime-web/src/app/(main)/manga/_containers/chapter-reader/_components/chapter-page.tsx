@@ -20,6 +20,8 @@ type ChapterPageProps = {
     imageWidth?: number | string
     imageMaxWidth?: number | string
     containerMaxWidth?: number | string
+    pageZoom?: number
+    pageFit?: string
 }
 
 export function ChapterPage(props: ChapterPageProps) {
@@ -36,11 +38,19 @@ export function ChapterPage(props: ChapterPageProps) {
         imageWidth,
         imageMaxWidth,
         containerMaxWidth,
+        pageZoom = 1,
+        pageFit,
         ...rest
     } = props
 
     const ref = React.useRef<HTMLImageElement>(null)
-    const { isLoaded, isLoading, hasError, retry } = useImageLoadStatus(ref)
+    const { getChapterPageUrl, isReady } = useMangaReaderUtils()
+    const pageUrl = React.useMemo(() => {
+        if (!page || !isReady) return undefined
+        return HIDE_IMAGES ? "/no-cover.png" : getChapterPageUrl(page.url, pageContainer?.isDownloaded, page.headers)
+    }, [getChapterPageUrl, isReady, page, pageContainer?.isDownloaded])
+
+    const { isLoaded, isLoading, hasError, retry } = useImageLoadStatus(ref, isReady, pageUrl)
 
     useUpdateEffect(() => {
         if (isLoaded && onFinishedLoading) {
@@ -48,25 +58,38 @@ export function ChapterPage(props: ChapterPageProps) {
         }
     }, [isLoaded])
 
-    const { getChapterPageUrl, isReady } = useMangaReaderUtils()
-
     if (!page) return null
+
+    const containerStyle: React.CSSProperties & { zoom?: number } = {
+        maxWidth: pageZoom !== 1 ? "none" : containerMaxWidth,
+        minHeight: isLoaded ? "20px" : undefined,
+        transformOrigin: "top center",
+    }
+    if (pageZoom !== 1) {
+        containerStyle.zoom = pageZoom
+    }
 
     return (
         <>
             <div
                 data-chapter-page-container
                 className={containerClass}
-                style={{ maxWidth: containerMaxWidth }}
+                style={containerStyle}
                 id={`page-${index}`}
                 tabIndex={-1}
             >
                 {(isLoading || !isReady) &&
-                    <LoadingSpinner data-chapter-page-loading-spinner containerClass="h-full absolute inset-0 z-[1] w-full mx-auto" tabIndex={-1} />}
+                    <LoadingSpinner
+                        data-chapter-page-loading-spinner
+                        containerClass="h-full absolute inset-0 z-[1] w-full mx-auto"
+                        style={{ zoom: pageZoom !== 1 ? 1 / pageZoom : undefined }}
+                        tabIndex={-1}
+                    />}
                 {hasError &&
                     <div
                         data-chapter-page-retry-container
                         className="h-full w-full flex justify-center items-center absolute inset-0 z-[10]"
+                        style={{ zoom: pageZoom !== 1 ? 1 / pageZoom : undefined }}
                         id="retry-container"
                         tabIndex={-1}
                     >
@@ -75,10 +98,21 @@ export function ChapterPage(props: ChapterPageProps) {
                 {isReady && <img
                     data-chapter-page-image
                     data-page-index={index}
-                    src={HIDE_IMAGES ? "/no-cover.png" : getChapterPageUrl(page.url, pageContainer?.isDownloaded, page.headers)}
+                    src={pageUrl}
                     alt={`Page ${index}`}
+                    crossOrigin="anonymous"
+                    draggable={false}
                     className={imageClass}
-                    style={{ width: imageWidth, maxWidth: imageMaxWidth }}
+                    style={{
+                        width: pageZoom !== 1 ? (pageFit === "contain" || pageFit === "true-size" ? "auto" : "100%") : imageWidth,
+                        height: pageZoom !== 1 ? (pageFit === "contain" ? "100%" : "auto") : undefined,
+                        maxWidth: pageZoom !== 1 ? "none" : imageMaxWidth,
+                        maxHeight: pageZoom !== 1 ? "none" : undefined,
+                        objectFit: pageZoom !== 1 ? "initial" : undefined,
+                        display: pageZoom !== 1 ? "block" : undefined,
+                        marginLeft: pageZoom !== 1 ? "auto" : undefined,
+                        marginRight: pageZoom !== 1 ? "auto" : undefined,
+                    }}
                     ref={ref}
                     tabIndex={-1}
                 />}
@@ -94,7 +128,11 @@ export const IMAGE_STATUS = {
     ERROR: "error",
 }
 
-const useImageLoadStatus = (imageRef: React.RefObject<HTMLImageElement>) => {
+const useImageLoadStatus = (
+    imageRef: React.RefObject<HTMLImageElement | null>,
+    enabled: boolean,
+    src?: string,
+) => {
     const [imageStatus, setImageStatus] = React.useState(IMAGE_STATUS.LOADING)
     const retries = React.useRef(0)
 
@@ -108,14 +146,23 @@ const useImageLoadStatus = (imageRef: React.RefObject<HTMLImageElement>) => {
     const retry = React.useCallback(() => {
         retries.current = 0
         setImageStatus(IMAGE_STATUS.LOADING)
-        const imgSrc = imageRef.current?.src
-        if (!imgSrc) {
+        const image = imageRef.current
+        const imgSrc = image?.src
+        if (!image || !imgSrc) {
             return
         }
-        imageRef.current.src = imgSrc
+        image.src = imgSrc
     }, [])
 
     React.useEffect(() => {
+        if (!enabled || !src) {
+            setImageStatus(IMAGE_STATUS.LOADING)
+            return
+        }
+
+        retries.current = 0
+        setImageStatus(IMAGE_STATUS.LOADING)
+
         if (!imageRef.current) {
             return
         }
@@ -144,6 +191,7 @@ const useImageLoadStatus = (imageRef: React.RefObject<HTMLImageElement>) => {
         const handleError = (event: ErrorEvent) => {
             logger("chapter-page").info("retrying")
             if (retries.current >= 3) {
+                logger("chapter-page").info("max retries reached", event.error)
                 setImageStatus(IMAGE_STATUS.ERROR)
                 return
             }
@@ -181,7 +229,7 @@ const useImageLoadStatus = (imageRef: React.RefObject<HTMLImageElement>) => {
                 clearTimeout(timerId)
             }
         }
-    }, [imageRef, retries])
+    }, [enabled, imageRef, src])
 
     return {
         isLoaded,

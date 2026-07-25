@@ -21,20 +21,32 @@ const (
 	StreamTypeNakama  StreamType = "nakama"
 )
 
+type VideoSubtitleTrack struct {
+	Index             int     `json:"index"`
+	Src               *string `json:"src"`
+	Content           *string `json:"content"`
+	Label             string  `json:"label"`
+	Language          string  `json:"language"`
+	Type              *string `json:"type"` // "srt" | "vtt" | "ass" | "ssa"
+	Default           *bool   `json:"default"`
+	UseLibassRenderer *bool   `json:"useLibassRenderer"`
+}
+
 type (
 	PlaybackInfo struct {
-		ID                 string               `json:"id"`
-		StreamType         StreamType           `json:"streamType"`
-		StreamPath         string               `json:"streamPath"`
-		MimeType           string               `json:"mimeType"`                // e.g. "video/mp4", "video/webm"
-		StreamUrl          string               `json:"streamUrl"`               // URL of the stream
-		ContentLength      int64                `json:"contentLength"`           // Size of the stream in bytes
-		MkvMetadata        *mkvparser.Metadata  `json:"mkvMetadata,omitempty"`   // nil if not ebml
-		EntryListData      *anime.EntryListData `json:"entryListData,omitempty"` // nil if not in list
-		Episode            *anime.Episode       `json:"episode"`
-		Media              *anilist.BaseAnime   `json:"media"`
-		IsNakamaWatchParty bool                 `json:"isNakamaWatchParty"` // Is the stream from Nakama Watch Party
-		LocalFile          *anime.LocalFile     `json:"localFile,omitempty"`
+		ID                 string                `json:"id"`
+		StreamType         StreamType            `json:"streamType"`
+		StreamPath         string                `json:"streamPath"`
+		MimeType           string                `json:"mimeType"`                // e.g. "video/mp4", "video/webm"
+		StreamUrl          string                `json:"streamUrl"`               // URL of the stream
+		ContentLength      int64                 `json:"contentLength"`           // Size of the stream in bytes
+		MkvMetadata        *mkvparser.Metadata   `json:"mkvMetadata,omitempty"`   // nil if not ebml
+		SubtitleTracks     []*VideoSubtitleTrack `json:"subtitleTracks,omitempty"`
+		EntryListData      *anime.EntryListData  `json:"entryListData,omitempty"` // nil if not in list
+		Episode            *anime.Episode        `json:"episode"`
+		Media              *anilist.BaseAnime    `json:"media"`
+		IsNakamaWatchParty bool                  `json:"isNakamaWatchParty"` // Is the stream from Nakama Watch Party
+		LocalFile          *anime.LocalFile      `json:"localFile,omitempty"`
 
 		MkvMetadataParser mo.Option[*mkvparser.MetadataParser] `json:"-"`
 	}

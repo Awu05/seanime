@@ -1,10 +1,11 @@
 import { Status } from "@/api/generated/types"
 import { atom } from "jotai"
-import { atomWithImmer } from "jotai-immer"
 import { atomWithStorage } from "jotai/utils"
 
-export const serverStatusAtom = atomWithImmer<Status | undefined>(undefined)
+export const SERVER_AUTH_TOKEN_STORAGE_KEY = "sea-server-auth-token"
+
+export const serverStatusAtom = atom<Status | undefined>(undefined)
 
 export const isLoginModalOpenAtom = atom(false)
 
-export const serverAuthTokenAtom = atomWithStorage<string | undefined>("sea-server-auth-token", undefined, undefined, { getOnInit: true })
+export const serverAuthTokenAtom = atomWithStorage<string | undefined>(SERVER_AUTH_TOKEN_STORAGE_KEY, undefined, undefined, { getOnInit: true })

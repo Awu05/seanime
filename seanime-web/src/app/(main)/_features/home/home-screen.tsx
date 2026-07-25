@@ -179,12 +179,12 @@ export function HomeScreen() {
                     )}
                 />
 
-                <div className="text-center space-y-6 py-10">
+                <div className="text-center space-y-6 py-10 z-[10] relative">
                     <h2>Your home screen is empty</h2>
 
                     {!!serverStatus?.settings?.library?.libraryPath && <>
                         <Button
-                            intent="primary-glass"
+                            intent="primary-subtle"
                             leftIcon={<FiSearch />}
                             size="xl"
                             rounded
@@ -197,7 +197,7 @@ export function HomeScreen() {
                     {!serverStatus?.settings?.library?.libraryPath && noMediaInCollection && <>
                         <SeaLink href="/discover" className="block">
                             <Button
-                                intent="gray-glass"
+                                intent="gray-subtle"
                                 leftIcon={<LuPlus />}
                                 size="lg"
                                 rounded
@@ -209,7 +209,7 @@ export function HomeScreen() {
 
                     {!serverStatus?.settings?.library?.libraryPath && !noMediaInCollection && <>
                         {animeLibraryType === "local" && <Button
-                            intent="gray-glass"
+                            intent="gray-subtle"
                             leftIcon={<LiaPlayCircle className="text-2xl" />}
                             size="lg"
                             rounded
@@ -352,14 +352,14 @@ export function HomeScreen() {
                 {view === "base" && <PageWrapper
                     key="base"
                     className="relative 2xl:order-first pb-10 pt-4"
-                    {...{
-                        initial: { opacity: 0, y: 5 },
-                        animate: { opacity: 1, y: 0 },
-                        exit: { opacity: 0, scale: 0.99 },
-                        transition: {
-                            duration: 0.25,
-                        },
-                    }}
+                    // {...{
+                    //     initial: { opacity: 0, y: 5 },
+                    //     animate: { opacity: 1, y: 0 },
+                    //     exit: { opacity: 0, scale: 0.99 },
+                    //     transition: {
+                    //         duration: 0.25,
+                    //     },
+                    // }}
                 >
                     {homeItems.filter(n => n.type !== "discover-header" && n.type !== "anime-continue-watching-header").map((item, index) => {
                         return (
@@ -398,14 +398,14 @@ export function HomeScreen() {
                 {view === "detailed" && <PageWrapper
                     key="detailed"
                     className="relative 2xl:order-first pb-10 pt-4"
-                    {...{
-                        initial: { opacity: 0, y: 5 },
-                        animate: { opacity: 1, y: 0 },
-                        exit: { opacity: 0, scale: 0.99 },
-                        transition: {
-                            duration: 0.25,
-                        },
-                    }}
+                    // {...{
+                    //     initial: { opacity: 0, y: 5 },
+                    //     animate: { opacity: 1, y: 0 },
+                    //     exit: { opacity: 0, scale: 0.99 },
+                    //     transition: {
+                    //         duration: 0.25,
+                    //     },
+                    // }}
                 >
                     <DetailedLibraryView
                         collectionList={libraryCollectionList}

@@ -34,6 +34,23 @@ func (r *Repository) GetBatchHistory(mId int) (ret *BatchHistoryResponse) {
 	}
 }
 
+func (r *Repository) DeleteBatchHistory(mId int) (err error) {
+	defer util.HandlePanicInModuleWithError("torrentstream/DeleteBatchHistory", &err)
+
+	if mId == 0 {
+		return nil
+	}
+
+	err = db_bridge.DeleteTorrentstreamHistory(r.db, mId)
+	if err != nil {
+		return err
+	}
+
+	r.wsEventManager.SendEvent(events.InvalidateQueries, []string{events.GetTorrentstreamBatchHistoryEndpoint})
+
+	return nil
+}
+
 func (r *Repository) AddBatchHistory(mId int, torrent *hibiketorrent.AnimeTorrent, files *hibiketorrent.BatchEpisodeFiles) {
 	go func() {
 		defer util.HandlePanicInModuleThen("torrentstream/AddBatchHistory", func() {})

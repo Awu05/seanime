@@ -3,14 +3,19 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"seanime/internal/api/anilist"
 	"seanime/internal/database/db_bridge"
+	"seanime/internal/database/models"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
+	"seanime/internal/library/autodownloader"
 	"seanime/internal/torrent_clients/torrent_client"
+	torrentrepo "seanime/internal/torrents/torrent"
 	"seanime/internal/util"
 
+	"github.com/goccy/go-json"
 	"github.com/labstack/echo/v4"
 )
 
@@ -36,6 +41,12 @@ func (h *Handler) HandleGetActiveTorrentList(c echo.Context) error {
 	// If an error occurred, try to start the torrent client and get the list again
 	// DEVNOTE: We try to get the list first because this route is called repeatedly by the client.
 	if err != nil {
+		if h.App.TorrentClientRepository.GetProvider() == torrent_client.SeanimeClient {
+			return h.RespondWithData(c, make([]*torrent_client.Torrent, 0))
+		}
+		if err := h.guardPrivilegedTorrentClient(c, h.App.Settings); err != nil {
+			return err
+		}
 		ok := h.App.TorrentClientRepository.Start()
 		if !ok {
 			return h.RespondWithError(c, errors.New("could not start torrent client, verify your settings"))
@@ -59,9 +70,17 @@ func (h *Handler) HandleGetActiveTorrentList(c echo.Context) error {
 func (h *Handler) HandleTorrentClientAction(c echo.Context) error {
 
 	type body struct {
-		Hash   string `json:"hash"`
-		Action string `json:"action"`
-		Dir    string `json:"dir"`
+		Hash          string `json:"hash,omitempty"`
+		Action        string `json:"action"`
+		Dir           string `json:"dir,omitempty"`
+		Tracker       string `json:"tracker,omitempty"`
+		Name          string `json:"name,omitempty"`
+		Value         bool   `json:"value,omitempty"`
+		Index         int    `json:"index,omitempty"`
+		Priority      int    `json:"priority,omitempty"`
+		DownloadLimit int    `json:"downloadLimit,omitempty"`
+		UploadLimit   int    `json:"uploadLimit,omitempty"`
+		Magnet        string `json:"magnet,omitempty"`
 	}
 
 	var b body
@@ -69,8 +88,12 @@ func (h *Handler) HandleTorrentClientAction(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	if b.Hash == "" || b.Action == "" {
+	if b.Action == "" {
 		return h.RespondWithError(c, errors.New("missing arguments"))
+	}
+	globalAction := b.Action == "pause-all" || b.Action == "resume-all" || b.Action == "set-limits" || b.Action == "add-magnet"
+	if !globalAction && b.Hash == "" {
+		return h.RespondWithError(c, errors.New("missing torrent hash"))
 	}
 
 	switch b.Action {
@@ -90,14 +113,93 @@ func (h *Handler) HandleTorrentClientAction(c echo.Context) error {
 			return h.RespondWithError(c, err)
 		}
 	case "open":
+		// Ensure the directory exists before attempting to open it, avoiding arbitrary string execution
 		if b.Dir == "" {
 			return h.RespondWithError(c, errors.New("directory not found"))
 		}
+		stat, err := os.Stat(b.Dir)
+		if err != nil {
+			return h.RespondWithError(c, errors.New("directory does not exist"))
+		}
+		// If it's a file, open its parent directory
+		if !stat.IsDir() {
+			b.Dir = filepath.Dir(b.Dir)
+		}
+
+		if err := h.guardPrivilegedLocalExecution(c); err != nil {
+			return err
+		}
 		OpenDirInExplorer(b.Dir)
+	case "pause-all", "resume-all", "force-start", "queue-up", "queue-down", "move-storage", "recheck", "reannounce", "add-tracker", "remove-tracker", "set-file-priority", "set-sequential", "rename", "set-limits", "add-magnet":
+		client := h.App.TorrentClientRepository.GetSeanimeClient()
+		if h.App.TorrentClientRepository.GetProvider() != torrent_client.SeanimeClient || client == nil {
+			return h.RespondWithError(c, errors.New("action is only available for the Seanime torrent client"))
+		}
+		var err error
+		switch b.Action {
+		case "pause-all":
+			err = client.PauseAll()
+		case "resume-all":
+			err = client.ResumeAll()
+		case "force-start":
+			err = client.SetForceStart(b.Hash, b.Value)
+		case "queue-up":
+			err = client.MoveQueue(b.Hash, -1)
+		case "queue-down":
+			err = client.MoveQueue(b.Hash, 1)
+		case "move-storage":
+			err = client.MoveStorage(b.Hash, b.Dir)
+		case "recheck":
+			go func(hash string) {
+				if verifyErr := client.RecheckTorrent(hash); verifyErr != nil {
+					h.App.Logger.Error().Err(verifyErr).Str("hash", hash).Msg("torrent client: recheck failed")
+				}
+			}(b.Hash)
+		case "reannounce":
+			err = client.ReannounceTorrent(b.Hash)
+		case "add-tracker":
+			err = client.AddTracker(b.Hash, b.Tracker)
+		case "remove-tracker":
+			err = client.RemoveTracker(b.Hash, b.Tracker)
+		case "set-file-priority":
+			err = client.SetFilePriority(b.Hash, b.Index, b.Priority)
+		case "set-sequential":
+			err = client.SetSequential(b.Hash, b.Value)
+		case "rename":
+			err = client.RenameTorrent(b.Hash, b.Name)
+		case "set-limits":
+			client.SetLimits(b.DownloadLimit, b.UploadLimit)
+		case "add-magnet":
+			_, err = client.AddMagnet(b.Magnet, b.Dir)
+		}
+		if err != nil {
+			return h.RespondWithError(c, err)
+		}
 	}
 
 	return h.RespondWithData(c, true)
 
+}
+
+// HandleGetBuiltInTorrentDetails
+//
+//	@summary returns details for a torrent managed by the Seanime torrent client.
+//	@route /api/v1/torrent-client/details [GET]
+//	@returns seanime.TorrentDetails
+func (h *Handler) HandleGetBuiltInTorrentDetails(c echo.Context) error {
+	hash := c.QueryParam("hash")
+	if hash == "" {
+		return h.RespondWithError(c, errors.New("missing torrent hash"))
+	}
+	client := h.App.TorrentClientRepository.GetSeanimeClient()
+	if h.App.TorrentClientRepository.GetProvider() != torrent_client.SeanimeClient || client == nil {
+		return h.RespondWithError(c, errors.New("Seanime torrent client is not active"))
+	}
+	details, err := client.GetTorrentDetails(hash)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, details)
 }
 
 // HandleTorrentClientGetFiles
@@ -128,13 +230,8 @@ func (h *Handler) HandleTorrentClientGetFiles(c echo.Context) error {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Get the torrent's provider extension
-	providerExtension, ok := h.App.TorrentRepository.GetAnimeProviderExtension(b.Provider)
-	if !ok {
-		return h.RespondWithError(c, errors.New("provider extension not found for torrent"))
-	}
 	// Get the magnet
-	magnet, err := providerExtension.GetProvider().GetTorrentMagnetLink(b.Torrent)
+	magnet, err := h.App.TorrentRepository.ResolveMagnetLink(b.Torrent)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -192,12 +289,24 @@ func (h *Handler) HandleTorrentClientDownload(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
+	if err := h.guardStrictFilesystemPath(c, b.Destination); err != nil {
+		return err
+	}
+
 	if b.Destination == "" {
 		return h.RespondWithError(c, errors.New("destination not found"))
 	}
 
 	if !filepath.IsAbs(b.Destination) {
 		return h.RespondWithError(c, errors.New("destination path must be absolute"))
+	}
+
+	if err := h.guardStrictFilesystemPath(c, b.Destination); err != nil {
+		return err
 	}
 
 	// Check that the destination path is a library path
@@ -211,6 +320,9 @@ func (h *Handler) HandleTorrentClientDownload(c echo.Context) error {
 	//}
 
 	// try to start torrent client if it's not running
+	if err := h.guardPrivilegedTorrentClient(c, h.App.Settings); err != nil {
+		return err
+	}
 	ok := h.App.TorrentClientRepository.Start()
 	if !ok {
 		return h.RespondWithError(c, errors.New("could not contact torrent client, verify your settings or make sure it's running"))
@@ -257,13 +369,8 @@ func (h *Handler) HandleTorrentClientDownload(c echo.Context) error {
 		// Get magnets
 		magnets := make([]string, 0)
 		for _, t := range b.Torrents {
-			// Get the torrent's provider extension
-			providerExtension, ok := h.App.TorrentRepository.GetAnimeProviderExtension(t.Provider)
-			if !ok {
-				return h.RespondWithError(c, errors.New("provider extension not found for torrent"))
-			}
 			// Get the torrent magnet link
-			magnet, err := providerExtension.GetProvider().GetTorrentMagnetLink(&t)
+			magnet, err := h.App.TorrentRepository.ResolveMagnetLink(&t)
 			if err != nil {
 				return h.RespondWithError(c, err)
 			}
@@ -326,8 +433,32 @@ func (h *Handler) HandleTorrentClientAddMagnetFromRule(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	if b.MagnetUrl == "" || b.RuleId == 0 {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
+	if b.RuleId == 0 || (b.MagnetUrl == "" && b.QueuedItemId == 0) {
 		return h.RespondWithError(c, errors.New("missing parameters"))
+	}
+
+	magnetURL := b.MagnetUrl
+	if magnetURL == "" {
+		item, err := h.App.Database.GetAutoDownloaderItem(b.QueuedItemId)
+		if err != nil {
+			return h.RespondWithError(c, err)
+		}
+
+		magnetURL, err = resolveAutoDownloaderItemMagnet(item, h.App.TorrentRepository)
+		if err != nil {
+			return h.RespondWithError(c, err)
+		}
+
+		if item.Magnet != magnetURL {
+			item.Magnet = magnetURL
+			if err := h.App.Database.UpdateAutoDownloaderItem(item.ID, item); err != nil {
+				h.App.Logger.Warn().Err(err).Uint("queuedItemId", item.ID).Msg("torrent client: Failed to cache resolved queued magnet")
+			}
+		}
 	}
 
 	// Get rule from database
@@ -336,14 +467,25 @@ func (h *Handler) HandleTorrentClientAddMagnetFromRule(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if !filepath.IsAbs(rule.Destination) {
+		return h.RespondWithError(c, errors.New("destination path must be absolute"))
+	}
+
+	if err := h.guardStrictFilesystemPath(c, rule.Destination); err != nil {
+		return err
+	}
+
 	// try to start torrent client if it's not running
+	if err := h.guardPrivilegedTorrentClient(c, h.App.Settings); err != nil {
+		return err
+	}
 	ok := h.App.TorrentClientRepository.Start()
 	if !ok {
 		return h.RespondWithError(c, errors.New("could not start torrent client, verify your settings"))
 	}
 
 	// try to add torrents to client, on error return error
-	err = h.App.TorrentClientRepository.AddMagnets([]string{b.MagnetUrl}, rule.Destination)
+	err = h.App.TorrentClientRepository.AddMagnets([]string{magnetURL}, rule.Destination)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -355,4 +497,50 @@ func (h *Handler) HandleTorrentClientAddMagnetFromRule(c echo.Context) error {
 
 	return h.RespondWithData(c, true)
 
+}
+
+func resolveAutoDownloaderItemMagnet(item *models.AutoDownloaderItem, torrentRepository *torrentrepo.Repository) (string, error) {
+	if item == nil {
+		return "", errors.New("queued item not found")
+	}
+
+	if item.Magnet != "" {
+		return item.Magnet, nil
+	}
+
+	fallbackHash := item.Hash
+	var resolveErr error
+
+	if len(item.TorrentData) > 0 {
+		var storedTorrent autodownloader.NormalizedTorrent
+		if err := json.Unmarshal(item.TorrentData, &storedTorrent); err != nil {
+			resolveErr = err
+		} else if storedTorrent.AnimeTorrent != nil {
+			if fallbackHash == "" {
+				fallbackHash = storedTorrent.AnimeTorrent.InfoHash
+			}
+
+			if storedTorrent.AnimeTorrent.Provider == "" && storedTorrent.ExtensionID != "" {
+				storedTorrent.AnimeTorrent.Provider = storedTorrent.ExtensionID
+			}
+
+			if torrentRepository != nil {
+				magnet, err := torrentRepository.ResolveMagnetLink(storedTorrent.AnimeTorrent)
+				if err == nil && magnet != "" {
+					return magnet, nil
+				}
+				resolveErr = err
+			}
+		}
+	}
+
+	if fallbackHash != "" {
+		return fmt.Sprintf("magnet:?xt=urn:btih:%s", fallbackHash), nil
+	}
+
+	if resolveErr != nil {
+		return "", resolveErr
+	}
+
+	return "", errors.New("magnet link not found")
 }

@@ -63,3 +63,12 @@ type PlaybackStreamDetailsRequestedEvent struct {
 	// Empty anime list entry
 	AnimeListEntry *anilist.AnimeListEntry `json:"animeListEntry"`
 }
+
+// GetProfileID overrides hook_resolver.Event's promoted method — each event above
+// redeclares its own ProfileID field (rather than using the embedded one), so the
+// embedded method would otherwise always read back an empty string.
+func (e *LocalFilePlaybackRequestedEvent) GetProfileID() string        { return e.ProfileID }
+func (e *StreamPlaybackRequestedEvent) GetProfileID() string           { return e.ProfileID }
+func (e *PlaybackBeforeTrackingEvent) GetProfileID() string            { return e.ProfileID }
+func (e *PlaybackLocalFileDetailsRequestedEvent) GetProfileID() string { return e.ProfileID }
+func (e *PlaybackStreamDetailsRequestedEvent) GetProfileID() string    { return e.ProfileID }

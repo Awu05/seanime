@@ -111,7 +111,7 @@ func (r *Repository) findBestTorrentFromManualSelection(t *hibiketorrent.AnimeTo
 		r.logger.Error().Err(err).Msgf("torrentstream: Error scraping magnet link for %s", t.Link)
 		return nil, fmt.Errorf("could not get magnet link from %s", t.Link)
 	}
-	selectedTorrent, err := r.client.AddTorrent(magnet)
+	selectedTorrent, err := r.client.AddTorrent(context.Background(), magnet)
 	if err != nil {
 		r.logger.Error().Err(err).Msgf("torrentstream: Error adding torrent %s", t.Link)
 		return nil, err

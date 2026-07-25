@@ -10,11 +10,14 @@ import (
 	"seanime/internal/database/models"
 	"seanime/internal/debrid/alldebrid"
 	"seanime/internal/debrid/debrid"
+	"seanime/internal/debrid/dummy"
+	"seanime/internal/debrid/premiumize"
 	"seanime/internal/debrid/realdebrid"
 	"seanime/internal/debrid/stremthru"
 	"seanime/internal/debrid/torbox"
 	"seanime/internal/directstream"
 	"seanime/internal/events"
+	"seanime/internal/hook"
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/platforms/platform"
 	"seanime/internal/torrents/autoselect"
@@ -41,6 +44,7 @@ type (
 		downloadLoopCancelFunc context.CancelFunc
 		torrentRepository      *torrent.Repository
 		directStreamManager    *directstream.Manager
+		dummyDebridEnabled     bool
 
 		playbackManager     *playbackmanager.PlaybackManager
 		streamManager       *StreamManager
@@ -63,6 +67,7 @@ type (
 		DirectStreamManager *directstream.Manager
 		MetadataProviderRef *util.Ref[metadata_provider.Provider]
 		PlatformRef         *util.Ref[platform.Platform]
+		DummyDebridEnabled  bool
 	}
 )
 
@@ -78,6 +83,7 @@ func NewRepository(opts *NewRepositoryOptions) (ret *Repository) {
 		torrentRepository:     opts.TorrentRepository,
 		platformRef:           opts.PlatformRef,
 		playbackManager:       opts.PlaybackManager,
+		dummyDebridEnabled:    opts.DummyDebridEnabled,
 		metadataProviderRef:   opts.MetadataProviderRef,
 		completeAnimeCache:    anilist.NewCompleteAnimeCache(),
 		ctxMap:                result.NewMap[string, context.CancelFunc](),
@@ -92,6 +98,9 @@ func NewRepository(opts *NewRepositoryOptions) (ret *Repository) {
 		TorrentRepository: opts.TorrentRepository,
 		MetadataProvider:  opts.MetadataProviderRef,
 		Platform:          opts.PlatformRef,
+		OnStatus: func(status autoselect.StreamAutoSelectStatusPayload) {
+			opts.WSEventManager.SendEvent(events.StreamAutoSelectStatus, status)
+		},
 	})
 
 	return
@@ -113,16 +122,32 @@ func (r *Repository) startOrStopDownloadLoop() {
 	}
 }
 
+func (r *Repository) closeProvider() {
+	provider, found := r.provider.Get()
+	if !found {
+		return
+	}
+
+	if closer, ok := provider.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			r.logger.Warn().Err(err).Msg("debrid: Failed to close provider")
+		}
+	}
+}
+
 // InitializeProvider is called each time the settings change
 func (r *Repository) InitializeProvider(settings *models.DebridSettings) error {
 	r.settings = settings
 
 	if !settings.Enabled {
+		r.closeProvider()
 		r.provider = mo.None[debrid.Provider]()
 		// Stop the download loop if it's running
 		r.startOrStopDownloadLoop()
 		return nil
 	}
+
+	r.closeProvider()
 
 	switch settings.Provider {
 	case "torbox":
@@ -133,6 +158,15 @@ func (r *Repository) InitializeProvider(settings *models.DebridSettings) error {
 		r.provider = mo.Some(alldebrid.NewAllDebrid(r.logger))
 	case "stremthru":
 		r.provider = mo.Some(stremthru.NewStremThru(r.logger, settings.ApiUrl, settings.StoreName, settings.StoreApiKey))
+	case "premiumize":
+		r.provider = mo.Some(premiumize.NewPremiumize(r.logger, &premiumizeHashStore{db: r.db}))
+	case "dummy":
+		if r.dummyDebridEnabled {
+			r.provider = mo.Some(dummy.New(r.logger, r.db))
+		} else {
+			r.provider = mo.None[debrid.Provider]()
+			r.logger.Warn().Msg("debrid: Dummy provider is disabled")
+		}
 	default:
 		r.provider = mo.None[debrid.Provider]()
 	}
@@ -171,11 +205,39 @@ func (r *Repository) GetProvider() (debrid.Provider, error) {
 	return p, nil
 }
 
+// premiumizeHashStore implements premiumize.HashStore on top of the app database, so transfer
+// hashes survive a restart instead of only living in the provider's in-memory cache.
+type premiumizeHashStore struct {
+	db *db.Database
+}
+
+func (s *premiumizeHashStore) LoadAll() (map[string]string, error) {
+	rows, err := s.db.GetDebridTransferHashes("premiumize")
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make(map[string]string, len(rows))
+	for _, row := range rows {
+		ret[row.TransferID] = row.Hash
+	}
+
+	return ret, nil
+}
+
+func (s *premiumizeHashStore) Save(transferId, hash string) {
+	_ = s.db.UpsertDebridTransferHash("premiumize", transferId, hash)
+}
+
+func (s *premiumizeHashStore) Delete(transferId string) {
+	_ = s.db.DeleteDebridTransferHash("premiumize", transferId)
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // AddAndQueueTorrent adds a torrent to the debrid service and queues it for automatic download
 func (r *Repository) AddAndQueueTorrent(opts debrid.AddTorrentOptions, destination string, mId int) (string, error) {
-	provider, err := r.GetProvider()
+	hTorrentItemId, err := triggerOnAddTorrentRequestedHook(&opts, &destination, &mId)
 	if err != nil {
 		return "", err
 	}
@@ -184,22 +246,64 @@ func (r *Repository) AddAndQueueTorrent(opts debrid.AddTorrentOptions, destinati
 		return "", fmt.Errorf("debrid: Failed to add torrent, destination must be an absolute path")
 	}
 
-	// Add the torrent to the debrid service
-	torrentItemId, err := provider.AddTorrent(opts)
+	provider, err := r.GetProvider()
 	if err != nil {
 		return "", err
 	}
 
+	torrentItemId := hTorrentItemId
+	if torrentItemId == "" {
+		// Add the torrent to the debrid service
+		torrentItemId, err = provider.AddTorrent(opts)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	// Add the torrent item to the database (so it can be downloaded automatically once it's ready)
 	// We ignore the error since it's non-critical
-	_ = r.db.InsertDebridTorrentItem(&models.DebridTorrentItem{
+	_ = r.db.UpsertDebridTorrentItem(&models.DebridTorrentItem{
 		TorrentItemID: torrentItemId,
 		Destination:   destination,
 		Provider:      provider.GetSettings().ID,
 		MediaId:       mId,
 	})
 
+	event := &DebridAddTorrentEvent{
+		Options:       opts,
+		Destination:   destination,
+		MediaID:       mId,
+		TorrentItemID: torrentItemId,
+	}
+
+	_ = hook.GlobalHookManager.OnDebridAddTorrent().Trigger(event)
+
 	return torrentItemId, nil
+}
+
+func triggerOnAddTorrentRequestedHook(opts *debrid.AddTorrentOptions, destination *string, mediaID *int) (string, error) {
+	requestedEvent := &DebridAddTorrentRequestedEvent{
+		Options:     *opts,
+		Destination: *destination,
+		MediaID:     *mediaID,
+	}
+
+	if err := hook.GlobalHookManager.OnDebridAddTorrentRequested().Trigger(requestedEvent); err != nil {
+		return "", err
+	}
+
+	*opts = requestedEvent.Options
+	*destination = requestedEvent.Destination
+	*mediaID = requestedEvent.MediaID
+
+	if requestedEvent.DefaultPrevented {
+		if requestedEvent.TorrentItemID == "" {
+			return "", fmt.Errorf("debrid: add torrent prevented by hook without torrent item id")
+		}
+		return requestedEvent.TorrentItemID, nil
+	}
+
+	return "", nil
 }
 
 // GetTorrentInfo retrieves information about a torrent.
@@ -228,6 +332,14 @@ func (r *Repository) HasProvider() bool {
 
 func (r *Repository) GetSettings() *models.DebridSettings {
 	return r.settings
+}
+
+func (r *Repository) IsDownloadActive(itemID string) bool {
+	if r.ctxMap == nil {
+		return false
+	}
+
+	return r.ctxMap.Has(itemID)
 }
 
 // CancelDownload cancels the download for the given item ID

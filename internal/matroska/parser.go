@@ -258,6 +258,22 @@ func NewMatroskaParser(r io.ReadSeeker, noSeeking bool, elementsToParse ...uint3
 	//	}
 	//}
 
+	if headerErr == nil && segmentErr == nil {
+		if parser.shouldParseElement(IDCues) && parser.cuesPos > 0 && len(parser.cues) == 0 {
+			currentPos := parser.reader.Position()
+			if _, err := parser.reader.Seek(int64(parser.segmentPos+parser.cuesPos), io.SeekStart); err == nil {
+				id, size, errHeader := parser.reader.ReadElementHeader()
+				if errHeader == nil && id == IDCues {
+					parser.cuesTopPos = uint64(parser.reader.Position()) + size
+					if cueErr := parser.parseCues(size); cueErr != nil || !parser.hasValidCues() {
+						parser.cues = nil
+					}
+				}
+			}
+			_, _ = parser.reader.Seek(currentPos, io.SeekStart)
+		}
+	}
+
 	return parser, nil
 }
 
@@ -383,6 +399,14 @@ func (mp *MatroskaParser) parseSegmentChildren() error {
 		currentPos := mp.reader.Position()
 
 		switch id {
+		case IDSeekHead:
+			if mp.shouldParseElement(IDCues) {
+				if err = mp.parseSeekHead(size); err != nil {
+					mp.cuesPos = 0
+				}
+			} else if err = mp.reader.SeekOrSkip(mp.noSeeking, int64(size)); err != nil {
+				return fmt.Errorf("failed to skip element: %w", err)
+			}
 		case IDSegmentInfo:
 			if mp.shouldParseElement(IDSegmentInfo) {
 				if err = mp.parseSegmentInfo(size); err != nil {
@@ -409,8 +433,8 @@ func (mp *MatroskaParser) parseSegmentChildren() error {
 			if mp.shouldParseElement(IDCues) {
 				mp.cuesPos = uint64(currentPos)
 				mp.cuesTopPos = uint64(currentPos) + size
-				if err = mp.parseCues(size); err != nil {
-					return fmt.Errorf("failed to parse cues: %w", err)
+				if err = mp.parseCues(size); err != nil || !mp.hasValidCues() {
+					mp.cues = nil
 				}
 			} else {
 				// Skip this element
@@ -502,7 +526,61 @@ func (mp *MatroskaParser) parseSegmentChildren() error {
 //
 // Returns:
 //   - error: An error if the SegmentInfo element could not be read or parsed.
+func (mp *MatroskaParser) parseSeekHead(size uint64) error {
+	if size > 1024*1024 { // 1MB limit for safety
+		return mp.reader.SeekOrSkip(mp.noSeeking, int64(size))
+	}
+	data := make([]byte, size)
+	n, err := io.ReadFull(mp.reader.r, data)
+	if err != nil {
+		return err
+	}
+	mp.reader.pos += int64(n)
+
+	reader := bytes.NewReader(data)
+	childReader := &EBMLReader{r: &seekableReader{reader}, pos: 0}
+
+	for childReader.pos < int64(size) {
+		element, errReadElement := childReader.ReadElement()
+		if errReadElement != nil {
+			if errors.Is(errReadElement, io.EOF) {
+				break
+			}
+			return errReadElement
+		}
+
+		if element.ID == IDSeek { // 0x4DBB
+			seekReader := &EBMLReader{r: &seekableReader{bytes.NewReader(element.Data)}, pos: 0}
+			var seekID uint32
+			var seekPos uint64
+			for seekReader.pos < int64(len(element.Data)) {
+				subElement, errSub := seekReader.ReadElement()
+				if errSub != nil {
+					break
+				}
+				if subElement.ID == IDSeekID { // 0x53AB
+					var idVal uint32
+					for _, b := range subElement.Data {
+						idVal = (idVal << 8) | uint32(b)
+					}
+					seekID = idVal
+				} else if subElement.ID == IDSeekPos { // 0x53AC
+					seekPos = subElement.ReadUInt()
+				}
+			}
+
+			if seekID == IDCues {
+				mp.cuesPos = seekPos
+			}
+		}
+	}
+	return nil
+}
+
 func (mp *MatroskaParser) parseSegmentInfo(size uint64) error {
+	if size > 256*1024*1024 {
+		return fmt.Errorf("segment info size %d is too large", size)
+	}
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
 	if err != nil {
@@ -593,6 +671,9 @@ func (mp *MatroskaParser) parseSegmentInfo(size uint64) error {
 // Returns:
 //   - error: An error if the Tracks element could not be read or parsed.
 func (mp *MatroskaParser) parseTracks(size uint64) error {
+	if size > 256*1024*1024 {
+		return fmt.Errorf("tracks size %d is too large", size)
+	}
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
 	if err != nil {
@@ -989,6 +1070,9 @@ func (mp *MatroskaParser) parseAudioTrack(data []byte, track *TrackInfo) error {
 // Returns:
 //   - error: An error if the Cues element could not be parsed.
 func (mp *MatroskaParser) parseCues(size uint64) error {
+	if size > 256*1024*1024 {
+		return mp.reader.SeekOrSkip(mp.noSeeking, int64(size))
+	}
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
 	if err != nil {
@@ -1023,6 +1107,23 @@ func (mp *MatroskaParser) parseCues(size uint64) error {
 	})
 
 	return nil
+}
+
+func (mp *MatroskaParser) hasValidCues() bool {
+	if len(mp.cues) == 0 || mp.segment == nil {
+		return false
+	}
+
+	for i, cue := range mp.cues {
+		if cue == nil || cue.Position >= mp.segment.Size {
+			return false
+		}
+		if i > 0 && cue.Time < mp.cues[i-1].Time {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (mp *MatroskaParser) parseCuePoint(data []byte) ([]*Cue, error) {
@@ -1110,6 +1211,9 @@ type editionEntry struct {
 }
 
 func (mp *MatroskaParser) parseChapters(size uint64) error {
+	if size > 256*1024*1024 {
+		return fmt.Errorf("chapters size %d is too large", size)
+	}
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
 	if err != nil {
@@ -1288,6 +1392,9 @@ func (mp *MatroskaParser) parseChapterDisplay(data []byte) (ChapterDisplay, erro
 // Returns:
 //   - error: An error if the Tags element could not be parsed.
 func (mp *MatroskaParser) parseTags(size uint64) error {
+	if size > 256*1024*1024 {
+		return fmt.Errorf("tags size %d is too large", size)
+	}
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
 	if err != nil {
@@ -1434,6 +1541,9 @@ func (mp *MatroskaParser) parseSimpleTag(data []byte) (SimpleTag, error) {
 // Returns:
 //   - error: An error if the Attachments element could not be parsed.
 func (mp *MatroskaParser) parseAttachments(size uint64) error {
+	if size > 256*1024*1024 {
+		return fmt.Errorf("attachments size %d is too large", size)
+	}
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
 	if err != nil {
@@ -1658,6 +1768,9 @@ func (mp *MatroskaParser) ReadPacket() (*Packet, error) {
 // Returns:
 //   - error: An error if the cluster header could not be parsed.
 func (mp *MatroskaParser) parseClusterHeader(size uint64) error {
+	if size > 256*1024*1024 {
+		return fmt.Errorf("cluster header size %d is too large", size)
+	}
 	// We need to find the timestamp of the cluster.
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
@@ -1723,36 +1836,91 @@ func (mp *MatroskaParser) parseClusterHeader(size uint64) error {
 //     and metadata.
 //   - error: An error if the SimpleBlock element could not be parsed.
 func (mp *MatroskaParser) parseSimpleBlock(size uint64) (*Packet, error) {
-	data := make([]byte, size)
-	n, err := io.ReadFull(mp.reader.r, data)
+	if size > 100*1024*1024 {
+		return nil, fmt.Errorf("simple block size %d is too large", size)
+	}
+	if size < 4 {
+		data := make([]byte, size)
+		n, err := io.ReadFull(mp.reader.r, data)
+		if err != nil {
+			return nil, err
+		}
+		mp.reader.pos += int64(n)
+		return nil, fmt.Errorf("block too short")
+	}
+
+	// Read only the header of the block first (up to 12 bytes: track number VINT is max 8, timestamp is 2, flags is 1)
+	headerSize := int(size)
+	if headerSize > 12 {
+		headerSize = 12
+	}
+
+	headerData := make([]byte, headerSize)
+	n, err := io.ReadFull(mp.reader.r, headerData)
 	if err != nil {
 		return nil, err
 	}
 	mp.reader.pos += int64(n)
 
-	if len(data) < 4 {
-		return nil, fmt.Errorf("block too short")
-	}
-
 	// Parse track number (VINT)
-	trackNum, trackBytes := mp.parseVInt(data)
+	trackNum, trackBytes := mp.parseVInt(headerData)
 	if trackBytes == 0 {
 		return nil, fmt.Errorf("invalid track number")
 	}
 
+	// Check if this track is ignored
+	isIgnored := mp.currentTrackMask != 0 && (1<<(trackNum-1))&mp.currentTrackMask != 0
+
 	// Parse timestamp (2 bytes, signed)
-	if len(data) < trackBytes+2 {
+	if len(headerData) < trackBytes+2 {
 		return nil, fmt.Errorf("block too short for timestamp")
 	}
-
-	timestamp := int16(data[trackBytes])<<8 | int16(data[trackBytes+1])
+	timestamp := int16(headerData[trackBytes])<<8 | int16(headerData[trackBytes+1])
 
 	// Parse flags
-	if len(data) < trackBytes+3 {
+	if len(headerData) < trackBytes+3 {
 		return nil, fmt.Errorf("block too short for flags")
 	}
+	flags := headerData[trackBytes+2]
 
-	flags := data[trackBytes+2]
+	if isIgnored {
+		// If ignored, skip the rest of this SimpleBlock's payload by seeking
+		remaining := int64(size) - int64(n)
+		if remaining > 0 {
+			if _, seekErr := mp.reader.Seek(remaining, io.SeekCurrent); seekErr != nil {
+				return nil, seekErr
+			}
+		}
+
+		scaledTime := (mp.clusterTimestamp + uint64(timestamp)) * mp.fileInfo.TimecodeScale
+		packet := &Packet{
+			Track:     uint8(trackNum),
+			StartTime: scaledTime,
+			EndTime:   scaledTime,
+			FilePos:   uint64(mp.reader.Position()) - size,
+			Data:      nil,
+			Flags:     uint32(flags),
+		}
+		if flags&0x80 != 0 {
+			packet.Flags |= KF
+		}
+		return packet, nil
+	}
+
+	// If not ignored, read the rest of the block data
+	remaining := int(size) - n
+	frameDataBuf := make([]byte, remaining)
+	if remaining > 0 {
+		if _, err = io.ReadFull(mp.reader.r, frameDataBuf); err != nil {
+			return nil, err
+		}
+		mp.reader.pos += int64(remaining)
+	}
+
+	// Reconstruct the full data slice for processing
+	data := make([]byte, size)
+	copy(data, headerData)
+	copy(data[n:], frameDataBuf)
 
 	// Extract frame data, handling lacing
 	frameData := data[trackBytes+3:]
@@ -1863,6 +2031,9 @@ func (mp *MatroskaParser) parseSimpleBlock(size uint64) (*Packet, error) {
 //     and metadata.
 //   - error: An error if the BlockGroup element could not be parsed.
 func (mp *MatroskaParser) parseBlockGroup(size uint64) (*Packet, error) {
+	if size > 100*1024*1024 {
+		return nil, fmt.Errorf("block group size %d is too large", size)
+	}
 	data := make([]byte, size)
 	n, err := io.ReadFull(mp.reader.r, data)
 	if err != nil {

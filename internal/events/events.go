@@ -5,6 +5,7 @@ type WebsocketClientEventType string
 const (
 	NativePlayerEventType WebsocketClientEventType = "native-player"
 	VideoCoreEventType    WebsocketClientEventType = "videocore"
+	MpvCoreEventType      WebsocketClientEventType = "mpvcore"
 	NakamaEventType       WebsocketClientEventType = "nakama"
 	PluginEvent           WebsocketClientEventType = "plugin"
 	PlaylistEvent         WebsocketClientEventType = "playlist"
@@ -54,13 +55,18 @@ const (
 	RefreshedMangaDownloadData  = "refreshed-manga-download-data"
 	ChapterDownloadQueueUpdated = "chapter-download-queue-updated"
 	OfflineSnapshotCreated      = "offline-snapshot-created"
+	MangaPreferencesUpdated     = "manga-preferences-updated"
+	MangaSourceRefreshUpdated   = "manga-source-refresh-job-updated"
 
 	MediastreamShutdownStream = "mediastream-shutdown-stream"
 
-	ExtensionsReloaded    = "extensions-reloaded"
-	ExtensionUpdatesFound = "extension-updates-found"
-	PluginUnloaded        = "plugin-unloaded"
-	PluginLoaded          = "plugin-loaded"
+	ExtensionsReloaded      = "extensions-reloaded"
+	ExtensionUpdatesFound   = "extension-updates-found"
+	PluginUnloaded          = "plugin-unloaded"
+	PluginLoaded            = "plugin-loaded"
+	ExtensionPrompt         = "extension-prompt"
+	ExtensionPromptSync     = "extension-prompt-sync"
+	ExtensionPromptResponse = "extension-prompt-response"
 
 	ActiveTorrentCountUpdated = "active-torrent-count-updated"
 
@@ -73,12 +79,16 @@ const (
 	DebridDownloadProgress = "debrid-download-progress"
 	DebridStreamState      = "debrid-stream-state"
 
+	StreamAutoSelectStatus = "stream-auto-select-status"
+
 	InvalidateQueries = "invalidate-queries"
 	ConsoleLog        = "console-log"
 	ConsoleWarn       = "console-warn"
 
 	ShowIndefiniteLoader = "show-indefinite-loader"
 	HideIndefiniteLoader = "hide-indefinite-loader"
+	AnilistRateLimit     = "anilist-rate-limit"
+	ClientIdentity       = "client-identity"
 
 	// Nakama events
 	NakamaHostStarted          = "nakama-host-started"
@@ -103,4 +113,6 @@ const (
 	NakamaWatchPartyEnableRelayMode                       = "nakama-watch-party-enable-relay-mode"
 	NakamaWatchPartyRelayModeToggleShareLibraryWithOrigin = "nakama-watch-party-relay-mode-toggle-share-library-with-origin"
 	NakamaWatchPartyChatMessage                           = "nakama-watch-party-chat-message"
+
+	SettingsChanged = "settings-changed"
 )

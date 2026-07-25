@@ -23,6 +23,8 @@ import {
     __manga_paginationMapAtom,
     __manga_readingDirectionAtom,
     __manga_readingModeAtom,
+    __manga_resumeLocationsAtom,
+    cleanupMangaResumeLocations,
     MangaReadingDirection,
     MangaReadingMode,
 } from "@/app/(main)/manga/_lib/manga-chapter-reader.atoms"
@@ -62,8 +64,10 @@ export function ChapterReaderDrawer(props: ChapterDrawerProps) {
     const currentChapter = useCurrentChapter()
     const setCurrentChapter = useSetCurrentChapter()
 
+    const currentPageIndex = useAtomValue(__manga_currentPageIndexAtom)
     const setCurrentPageIndex = useSetAtom(__manga_currentPageIndexAtom)
     const setCurrentPaginationMapIndex = useSetAtom(__manga_currentPaginationMapIndexAtom)
+    const setIsLastPage = useSetAtom(__manga_isLastPageAtom)
 
     const [readingMode, setReadingMode] = useAtom(__manga_readingModeAtom)
     const isLastPage = useAtomValue(__manga_isLastPageAtom)
@@ -74,7 +78,39 @@ export function ChapterReaderDrawer(props: ChapterDrawerProps) {
 
     const [hiddenBar, setHideBar] = useAtom(__manga_hiddenBarAtom)
 
+    // resume locations
+    const [resumeLocations, setResumeLocations] = useAtom(__manga_resumeLocationsAtom)
+
+    const currentMediaResumeKey = React.useMemo(() => {
+        if (!currentChapter) return undefined
+        return String(currentChapter.mediaId)
+    }, [currentChapter])
+
+    const currentChapterResumeKey = React.useMemo(() => {
+        if (!currentChapter) return undefined
+        return `${currentChapter.mediaId}:${currentChapter.provider}:${currentChapter.chapterId}`
+    }, [currentChapter])
+
+    const currentResumeLocation = React.useMemo(() => {
+        if (!currentMediaResumeKey) return undefined
+        return resumeLocations[currentMediaResumeKey]
+    }, [currentMediaResumeKey, resumeLocations])
+
+    const shouldRestoreSavedPage = React.useMemo(() => {
+        if (!currentChapter || !currentResumeLocation) return false
+        return (
+            currentResumeLocation.chapterId === currentChapter.chapterId
+            && currentResumeLocation.provider === currentChapter.provider
+        )
+    }, [currentChapter, currentResumeLocation])
+
+    const restoredChapterResumeKeyRef = React.useRef<string | null>(null)
+
     useSwitchSettingsWithKeys()
+
+    React.useEffect(() => {
+        setResumeLocations(prev => cleanupMangaResumeLocations(prev))
+    }, [])
 
     const { inject, remove } = useSeaCommandInject()
 
@@ -176,18 +212,98 @@ export function ChapterReaderDrawer(props: ChapterDrawerProps) {
             pageContainerLoading])
 
     /**
-     * Reset the current page index when the pageContainer or chapterContainer changes
-     * This signals that the user has switched chapters
+     * Restore the saved page when the user opens a chapter
+     * This runs before the new page container settles so horizontal mode can hydrate the right map index
      */
-    const previousChapterId = React.useRef(currentChapter?.chapterId)
     React.useEffect(() => {
-        // Avoid resetting the page index when we're still on the same chapter
-        if (currentChapter?.chapterId !== previousChapterId.current) {
+        if (!currentChapterResumeKey) {
+            restoredChapterResumeKeyRef.current = null
+            setIsLastPage(false)
             setCurrentPageIndex(0)
             setCurrentPaginationMapIndex(0)
-            previousChapterId.current = currentChapter?.chapterId
+            return
         }
-    }, [pageContainer?.pages, chapterContainer?.chapters])
+
+        restoredChapterResumeKeyRef.current = null
+        setIsLastPage(false)
+        setCurrentPageIndex(shouldRestoreSavedPage ? currentResumeLocation?.pageIndex ?? 0 : 0)
+        setCurrentPaginationMapIndex(0)
+    }, [currentChapterResumeKey])
+
+    /**
+     * Clamp the restored page once the chapter pages are available
+     * Providers can return a different page count between sessions
+     */
+    React.useEffect(() => {
+        if (!currentChapterResumeKey || pageContainerLoading || pageContainerError || !pageContainer?.pages?.length) return
+        if (restoredChapterResumeKeyRef.current === currentChapterResumeKey) return
+
+        const maxPageIndex = pageContainer.pages.length - 1
+        const savedPageIndex = shouldRestoreSavedPage ? currentResumeLocation?.pageIndex ?? 0 : 0
+        const nextPageIndex = Math.min(savedPageIndex, maxPageIndex)
+
+        setCurrentPageIndex(nextPageIndex)
+        restoredChapterResumeKeyRef.current = currentChapterResumeKey
+
+        if (savedPageIndex !== nextPageIndex && currentMediaResumeKey && currentChapter) {
+            setResumeLocations(prev => cleanupMangaResumeLocations({
+                ...prev,
+                [currentMediaResumeKey]: {
+                    chapterId: currentChapter.chapterId,
+                    provider: currentChapter.provider,
+                    pageIndex: nextPageIndex,
+                    updatedAt: Date.now(),
+                },
+            }))
+        }
+    }, [
+        currentChapterResumeKey,
+        currentMediaResumeKey,
+        currentResumeLocation,
+        currentChapter,
+        pageContainer?.pages,
+        pageContainerError,
+        pageContainerLoading,
+        shouldRestoreSavedPage,
+    ])
+
+    /**
+     * Autosave the current page after the chapter resume point has been restored
+     */
+    React.useEffect(() => {
+        if (!currentChapterResumeKey || !currentMediaResumeKey || !currentChapter || pageContainerLoading || pageContainerError || !pageContainer?.pages?.length) return
+        if (restoredChapterResumeKeyRef.current !== currentChapterResumeKey) return
+        if (currentPageIndex < 0 || currentPageIndex > pageContainer.pages.length - 1) return
+
+        setResumeLocations(prev => {
+            const currentLocation = prev[currentMediaResumeKey]
+            if (
+                currentLocation?.chapterId === currentChapter.chapterId
+                && currentLocation?.provider === currentChapter.provider
+                && currentLocation?.pageIndex === currentPageIndex
+            ) {
+                return prev
+            }
+
+            return cleanupMangaResumeLocations({
+                ...prev,
+                [currentMediaResumeKey]: {
+                    chapterId: currentChapter.chapterId,
+                    provider: currentChapter.provider,
+                    pageIndex: currentPageIndex,
+                    updatedAt: Date.now(),
+                },
+            })
+        })
+    }, [
+        currentChapterResumeKey,
+        currentMediaResumeKey,
+        currentChapter,
+        currentPageIndex,
+        pageContainer?.pages,
+        pageContainerError,
+        pageContainerLoading,
+    ])
 
     // Progress update keyboard shortcuts
     React.useEffect(() => {
@@ -270,7 +386,7 @@ export function ChapterReaderDrawer(props: ChapterDrawerProps) {
             side="bottom"
             headerClass="absolute h-0"
             contentClass={cn(
-                "p-0 pt-0 !m-0 !rounded-none",
+                "p-0 pt-0 !m-0 !rounded-none overflow-hidden",
                 "w-full inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
             )}
             hideCloseButton
@@ -329,7 +445,7 @@ export function ChapterReaderDrawer(props: ChapterDrawerProps) {
             <div
                 data-chapter-reader-drawer-content
                 className={cn(
-                    "max-h-[calc(100dvh-3rem)] h-full",
+                    "max-h-[calc(100dvh-3rem)] h-full overflow-hidden",
                     hiddenBar && "max-h-dvh",
                 )} tabIndex={-1}
             >

@@ -17,20 +17,15 @@ type LibrarySettingsProps = {
 
 export function AnimeLibrarySettings(props: LibrarySettingsProps) {
 
-    const {
-        isPending,
-        ...rest
-    } = props
-
-    const { watch } = useFormContext()
+    const { isPending } = props
 
     const useLegacyMatching = useWatch({ name: "scannerUseLegacyMatching" })
 
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-8">
 
-            <SettingsCard>
+            <SettingsCard title="Local library">
                 <Field.DirectorySelector
                     name="libraryPath"
                     label="Library directory"
@@ -48,7 +43,7 @@ export function AnimeLibrarySettings(props: LibrarySettingsProps) {
                 />
             </SettingsCard>
 
-            <SettingsCard>
+            <SettingsCard title="Scanning">
 
                 <Field.Switch
                     side="right"

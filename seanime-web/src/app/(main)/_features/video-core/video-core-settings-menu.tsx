@@ -592,7 +592,7 @@ export function VideoCoreSettingsMenu() {
                             onValueChange={setShowChapterMarkers}
                         />
                         <Switch
-                            label="Highlight OP/ED Chapters"
+                            label="Highlight Skipped Chapters"
                             side="right"
                             fieldClass="hover:bg-transparent hover:border-transparent px-0 ml-0 w-full"
                             size="sm"
@@ -631,7 +631,7 @@ export function VideoCoreSettingsMenu() {
                                 />
                                 <div className="flex w-full">
                                     <Button
-                                        size="sm" intent="gray-glass" onClick={() => {
+                                        size="sm" intent="gray-subtle" onClick={() => {
                                         handleSubtitleCustomizationChange("fontName", subFontName)
                                     }}
                                     >

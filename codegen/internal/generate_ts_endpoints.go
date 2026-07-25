@@ -100,7 +100,7 @@ func GenerateTypescriptEndpointsFile(handlersJsonPath string, structsJsonPath st
 
 			if len(route.Api.Descriptions) > 0 {
 				writeLine(f, "        /**")
-				f.WriteString(fmt.Sprintf("         *  @description\n"))
+				f.WriteString("         *  @description\n")
 				f.WriteString(fmt.Sprintf("         *  Route %s\n", route.Api.Summary))
 				for _, cmt := range route.Api.Descriptions {
 					writeLine(f, fmt.Sprintf("         *  %s", strings.TrimSpace(cmt)))
@@ -229,7 +229,7 @@ func GenerateTypescriptEndpointsFile(handlersJsonPath string, structsJsonPath st
 			typeF.WriteString(fmt.Sprintf(" * - Filename: %s\n", route.Filename))
 			typeF.WriteString(fmt.Sprintf(" * - Endpoint: %s\n", route.Api.Endpoint))
 			if len(route.Api.Summary) > 0 {
-				typeF.WriteString(fmt.Sprintf(" * @description\n"))
+				typeF.WriteString(" * @description\n")
 				typeF.WriteString(fmt.Sprintf(" * Route %s\n", strings.TrimSpace(route.Api.Summary)))
 			}
 			typeF.WriteString(" */\n")
@@ -283,7 +283,7 @@ func generateHooksFile(f *os.File, groupedHandlers map[string][]*RouteHandler, f
 //         method: API_ENDPOINTS.{groupName}.{handlerName}.methods[%d],
 //         mutationKey: [API_ENDPOINTS.{groupName}.{handlerName}.key],
 //         onSuccess: async () => {
-// 
+//
 //         },
 //     })
 // }
@@ -428,7 +428,12 @@ func writeParamField(f *os.File, handler *RouteHandler, param *RouteHandlerParam
 	if len(param.Descriptions) > 0 {
 		writeLine(f, "\t/**")
 		for _, cmt := range param.Descriptions {
-			writeLine(f, fmt.Sprintf("\t *  %s", strings.TrimSpace(cmt)))
+			cmt = strings.TrimSpace(cmt)
+			if cmt == "" {
+				writeLine(f, "\t *")
+				continue
+			}
+			writeLine(f, fmt.Sprintf("\t *  %s", cmt))
 		}
 		writeLine(f, "\t */")
 	}
@@ -451,16 +456,12 @@ func getEndpointKey(s string, groupName string) string {
 		result += string(v)
 	}
 	result = strings.ToLower(result)
-	if strings.Contains(result, "t-v-d-b") {
-		result = strings.Replace(result, "t-v-d-b", "tvdb", 1)
-	}
-	if strings.Contains(result, "m-a-l") {
-		result = strings.Replace(result, "m-a-l", "mal", 1)
-	}
+	result = strings.Replace(result, "t-v-d-b", "tvdb", 1)
+	result = strings.Replace(result, "m-a-l", "mal", 1)
 	return strings.ReplaceAll(groupName, "_", "-") + "-" + result
 }
 
 func writeLine(file *os.File, template string) {
 	template = strings.ReplaceAll(template, "\t", space)
-	file.WriteString(fmt.Sprintf(template + "\n"))
+	file.WriteString(template + "\n")
 }

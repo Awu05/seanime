@@ -6,10 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"seanime/internal/constants"
-	"seanime/internal/events"
 	"seanime/internal/util"
-	"strconv"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -33,7 +30,7 @@ func customQuery(body []byte, logger *zerolog.Logger, token ...string) (data int
 		timeSince := time.Since(reqTime)
 		formattedDur := timeSince.Truncate(time.Millisecond).String()
 		if err != nil {
-			logger.Error().Str("duration", formattedDur).Str("rlr", rlRemainingStr).Err(err).Msg("anilist: Failed Request")
+			logger.Error().Str("duration", formattedDur).Str("rlr", rlRemainingStr).Err(err).Msg("anilist: Failed Request (custom query)")
 		} else {
 			if timeSince > 600*time.Millisecond {
 				logger.Warn().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Msg("anilist: Long Request")
@@ -47,68 +44,33 @@ func customQuery(body []byte, logger *zerolog.Logger, token ...string) (data int
 		err = errors.New("panic in customQuery")
 	})
 
-	client := http.DefaultClient
-
 	var req *http.Request
-	req, err = http.NewRequest("POST", constants.AnilistApiUrl, bytes.NewBuffer(body))
+	req, err = http.NewRequest("POST", alApiUrl(), bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	if len(token) > 0 && token[0] != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token[0]))
+	authToken := ""
+	if len(token) > 0 {
+		authToken = token[0]
 	}
 
-	// Send request
-	retryCount := 2
+	if err = initAnilistReq(req.Context(), req, authToken); err != nil {
+		return nil, err
+	}
 
 	var resp *http.Response
-	for i := 0; i < retryCount; i++ {
-
-		// Reset response body for retry
-		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
-		}
-
-		// Recreate the request body if it was read in a previous attempt
-		if req.GetBody != nil {
-			newBody, err := req.GetBody()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get request body: %w", err)
-			}
-			req.Body = newBody
-		}
-
-		resp, err = client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("request failed: %w", err)
-		}
-
-		rlRemainingStr = resp.Header.Get("X-Ratelimit-Remaining")
-		rlRetryAfterStr := resp.Header.Get("Retry-After")
-		rlRetryAfter, err := strconv.Atoi(rlRetryAfterStr)
-		if err == nil {
-			logger.Warn().Msgf("anilist: Rate limited, retrying in %d seconds", rlRetryAfter+1)
-			if time.Since(sentRateLimitWarningTime) > 10*time.Second {
-				events.GlobalWSEventManager.SendEvent(events.WarningToast, "anilist: Rate limited, retrying in "+strconv.Itoa(rlRetryAfter+1)+" seconds")
-				sentRateLimitWarningTime = time.Now()
-			}
-			select {
-			case <-time.After(time.Duration(rlRetryAfter+1) * time.Second):
-				continue
-			}
-		}
-
-		if rlRemainingStr == "" {
-			select {
-			case <-time.After(5 * time.Second):
-				continue
-			}
-		}
-
-		break
+	resp, rlRemainingStr, err = doAniListRequestWithRetries(
+		alHttpClient(),
+		req,
+		sharedAniListRateBlocker,
+		sleepWithContext,
+		func(waitSeconds int) {
+			notifyAniListRateLimit(logger, waitSeconds)
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	defer resp.Body.Close()

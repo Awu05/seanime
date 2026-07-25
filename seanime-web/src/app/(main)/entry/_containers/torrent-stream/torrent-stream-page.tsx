@@ -1,10 +1,12 @@
 import { Anime_Entry, Anime_Episode } from "@/api/generated/types"
 import { useGetAnimeEpisodeCollection } from "@/api/hooks/anime.hooks"
-import { useGetTorrentstreamBatchHistory } from "@/api/hooks/torrentstream.hooks"
+import { useDeleteTorrentstreamBatchHistory, useGetTorrentstreamBatchHistory } from "@/api/hooks/torrentstream.hooks"
 import { useAutoPlaySelectedTorrent, useTorrentstreamAutoplay } from "@/app/(main)/_features/autoplay/autoplay"
+import { getBatchSelectionParams } from "@/app/(main)/_features/autoplay/batches.ts"
 
 import { useSeaCommandInject } from "@/app/(main)/_features/sea-command/use-inject"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
+import { ENTRY_VIEW_TRANSITION } from "@/app/(main)/entry/_containers/entry-view-transition"
 import { useTorrentSearchSelectedStreamEpisode } from "@/app/(main)/entry/_containers/torrent-search/_lib/handle-torrent-selection"
 import {
     __torrentSearch_selectionAtom,
@@ -13,10 +15,10 @@ import {
 import { TorrentStreamEpisodeSection } from "@/app/(main)/entry/_containers/torrent-stream/_components/torrent-stream-episode-section"
 import { useHandleStartTorrentStream } from "@/app/(main)/entry/_containers/torrent-stream/_lib/handle-torrent-stream"
 import { ForcePlaybackMethod, useForcePlaybackMethod } from "@/app/(main)/entry/_lib/handle-play-media"
+import { ConfirmationDialog, useConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { AppLayoutStack } from "@/components/ui/app-layout"
 import { IconButton } from "@/components/ui/button"
-import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Popover } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { logger } from "@/lib/helpers/debug"
@@ -26,6 +28,7 @@ import { atomWithStorage } from "jotai/utils"
 import React from "react"
 import { AiOutlineExclamationCircle } from "react-icons/ai"
 import { BiX } from "react-icons/bi"
+import { StreamPageSkeleton } from "../../_components/stream-page-skeleton"
 
 type TorrentStreamPageProps = {
     children?: React.ReactNode
@@ -78,6 +81,7 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
      */
     const { handleAutoSelectStream, handleStreamSelection, isPending, isUsingNativePlayer } = useHandleStartTorrentStream()
     const { setTorrentstreamAutoplayInfo } = useTorrentstreamAutoplay()
+    const { mutate: deleteBatchHistory, isPending: isDeletingBatchHistory } = useDeleteTorrentstreamBatchHistory()
 
     const { setAutoPlayTorrent } = useAutoPlaySelectedTorrent()
 
@@ -90,6 +94,24 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
     React.useEffect(() => {
         setUsePreviousBatch(!!batchHistory?.torrent?.isBatch)
     }, [batchHistory])
+
+    function handleDisablePreviousBatch() {
+        setUsePreviousBatch(false)
+    }
+
+    function handleDeletePreviousBatch() {
+        handleDisablePreviousBatch()
+        deleteBatchHistory({ mediaId: entry.mediaId })
+    }
+
+    const confirmPreviousBatchAction = useConfirmationDialog({
+        title: "Disable previous torrent",
+        description: "Disable using the saved previous batch for now, or delete the saved history entirely.",
+        actionText: "Delete history",
+        cancelText: "Disable only",
+        onConfirm: handleDeletePreviousBatch,
+        onCancel: handleDisablePreviousBatch,
+    })
 
     // Function to set the torrent stream autoplay info
     // It checks if there is a next episode and if it has aniDBEpisode
@@ -175,42 +197,26 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
                             })
                             started = true
                         } else {
-                            // Only auto select the file index if the user is trying to watch the next episode
+                            // Reuse the previous batch when the requested episode can be matched safely.
                             if (batchHistory?.batchEpisodeFiles) {
-                                let fileIndex: number | undefined = undefined
-
                                 console.log("handleEpisodeClick (batchHistory)",
                                     batchHistory?.batchEpisodeFiles,
                                     episode.aniDBEpisode,
                                     episode.episodeNumber)
 
-                                if (batchHistory?.batchEpisodeFiles.currentAniDBEpisode === episode.aniDBEpisode) {
-                                    fileIndex = batchHistory.batchEpisodeFiles.current
-                                } else {
-                                    // guess index based on the last selected file
-                                    const offset = episode.episodeNumber - batchHistory.batchEpisodeFiles.currentEpisodeNumber
-                                    const file = batchHistory.batchEpisodeFiles.files?.find(f => f.index === (batchHistory.batchEpisodeFiles?.current || 0) + offset)
-                                    if (file) {
-                                        fileIndex = file.index
-                                        console.log("handleEpisodeClick (batchHistory) found file", file)
-                                    }
-                                }
+                                const batchParams = getBatchSelectionParams(batchHistory.batchEpisodeFiles,
+                                    episode.episodeNumber,
+                                    episode.aniDBEpisode)
 
-                                if (fileIndex !== undefined) {
+                                if (batchParams.fileIndex !== undefined) {
                                     forcePlaybackMethodFn(forcePlaybackMethod, () => {
                                         handleStreamSelection({
                                             mediaId: entry.mediaId,
                                             episodeNumber: episode.episodeNumber,
                                             aniDBEpisode: episode.aniDBEpisode!,
                                             torrent: batchHistory.torrent!,
-                                            chosenFileIndex: fileIndex,
-                                            batchEpisodeFiles: (batchHistory.batchEpisodeFiles) ? {
-                                                ...batchHistory.batchEpisodeFiles!,
-                                                files: batchHistory.batchEpisodeFiles!.files!,
-                                                current: fileIndex!,
-                                                currentAniDBEpisode: episode.aniDBEpisode!,
-                                                currentEpisodeNumber: episode.episodeNumber,
-                                            } : undefined,
+                                            chosenFileIndex: batchParams.fileIndex,
+                                            batchEpisodeFiles: batchParams.batchEpisodeFiles,
                                         })
                                     })
                                     started = true
@@ -270,7 +276,7 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
     }, [episodeCollection?.episodes])
 
     if (!entry.media) return null
-    if (isLoading) return <LoadingSpinner />
+    if (isLoading) return <StreamPageSkeleton />
 
     return (
         <>
@@ -280,14 +286,7 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
                 data-anime-entry-page-torrent-stream-view
                 key="torrent-streaming-episodes"
                 className="relative 2xl:order-first pb-10 lg:pt-0"
-                {...{
-                    initial: { opacity: 0, y: 60 },
-                    animate: { opacity: 1, y: 0 },
-                    exit: { opacity: 0, scale: 0.99 },
-                    transition: {
-                        duration: 0.35,
-                    },
-                }}
+                {...ENTRY_VIEW_TRANSITION}
             >
                 <div className="h-10 lg:h-0" />
                 <AppLayoutStack data-torrent-stream-page>
@@ -328,10 +327,11 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
                                     <div className="flex items-center gap-2">
                                         <div className="flex flex-none items-center justify-center">
                                             <IconButton
-                                                intent="alert-glass"
+                                                intent="alert-subtle"
                                                 icon={<BiX />}
                                                 size="xs"
-                                                onClick={() => setUsePreviousBatch(false)}
+                                                onClick={() => confirmPreviousBatchAction.open()}
+                                                disabled={isDeletingBatchHistory}
                                                 className="rounded-full"
                                             />
                                         </div>
@@ -365,6 +365,7 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
                     )}
 
                     <TorrentStreamEpisodeSection
+                        contextType="torrenstream"
                         episodeCollection={episodeCollection}
                         entry={entry}
                         onEpisodeClick={handleEpisodeClick}
@@ -376,6 +377,7 @@ export function TorrentStreamPage(props: TorrentStreamPageProps) {
                     />
                 </AppLayoutStack>
             </PageWrapper>
+            <ConfirmationDialog {...confirmPreviousBatchAction} />
         </>
     )
 }

@@ -12,6 +12,7 @@ import (
 	"seanime/internal/torrentstream"
 	"seanime/internal/util"
 	"seanime/internal/util/result"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -192,15 +193,27 @@ func (h *Handler) HandleGetLibraryCollection(c echo.Context) error {
 		}
 		tsSettings := h.getTorrentstreamSettings(c)
 		debridSettings := h.getDebridSettings(c)
-		if (tsSettings != nil && tsSettings.Enabled && tsSettings.IncludeInLibrary) ||
+		includeTorrentstream := tsSettings != nil && tsSettings.Enabled && tsSettings.IncludeInLibrary
+		includeDebridstream := debridSettings != nil && debridSettings.Enabled && debridSettings.IncludeDebridStreamInLibrary
+		if includeTorrentstream ||
 			(library != nil && library.EnableOnlinestream && library.IncludeOnlineStreamingInLibrary) ||
-			(debridSettings != nil && debridSettings.Enabled && debridSettings.IncludeDebridStreamInLibrary) {
+			includeDebridstream {
 			session := h.getStreamSession(c)
 			session.TorrentStream.HydrateStreamCollection(c.Request().Context(), &torrentstream.HydrateStreamCollectionOptions{
 				AnimeCollection:     animeCollection,
 				LibraryCollection:   libraryCollection,
 				MetadataProviderRef: h.App.MetadataProviderRef,
 			})
+
+			if library != nil {
+				defaultSource := library.DefaultPlaybackSource
+				usesOnlineSource := defaultSource == "onlinestream" || strings.HasPrefix(defaultSource, "ext:")
+				if library.ShowTorrentAvailability && !usesOnlineSource && (includeTorrentstream || includeDebridstream) && libraryCollection.Stream != nil {
+					libraryCollection.Stream.ContinueWatchingList = h.App.WithEpisodeAvailability(
+						libraryCollection.Stream.ContinueWatchingList,
+					)
+				}
+			}
 		}
 	}
 

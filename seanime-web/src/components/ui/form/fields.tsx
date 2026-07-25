@@ -13,7 +13,6 @@ import { Autocomplete, AutocompleteProps } from "../autocomplete"
 import { BasicFieldOptions } from "../basic-field"
 import { Checkbox, CheckboxGroup, CheckboxGroupProps, CheckboxProps } from "../checkbox"
 import { Combobox, ComboboxProps } from "../combobox"
-import { CurrencyInput, CurrencyInputProps } from "../currency-input"
 import { DatePicker, DatePickerProps, DateRangePicker, DateRangePickerProps } from "../date-picker"
 import { NativeSelect, NativeSelectProps } from "../native-select"
 import { NumberInput, NumberInputProps } from "../number-input"
@@ -252,7 +251,7 @@ const NumberField = React.memo(withControlledInput(forwardRef<HTMLInputElement, 
     ({ onChange, ...props }, ref) => {
         return <NumberInput
             {...props}
-            onValueChange={onChange}
+            onValueChange={(value, valueAsString) => onChange(valueAsString === "" ? undefined : value)}
             ref={ref}
         />
     },
@@ -311,8 +310,10 @@ const RadioGroupField = React.memo(withControlledInput(forwardRef<HTMLButtonElem
 )))
 
 
-const RadioCardsField = React.memo(withControlledInput(forwardRef<HTMLButtonElement, FieldComponent<RadioGroupProps>>(
-    ({ onChange, itemContainerClass, itemClass, ...props }, ref) => {
+const RadioCardsField = React.memo(withControlledInput(forwardRef<HTMLButtonElement, FieldComponent<RadioGroupProps & {
+    radioGroupStackClass?: string
+}>>(
+    ({ onChange, itemContainerClass, itemClass, radioGroupStackClass, ...props }, ref) => {
         return <RadioGroup
             // itemContainerClass={cn(
             //     "items-start cursor-pointer transition border-transparent rounded-[--radius] p-4 w-full",
@@ -331,7 +332,7 @@ const RadioCardsField = React.memo(withControlledInput(forwardRef<HTMLButtonElem
                 "items-start cursor-pointer transition border-transparent rounded-[--radius] p-3 w-full md:w-fit",
                 "bg-transparent dark:hover:bg-gray-900 dark:bg-transparent",
                 "data-[state=checked]:bg-brand-500/5 dark:data-[state=checked]:bg-gray-900",
-                "focus:ring-2 ring-brand-100 dark:ring-brand-900 ring-offset-1 ring-offset-[--background] focus-within:ring-transparent transition",
+                "focus:outline-none focus:ring-1 ring-offset-1 ring-offset-[--background] focus:ring-white/40 focus-within:ring-transparent transition",
                 "dark:border dark:data-[state=checked]:border-[--border] data-[state=checked]:ring-offset-0",
                 itemContainerClass,
             )}
@@ -346,18 +347,7 @@ const RadioCardsField = React.memo(withControlledInput(forwardRef<HTMLButtonElem
             // stackClass="flex flex-col md:flex-row flex-wrap gap-2 space-y-0"
             {...props}
             onValueChange={onChange}
-            stackClass="flex flex-col md:flex-row gap-2 space-y-0"
-            ref={ref}
-        />
-    },
-)))
-
-
-const CurrencyInputField = React.memo(withControlledInput(forwardRef<HTMLInputElement, FieldComponent<CurrencyInputProps>>(
-    ({ onChange, ...props }, ref) => {
-        return <CurrencyInput
-            {...props}
-            onValueChange={onChange}
+            stackClass={cn("flex flex-col md:flex-row gap-2 space-y-0", radioGroupStackClass)}
             ref={ref}
         />
     },
@@ -498,7 +488,6 @@ export const Field = createPolymorphicComponent<"div", FieldProps, {
     Checkbox: typeof CheckboxField,
     CheckboxGroup: typeof CheckboxGroupField,
     RadioGroup: typeof RadioGroupField,
-    Currency: typeof CurrencyInputField,
     Number: typeof NumberField,
     DatePicker: typeof DatePickerField
     DateRangePicker: typeof DateRangePickerField
@@ -520,7 +509,6 @@ export const Field = createPolymorphicComponent<"div", FieldProps, {
     Checkbox: CheckboxField,
     CheckboxGroup: CheckboxGroupField,
     RadioGroup: RadioGroupField,
-    Currency: CurrencyInputField,
     Number: NumberField,
     DatePicker: DatePickerField,
     DateRangePicker: DateRangePickerField,

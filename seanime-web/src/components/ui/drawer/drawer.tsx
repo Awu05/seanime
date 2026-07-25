@@ -1,17 +1,17 @@
 import { __isDesktop__ } from "@/types/constants"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { cva, VariantProps } from "class-variance-authority"
 import { atom } from "jotai"
 import { useAtom } from "jotai/react"
 import * as React from "react"
+import { Drawer as VaulPrimitive } from "vaul"
 import { CloseButton } from "../button"
 import { cn, ComponentAnatomy, defineStyleAnatomy } from "../core/styling"
 
 export const __openDrawersAtom = atom<string[]>([])
 
 function useDrawerBodyBehavior(id: string, open: boolean | undefined) {
-    const [openDrawers, setOpenDrawers] = useAtom(__openDrawersAtom)
+    const [, setOpenDrawers] = useAtom(__openDrawersAtom)
 
     React.useEffect(() => {
         const body = document.querySelector("body")
@@ -47,14 +47,14 @@ export const DrawerAnatomy = defineStyleAnatomy({
     ]),
     content: cva([
         "UI-Drawer__content",
-        "fixed z-50 w-full gap-4 bg-[--background] p-6 shadow-lg overflow-y-auto",
+        "fixed z-50 w-full gap-4 bg-[--paper] p-6 shadow-lg overflow-y-auto",
         "transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-500 data-[state=open]:duration-500",
         "focus:outline-none focus-visible:outline-none",
         __isDesktop__ && "select-none",
     ], {
         variants: {
             side: {
-                mangaReader: "w-full inset-x-0 top-0 border data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+                mangaReader: "w-full inset-x-0 top-0 border data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom !bg-[#000]",
                 top: "w-full lg:w-[calc(100%_-_20px)] inset-x-0 top-0 border data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
                 bottom: "w-full lg:w-[calc(100%_-_20px)] inset-x-0 bottom-0 border data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
                 left: "inset-y-0 left-0 h-full lg:h-[calc(100%_-_20px)] border data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
@@ -106,11 +106,14 @@ export const DrawerAnatomy = defineStyleAnatomy({
  * Drawer
  * -----------------------------------------------------------------------------------------------*/
 
-export type DrawerProps = Omit<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>, "modal"> &
-    Pick<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>,
+export type DrawerProps =
+    Pick<React.ComponentPropsWithoutRef<typeof VaulPrimitive.Content>,
         "onOpenAutoFocus" | "onCloseAutoFocus" | "onEscapeKeyDown" | "onPointerDownCapture" | "onInteractOutside"> &
+    Pick<React.ComponentPropsWithoutRef<typeof VaulPrimitive.Root>,
+        "open" | "defaultOpen" | "onOpenChange"> &
     VariantProps<typeof DrawerAnatomy.content> &
     ComponentAnatomy<typeof DrawerAnatomy> & {
+    children?: React.ReactNode
     /**
      * Interaction with outside elements will be enabled and other elements will be visible to screen readers.
      */
@@ -168,6 +171,8 @@ export function Drawer(props: DrawerProps) {
         side = "right",
         size,
         open,
+        defaultOpen,
+        onOpenChange,
         // Content
         onOpenAutoFocus,
         onCloseAutoFocus,
@@ -180,23 +185,57 @@ export function Drawer(props: DrawerProps) {
     } = props
 
     const id = React.useId()
+    const isControlled = open !== undefined
+    const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false)
+    const drawerSide = mangaReader ? "mangaReader" : (side ?? "right")
+    const direction = drawerSide === "mangaReader" ? "bottom" : drawerSide
+    const resolvedOpen = isControlled ? open : uncontrolledOpen
+    const container = portalContainer ?? (typeof document !== "undefined" ? document.body : undefined)
 
-    useDrawerBodyBehavior(id, open)
+    const handleOpenChange = React.useCallback((nextOpen: boolean) => {
+        if (!isControlled) {
+            setUncontrolledOpen(nextOpen)
+        }
+
+        onOpenChange?.(nextOpen)
+    }, [isControlled, onOpenChange])
+
+    const handleInteractOutside = React.useCallback((event: Parameters<NonNullable<typeof onInteractOutside>>[0]) => {
+        onInteractOutside?.(event)
+
+        if (allowOutsideInteraction && !event.defaultPrevented) {
+            handleOpenChange(false)
+        }
+    }, [allowOutsideInteraction, handleOpenChange, onInteractOutside])
+
+    useDrawerBodyBehavior(id, resolvedOpen)
 
     return (
-        <DialogPrimitive.Root modal={!allowOutsideInteraction} open={open} {...rest}>
+        <VaulPrimitive.Root
+            modal={!allowOutsideInteraction}
+            container={container}
+            direction={direction}
+            handleOnly
+            noBodyStyles
+            disablePreventScroll={false}
+            autoFocus
+            open={resolvedOpen}
+            defaultOpen={defaultOpen}
+            onOpenChange={handleOpenChange}
+            {...rest}
+        >
 
-            {trigger && <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>}
+            {trigger && <VaulPrimitive.Trigger asChild>{trigger}</VaulPrimitive.Trigger>}
 
-            <DialogPrimitive.Portal container={portalContainer}>
+            <VaulPrimitive.Portal>
 
-                <DialogPrimitive.Overlay className={cn(DrawerAnatomy.overlay(), overlayClass)} />
+                <VaulPrimitive.Overlay className={cn(DrawerAnatomy.overlay(), overlayClass)} />
 
-                <DialogPrimitive.Content
+                <VaulPrimitive.Content
                     className={cn(
-                        DrawerAnatomy.content({ size, side: mangaReader ? "mangaReader" : side }),
+                        DrawerAnatomy.content({ size, side: drawerSide }),
                         // __isDesktop__ && "pt-12",
-                        !mangaReader && "lg:m-[10px] rounded-[--radius]",
+                        !mangaReader && "lg:m-[10px] rounded-xl scroll-mt-2",
                         contentClass,
                     )}
                     style={{
@@ -211,16 +250,16 @@ export function Drawer(props: DrawerProps) {
                     onCloseAutoFocus={onCloseAutoFocus}
                     onEscapeKeyDown={onEscapeKeyDown}
                     onPointerDownCapture={onPointerDownCapture}
-                    onInteractOutside={onInteractOutside}
+                    onInteractOutside={handleInteractOutside}
                     tabIndex={-1}
                 >
                     {!title && !description ? (
                         <VisuallyHidden>
-                            <DialogPrimitive.Title>Drawer</DialogPrimitive.Title>
+                            <VaulPrimitive.Title>Drawer</VaulPrimitive.Title>
                         </VisuallyHidden>
                     ) : (
                         <div className={cn(DrawerAnatomy.header(), headerClass)}>
-                            <DialogPrimitive.Title
+                            <VaulPrimitive.Title
                                 className={cn(
                                     DrawerAnatomy.title(),
                                     __isDesktop__ && "relative",
@@ -228,11 +267,11 @@ export function Drawer(props: DrawerProps) {
                                 )}
                             >
                                 {title}
-                            </DialogPrimitive.Title>
+                            </VaulPrimitive.Title>
                             {description && (
-                                <DialogPrimitive.Description className={cn(DrawerAnatomy.description(), descriptionClass)}>
+                                <VaulPrimitive.Description className={cn(DrawerAnatomy.description(), descriptionClass)}>
                                     {description}
-                                </DialogPrimitive.Description>
+                                </VaulPrimitive.Description>
                             )}
                         </div>
                     )}
@@ -243,7 +282,7 @@ export function Drawer(props: DrawerProps) {
                         {footer}
                     </div>}
 
-                    {!hideCloseButton && <DialogPrimitive.Close
+                    {!hideCloseButton && <VaulPrimitive.Close
                         className={cn(
                             DrawerAnatomy.close(),
                             // __isDesktop__ && "!top-10 !right-4",
@@ -252,13 +291,13 @@ export function Drawer(props: DrawerProps) {
                         asChild
                     >
                         {closeButton ? closeButton : <CloseButton />}
-                    </DialogPrimitive.Close>}
+                    </VaulPrimitive.Close>}
 
-                </DialogPrimitive.Content>
+                </VaulPrimitive.Content>
 
-            </DialogPrimitive.Portal>
+            </VaulPrimitive.Portal>
 
-        </DialogPrimitive.Root>
+        </VaulPrimitive.Root>
     )
 }
 

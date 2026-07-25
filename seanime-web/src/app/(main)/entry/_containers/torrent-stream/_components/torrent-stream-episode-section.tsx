@@ -23,6 +23,7 @@ type TorrentStreamEpisodeSectionProps = {
     onPlayExternallyEpisodeClick?: (episode: Anime_Episode) => void
     onPlayNextEpisodeOnMount: (episode: Anime_Episode) => void
     bottomSection?: React.ReactNode
+    contextType: "torrentstream" | "debridstream" | string // used for plugin context menu item filtering
 }
 
 export function TorrentStreamEpisodeSection(props: TorrentStreamEpisodeSectionProps) {
@@ -35,6 +36,7 @@ export function TorrentStreamEpisodeSection(props: TorrentStreamEpisodeSectionPr
         onPlayNextEpisodeOnMount,
         bottomSection,
         onPlayExternallyEpisodeClick,
+        contextType,
         ...rest
     } = props
 
@@ -83,6 +85,7 @@ export function TorrentStreamEpisodeSection(props: TorrentStreamEpisodeSectionPr
                         >
                             <EpisodeCard
                                 key={episode.localFile?.path || ""}
+                                contextType={contextType}
                                 episode={episode}
                                 image={episode.episodeMetadata?.image || episode.baseAnime?.bannerImage || episode.baseAnime?.coverImage?.extraLarge}
                                 topTitle={episode.episodeTitle || episode?.baseAnime?.title?.userPreferred}
@@ -90,6 +93,7 @@ export function TorrentStreamEpisodeSection(props: TorrentStreamEpisodeSectionPr
                                 // meta={episode.episodeMetadata?.airDate ?? undefined}
                                 isInvalid={episode.isInvalid}
                                 progressTotal={episode.baseAnime?.episodes}
+                                watchedProgress={entry.listData?.progress}
                                 progressNumber={episode.progressNumber}
                                 episodeNumber={episode.episodeNumber}
                                 length={episode.episodeMetadata?.length}
@@ -139,6 +143,7 @@ export function TorrentStreamEpisodeSection(props: TorrentStreamEpisodeSectionPr
                             isWatched={!!entry.listData?.progress && entry.listData.progress >= (episode?.progressNumber || 0)}
                             className="flex-none w-full"
                             episodeNumber={episode?.episodeNumber}
+                            watchedProgress={entry.listData?.progress}
                             progressNumber={episode?.progressNumber}
                             action={<>
                                 <MediaEpisodeInfoModal
@@ -169,9 +174,9 @@ export function TorrentStreamEpisodeSection(props: TorrentStreamEpisodeSectionPr
                                         <LuTvMinimalPlay />
                                         Play externally
                                     </DropdownMenuItem>}
-                                    <PluginEpisodeGridItemMenuItems isDropdownMenu={false} type="torrentstream" episode={episode as Anime_Episode} />
+                                    <PluginEpisodeGridItemMenuItems isDropdownMenu={false} type={contextType} episode={episode as Anime_Episode} />
                                 </DropdownMenu> : (
-                                    <PluginEpisodeGridItemMenuItems isDropdownMenu={true} type="torrentstream" episode={episode as Anime_Episode} />
+                                    <PluginEpisodeGridItemMenuItems isDropdownMenu={true} type={contextType} episode={episode as Anime_Episode} />
                                 )}
 
                             </>}

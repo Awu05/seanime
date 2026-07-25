@@ -11,6 +11,7 @@ import { useAtom } from "jotai/react"
 import { atomWithStorage } from "jotai/utils"
 import React, { useState } from "react"
 import { toast } from "sonner"
+import { getBatchSelectionParams } from "./batches.ts"
 
 const __autoplay_countdownAtom = atom(5)
 export const __autoplay_nextEpisodeAtom = atom<Anime_Episode | null>(null)
@@ -61,7 +62,7 @@ export function useTorrentstreamAutoplay() {
     const [nextEpisode, setNextEpisode] = useAtom(__autoplay_nextEpisodeAtom)
 
     const { handleAutoSelectStream, handleStreamSelection } = useHandleStartTorrentStream()
-    const { autoPlayTorrent } = useAutoPlaySelectedTorrent()
+    const { autoPlayTorrent, setAutoPlayTorrent } = useAutoPlaySelectedTorrent()
 
     function handleAutoplayNextTorrentstreamEpisode(preload?: boolean) {
         if (!info) return
@@ -74,14 +75,7 @@ export function useTorrentstreamAutoplay() {
             torrentInfo = null
         }
 
-        // If it's the right torrent and it's a batch, get the next file index to play
-        let fileIndex: number | undefined = undefined
-        if (!!torrentInfo && torrentInfo?.batchFiles) {
-            const file = torrentInfo!.batchFiles.files?.find(n => n.index === torrentInfo!.batchFiles!.current + 1)
-            if (file) {
-                fileIndex = file.index
-            }
-        }
+        const { fileIndex, batchEpisodeFiles } = getBatchSelectionParams(torrentInfo?.batchFiles, episodeNumber, aniDBEpisode)
 
         logger("TORRENT STREAM AUTOPLAY").info("Auto playing next episode", { episodeNumber, fileIndex, preload, torrent: torrentInfo?.torrent })
 
@@ -93,12 +87,7 @@ export function useTorrentstreamAutoplay() {
                 aniDBEpisode: aniDBEpisode,
                 torrent: torrentInfo.torrent,
                 chosenFileIndex: fileIndex,
-                batchEpisodeFiles: (torrentInfo?.batchFiles && fileIndex !== undefined) ? {
-                    ...torrentInfo.batchFiles,
-                    current: fileIndex,
-                    currentEpisodeNumber: episodeNumber,
-                    currentAniDBEpisode: aniDBEpisode,
-                } : undefined,
+                batchEpisodeFiles,
                 preload: preload,
             })
         } else {
@@ -112,6 +101,10 @@ export function useTorrentstreamAutoplay() {
         }
 
         if (!preload) {
+            if (torrentInfo?.torrent && batchEpisodeFiles) {
+                setAutoPlayTorrent(torrentInfo.torrent, entry, batchEpisodeFiles)
+            }
+
             const nextEpisode = allEpisodes?.find(e => e.episodeNumber === episodeNumber + 1)
             if (nextEpisode && !!nextEpisode.aniDBEpisode) {
                 setInfo({

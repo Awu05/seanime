@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/goccy/go-json"
 )
 
 type BaseModel struct {
@@ -109,8 +111,11 @@ type LibrarySettings struct {
 	// v3.5+
 	ScannerUseLegacyMatching bool   `gorm:"column:scanner_use_legacy_matching" json:"scannerUseLegacyMatching"`
 	ScannerConfig            string `gorm:"column:scanner_config" json:"scannerConfig"`
-	// v3.6.0+
-	UpdateChannel string `gorm:"column:update_channel" json:"updateChannel"` // "github", "seanime", "seanime_nightly"
+	UpdateChannel            string `gorm:"column:update_channel" json:"updateChannel"` // "github", "seanime", "seanime_nightly"
+	// v3.7.0+
+	EnableExtensionSecureMode bool   `gorm:"column:enable_extension_secure_mode" json:"enableExtensionSecureMode"`
+	DefaultPlaybackSource     string `gorm:"column:default_playback_source" json:"defaultPlaybackSource"` // "", "library", "torrentstream", "debridstream", "onlinestream", "ext:[extensionId]"
+	ShowTorrentAvailability   bool   `gorm:"column:show_torrent_availability" json:"showTorrentAvailability"`
 }
 
 func (o *LibrarySettings) GetLibraryPaths() (ret []string) {
@@ -208,27 +213,52 @@ type MediaPlayerSettings struct {
 	VcTranslateTargetLanguage string `gorm:"column:vc_translate_target_language" json:"vcTranslateTargetLanguage"`
 	VcTranslateProvider       string `gorm:"column:vc_translate_provider" json:"vcTranslateProvider"`
 	VcTranslateApiKey         string `gorm:"column:vc_translate_api_key" json:"vcTranslateApiKey"`
+	VcTranslateBaseUrl        string `gorm:"column:vc_translate_base_url" json:"vcTranslateBaseUrl"`
+	VcTranslateModel          string `gorm:"column:vc_translate_model" json:"vcTranslateModel"`
+	MpvPrismLogging           bool   `gorm:"column:mpv_prism_logging" json:"mpvPrismLogging"`
+	MpvPrismEnabled           bool   `gorm:"column:mpv_prism_enabled" json:"mpvPrismEnabled"`
+	ScreenshotDir             string `gorm:"column:screenshot_dir" json:"screenshotDir"`
 }
 
 type TorrentSettings struct {
-	Default              string `gorm:"column:default_torrent_client" json:"defaultTorrentClient"`
-	QBittorrentPath      string `gorm:"column:qbittorrent_path" json:"qbittorrentPath"`
-	QBittorrentHost      string `gorm:"column:qbittorrent_host" json:"qbittorrentHost"`
-	QBittorrentPort      int    `gorm:"column:qbittorrent_port" json:"qbittorrentPort"`
-	QBittorrentUsername  string `gorm:"column:qbittorrent_username" json:"qbittorrentUsername"`
-	QBittorrentPassword  string `gorm:"column:qbittorrent_password" json:"qbittorrentPassword"`
-	QBittorrentTags      string `gorm:"column:qbittorrent_tags" json:"qbittorrentTags"`
-	QBittorrentCategory  string `gorm:"column:qbittorrent_category" json:"qbittorrentCategory"`
-	TransmissionPath     string `gorm:"column:transmission_path" json:"transmissionPath"`
-	TransmissionHost     string `gorm:"column:transmission_host" json:"transmissionHost"`
-	TransmissionPort     int    `gorm:"column:transmission_port" json:"transmissionPort"`
-	TransmissionUsername string `gorm:"column:transmission_username" json:"transmissionUsername"`
-	TransmissionPassword string `gorm:"column:transmission_password" json:"transmissionPassword"`
+	Default                   string `gorm:"column:default_torrent_client" json:"defaultTorrentClient"`
+	QBittorrentPath           string `gorm:"column:qbittorrent_path" json:"qbittorrentPath"`
+	QBittorrentHost           string `gorm:"column:qbittorrent_host" json:"qbittorrentHost"`
+	QBittorrentPort           int    `gorm:"column:qbittorrent_port" json:"qbittorrentPort"`
+	QBittorrentUsername       string `gorm:"column:qbittorrent_username" json:"qbittorrentUsername"`
+	QBittorrentPassword       string `gorm:"column:qbittorrent_password" json:"qbittorrentPassword"`
+	QBittorrentTags           string `gorm:"column:qbittorrent_tags" json:"qbittorrentTags"`
+	QBittorrentCategory       string `gorm:"column:qbittorrent_category" json:"qbittorrentCategory"`
+	TransmissionPath          string `gorm:"column:transmission_path" json:"transmissionPath"`
+	TransmissionHost          string `gorm:"column:transmission_host" json:"transmissionHost"`
+	TransmissionPort          int    `gorm:"column:transmission_port" json:"transmissionPort"`
+	TransmissionUsername      string `gorm:"column:transmission_username" json:"transmissionUsername"`
+	TransmissionPassword      string `gorm:"column:transmission_password" json:"transmissionPassword"`
+	SeanimePort               int    `gorm:"column:seanime_port" json:"seanimePort"`
+	SeanimeMaxConnections     int    `gorm:"column:seanime_max_connections" json:"seanimeMaxConnections"`
+	SeanimeDownloadLimit      int    `gorm:"column:seanime_download_limit" json:"seanimeDownloadLimit"`
+	SeanimeUploadLimit        int    `gorm:"column:seanime_upload_limit" json:"seanimeUploadLimit"`
+	SeanimeMaxActiveDownloads int    `gorm:"column:seanime_max_active_downloads" json:"seanimeMaxActiveDownloads"`
 	// v2.1+
 	ShowActiveTorrentCount bool `gorm:"column:show_active_torrent_count" json:"showActiveTorrentCount"`
 	// v2.2+
 	// DEPRECATED, no longer used
 	HideTorrentList bool `gorm:"column:hide_torrent_list" json:"hideTorrentList"`
+}
+
+type LocalTorrent struct {
+	BaseModel
+	Hash           string `gorm:"column:hash;uniqueIndex" json:"hash"`
+	Magnet         string `gorm:"column:magnet;type:text" json:"magnet"`
+	Name           string `gorm:"column:name" json:"name"`
+	Destination    string `gorm:"column:destination" json:"destination"`
+	Paused         bool   `gorm:"column:paused" json:"paused"`
+	QueueIndex     int    `gorm:"column:queue_index;index" json:"queueIndex"`
+	ForceStart     bool   `gorm:"column:force_start" json:"forceStart"`
+	Sequential     bool   `gorm:"column:sequential" json:"sequential"`
+	FilePriorities string `gorm:"column:file_priorities;type:text" json:"-"`
+	Length         int64  `gorm:"column:length" json:"length"`
+	Completed      int64  `gorm:"column:completed" json:"completed"`
 }
 
 type ListSyncSettings struct {
@@ -391,6 +421,12 @@ type Theme struct {
 	HomeItems []byte `gorm:"column:home_items;type:text" json:"homeItems"`
 	// v3.5+
 	EnableBlurringEffects bool `gorm:"column:enable_blurring_effects" json:"enableBlurringEffects"`
+	// v3.7+
+	HideAnimeSpoilers               bool `gorm:"column:hide_anime_spoilers" json:"hideAnimeSpoilers"`
+	HideAnimeSpoilerThumbnails      bool `gorm:"column:hide_anime_spoiler_thumbnails" json:"hideAnimeSpoilerThumbnails"`
+	HideAnimeSpoilerTitles          bool `gorm:"column:hide_anime_spoiler_titles" json:"hideAnimeSpoilerTitles"`
+	HideAnimeSpoilerDescriptions    bool `gorm:"column:hide_anime_spoiler_descriptions" json:"hideAnimeSpoilerDescriptions"`
+	HideAnimeSpoilerSkipNextEpisode bool `gorm:"column:hide_anime_spoiler_skip_next_episode" json:"hideAnimeSpoilerSkipNextEpisode"`
 }
 
 type HomeItem struct {
@@ -480,7 +516,8 @@ type TorrentstreamSettings struct {
 	// v2.7+
 	SlowSeeding bool `gorm:"column:slow_seeding" json:"slowSeeding"`
 	// v3+
-	PreloadNextStream bool `gorm:"column:preload_next_stream" json:"preloadNextStream"`
+	PreloadNextStream         bool `gorm:"column:preload_next_stream" json:"preloadNextStream"`
+	DisableAcceleratedStartup bool `gorm:"column:disable_accelerated_startup" json:"disableAcceleratedStartup"`
 }
 
 // TorrentstreamHistory used by both torrent streaming and debrid streaming to store the last selected batch that was used for each media.
@@ -553,6 +590,67 @@ type DebridSettings struct {
 	StreamPreferredResolution    string `gorm:"column:stream_preferred_resolution" json:"streamPreferredResolution"`
 }
 
+type DummyDebridSettings struct {
+	BaseModel
+	Enabled                 bool             `gorm:"column:enabled" json:"enabled"`
+	ProfileName             string           `gorm:"column:profile_name" json:"profileName"`
+	FallbackFilePath        string           `gorm:"column:fallback_file_path" json:"fallbackFilePath"`
+	Files                   DummyDebridFiles `gorm:"column:files;type:text" json:"files"`
+	Cached                  bool             `gorm:"column:cached" json:"cached"`
+	ReadyDelayMs            int              `gorm:"column:ready_delay_ms" json:"readyDelayMs"`
+	ProgressIntervalMs      int              `gorm:"column:progress_interval_ms" json:"progressIntervalMs"`
+	FirstByteDelayMs        int              `gorm:"column:first_byte_delay_ms" json:"firstByteDelayMs"`
+	BandwidthBytesPerSecond int64            `gorm:"column:bandwidth_bytes_per_second" json:"bandwidthBytesPerSecond"`
+	ChunkSize               int              `gorm:"column:chunk_size" json:"chunkSize"`
+	JitterMs                int              `gorm:"column:jitter_ms" json:"jitterMs"`
+}
+
+type DummyDebridFile struct {
+	ID            string `json:"id"`
+	Path          string `json:"path"`
+	Name          string `json:"name"`
+	EpisodeNumber int    `json:"episodeNumber"`
+	LocalFilePath string `json:"localFilePath"`
+	Size          int64  `json:"size,omitempty"`
+}
+
+type DummyDebridFiles []DummyDebridFile
+
+func (o *DummyDebridFiles) Scan(src interface{}) error {
+	if src == nil {
+		*o = nil
+		return nil
+	}
+
+	var raw []byte
+	switch v := src.(type) {
+	case []byte:
+		raw = v
+	case string:
+		raw = []byte(v)
+	default:
+		return errors.New("src value cannot cast to JSON")
+	}
+
+	if len(raw) == 0 {
+		*o = nil
+		return nil
+	}
+
+	return json.Unmarshal(raw, o)
+}
+
+func (o DummyDebridFiles) Value() (driver.Value, error) {
+	if len(o) == 0 {
+		return "[]", nil
+	}
+	bytes, err := json.Marshal(o)
+	if err != nil {
+		return nil, err
+	}
+	return string(bytes), nil
+}
+
 type DebridTorrentItem struct {
 	BaseModel
 	TorrentItemID string `gorm:"column:torrent_item_id" json:"torrentItemId"`
@@ -574,6 +672,16 @@ type DebridLocalDownload struct {
 	// created. Deletion targets these, never LocalPath when it is a directory
 	// that could be (or contain) a library root.
 	LocalPaths string `gorm:"column:local_paths" json:"localPaths"`
+}
+
+// DebridTransferHash persists the info hash a debrid provider transfer was created from.
+// Some providers (e.g. Premiumize) never expose a transfer's info hash via their own API,
+// so this is the only way to recover the hash <-> transfer id mapping across restarts.
+type DebridTransferHash struct {
+	BaseModel
+	Provider   string `gorm:"column:provider;uniqueIndex:idx_debrid_transfer_hash" json:"provider"`
+	TransferID string `gorm:"column:transfer_id;uniqueIndex:idx_debrid_transfer_hash" json:"transferId"`
+	Hash       string `gorm:"column:hash;index" json:"hash"`
 }
 
 // +---------------------+

@@ -10,6 +10,7 @@ import (
 	"seanime/internal/events"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
 	"seanime/internal/torrentstream"
+	"seanime/internal/util"
 
 	"github.com/labstack/echo/v4"
 )
@@ -49,9 +50,14 @@ func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	prevSettings := h.getTorrentstreamSettings(c)
+	if err := h.guardStrictTorrentstreamRootMutation(c, prevSettings, &b.Settings); err != nil {
+		return err
+	}
+
 	// Validate the download directory
 	if b.Settings.DownloadDir != "" {
-		dir, err := os.Stat(b.Settings.DownloadDir)
+		dir, err := os.Stat(util.ResolvePhysicalPath(b.Settings.DownloadDir))
 		if err != nil {
 			h.App.Logger.Error().Err(err).Msgf("torrentstream: Download directory %s does not exist", b.Settings.DownloadDir)
 			h.App.WSEventManager.SendToProfile(profileID, events.ErrorToast, "Download directory does not exist")
@@ -98,12 +104,7 @@ func (h *Handler) HandleGetTorrentstreamTorrentFilePreviews(c echo.Context) erro
 		return h.RespondWithError(c, err)
 	}
 
-	providerExtension, ok := h.App.ExtensionRepository.GetAnimeTorrentProviderExtensionByID(b.Torrent.Provider)
-	if !ok {
-		return h.RespondWithError(c, errors.New("torrentstream: Torrent provider extension not found"))
-	}
-
-	magnet, err := providerExtension.GetProvider().GetTorrentMagnetLink(b.Torrent)
+	magnet, err := h.App.TorrentRepository.ResolveMagnetLink(b.Torrent)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -157,6 +158,8 @@ func (h *Handler) HandleTorrentstreamStartStream(c echo.Context) error {
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
 	}
+
+	b.ClientId = getRequestClientId(c, b.ClientId)
 
 	userAgent := c.Request().Header.Get("User-Agent")
 
@@ -241,10 +244,37 @@ func (h *Handler) HandleGetTorrentstreamBatchHistory(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	if b.MediaID == 0 {
+		return h.RespondWithData(c, &torrentstream.BatchHistoryResponse{})
+	}
+
 	session := h.getStreamSession(c)
 
 	ret := session.TorrentStream.GetBatchHistory(b.MediaID)
 	return h.RespondWithData(c, ret)
+}
+
+// HandleDeleteTorrentstreamBatchHistory
+//
+//	@summary deletes the saved batch selection.
+//	@desc This clears the saved previous batch selection for a media entry.
+//	@returns bool
+//	@route /api/v1/torrentstream/batch-history/delete [POST]
+func (h *Handler) HandleDeleteTorrentstreamBatchHistory(c echo.Context) error {
+	type body struct {
+		MediaID int `json:"mediaId"`
+	}
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	session := h.getStreamSession(c)
+	if err := session.TorrentStream.DeleteBatchHistory(b.MediaID); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	return h.RespondWithData(c, true)
 }
 
 // route /api/v1/torrentstream/stream/*

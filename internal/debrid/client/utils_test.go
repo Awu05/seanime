@@ -1,13 +1,36 @@
 package debrid_client
 
 import (
+	"archive/zip"
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"seanime/internal/testutil"
+	"seanime/internal/util"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func writeZipFixture(t testing.TB, entries map[string]string) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range entries {
+		writer, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = writer.Write([]byte(body))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+
+	archivePath := filepath.Join(t.TempDir(), "archive.zip")
+	require.NoError(t, os.WriteFile(archivePath, buf.Bytes(), 0o644))
+	return archivePath
+}
 
 func PrintPathStructure(path string, indent string) error {
 	entries, err := os.ReadDir(path)
@@ -30,6 +53,28 @@ func PrintPathStructure(path string, indent string) error {
 	return nil
 }
 
+func writeFixtureFile(t testing.TB, root string, fixturePath string) string {
+	t.Helper()
+
+	target := filepath.Join(root, testutil.FixtureRelPath(fixturePath))
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatalf("failed to create directory: %v", err)
+	}
+	if err := os.WriteFile(target, []byte("dummy content"), 0644); err != nil {
+		t.Fatalf("failed to create file %s: %v", target, err)
+	}
+
+	return target
+}
+
+func failRename(t *testing.T) {
+	t.Helper()
+
+	old := renamePath
+	renamePath = func(_, _ string) error { return errors.New("cross-device link") }
+	t.Cleanup(func() { renamePath = old })
+}
+
 func TestCreateTempDir(t *testing.T) {
 
 	files := []string{
@@ -39,13 +84,7 @@ func TestCreateTempDir(t *testing.T) {
 
 	root := t.TempDir()
 	for _, file := range files {
-		path := filepath.Join(root, file)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			t.Fatalf("failed to create directory: %v", err)
-		}
-		if err := os.WriteFile(path, []byte("dummy content"), 0644); err != nil {
-			t.Fatalf("failed to create file %s: %v", path, err)
-		}
+		writeFixtureFile(t, root, file)
 	}
 	defer os.RemoveAll(root)
 
@@ -172,13 +211,7 @@ func TestMoveContentsTo(t *testing.T) {
 			// Create the source directory structure
 			root := t.TempDir()
 			for _, file := range tt.files {
-				path := filepath.Join(root, file)
-				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-					t.Fatalf("failed to create directory: %v", err)
-				}
-				if err := os.WriteFile(path, []byte("dummy content"), 0644); err != nil {
-					t.Fatalf("failed to create file %s: %v", path, err)
-				}
+				writeFixtureFile(t, root, file)
 			}
 
 			PrintPathStructure(root, "")
@@ -204,4 +237,51 @@ func TestMoveContentsTo(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMoveContentsToReturnsRenameError(t *testing.T) {
+	failRename(t)
+
+	root := t.TempDir()
+	writeFixtureFile(t, root, "/Anime/Ep1.mkv")
+	writeFixtureFile(t, root, "/Anime/Ep2.mkv")
+
+	dest := t.TempDir()
+	err := moveContentsTo(root, dest)
+
+	require.Error(t, err)
+	_, statErr := os.Stat(filepath.Join(dest, "Anime"))
+	require.True(t, os.IsNotExist(statErr))
+}
+
+func TestMoveContentsToMobileCopiesWhenRenameFails(t *testing.T) {
+	failRename(t)
+
+	root := t.TempDir()
+	writeFixtureFile(t, root, "/Anime/Ep1.mkv")
+	writeFixtureFile(t, root, "/Anime/Ep2.mkv")
+
+	dest := t.TempDir()
+	err := moveContentsToMobile(root, dest)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(dest, "Anime", "Ep1.mkv"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(dest, "Anime", "Ep2.mkv"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(root, "Anime"))
+	require.True(t, os.IsNotExist(err))
+}
+
+func TestUnzipFileRejectsArchiveTraversal(t *testing.T) {
+	archivePath := writeZipFixture(t, map[string]string{
+		"../escape.txt": "pwned",
+	})
+
+	dest := t.TempDir()
+	_, err := unzipFile(archivePath, dest)
+	require.ErrorIs(t, err, util.ErrArchivePathTraversal)
+	_, statErr := os.Stat(filepath.Join(dest, "escape.txt"))
+	require.Error(t, statErr)
+	require.True(t, os.IsNotExist(statErr))
 }

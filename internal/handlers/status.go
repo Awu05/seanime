@@ -53,6 +53,15 @@ type Status struct {
 
 var clientInfoCache = result.NewMap[string, util.ClientInfo]()
 
+func (h *Handler) newRestrictedStatus() *Status {
+	return &Status{
+		User:              user.NewSimulatedUser(),
+		ServerReady:       h.App.ServerReady,
+		ServerHasPassword: h.App.Config.Server.Password != "",
+		MultiUserEnabled:  h.App.MultiUserEnabled,
+	}
+}
+
 // NewStatus returns a new Status struct.
 // It uses the RouteCtx to get the App instance containing the Database instance.
 func (h *Handler) NewStatus(c echo.Context) *Status {
@@ -61,6 +70,17 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 	var settings *models.Settings
 	var theme *models.Theme
 	//var mal *models.Mal
+
+	if c.Get("unauthenticated") != nil && c.Get("unauthenticated").(bool) {
+		// unauthenticated -> return bare minimum
+		status := h.newRestrictedStatus()
+		status.Settings = &models.Settings{}
+		return status
+	}
+
+	if isStrictModeSensitive(c.Request(), h.App.Config.Server.Password) {
+		return h.newRestrictedStatus()
+	}
 
 	// Get the user from the database (if logged in)
 	// In multi-user mode, load the profile-specific AniList account
@@ -134,17 +154,6 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		ShowChangelogTour:     h.App.ShowTour,
 	}
 
-	if c.Get("unauthenticated") != nil && c.Get("unauthenticated").(bool) {
-		// unauthenticated -> return bare minimum
-		status = &Status{
-			User:              user.NewSimulatedUser(),
-			ServerReady:       h.App.ServerReady,
-			ServerHasPassword: h.App.Config.Server.Password != "",
-			MultiUserEnabled:  h.App.MultiUserEnabled,
-			Settings:          &models.Settings{},
-		}
-	}
-
 	return status
 }
 
@@ -166,6 +175,10 @@ func (h *Handler) HandleGetStatus(c echo.Context) error {
 }
 
 func (h *Handler) HandleGetLogContent(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	if h.App.Config == nil || h.App.Config.Logs.Dir == "" {
 		return h.RespondWithData(c, "")
 	}
@@ -213,12 +226,20 @@ var newestLogFilename = ""
 //	@route /api/v1/logs/filenames [GET]
 //	@returns []string
 func (h *Handler) HandleGetLogFilenames(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	if h.App.Config == nil || h.App.Config.Logs.Dir == "" {
 		return h.RespondWithData(c, []string{})
 	}
 
 	var filenames []string
-	filepath.WalkDir(h.App.Config.Logs.Dir, func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(h.App.Config.Logs.Dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
 		if d.IsDir() {
 			return nil
 		}
@@ -229,7 +250,9 @@ func (h *Handler) HandleGetLogFilenames(c echo.Context) error {
 
 		filenames = append(filenames, filepath.Base(path))
 		return nil
-	})
+	}); err != nil {
+		return h.RespondWithError(c, err)
+	}
 
 	// Sort from newest to oldest & store the newest log filename
 	if len(filenames) > 0 {
@@ -254,6 +277,10 @@ func (h *Handler) HandleGetLogFilenames(c echo.Context) error {
 //	@route /api/v1/logs [DELETE]
 //	@returns bool
 func (h *Handler) HandleDeleteLogs(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	type body struct {
 		Filenames []string `json:"filenames"`
 	}
@@ -267,7 +294,17 @@ func (h *Handler) HandleDeleteLogs(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	filepath.WalkDir(h.App.Config.Logs.Dir, func(path string, d fs.DirEntry, err error) error {
+	for _, filename := range b.Filenames {
+		if filepath.Base(filename) != filename || filepath.Ext(filename) != ".log" {
+			return h.RespondWithError(c, fmt.Errorf("invalid filename"))
+		}
+	}
+
+	deleteErr := filepath.WalkDir(h.App.Config.Logs.Dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
 		if d.IsDir() {
 			return nil
 		}
@@ -288,6 +325,9 @@ func (h *Handler) HandleDeleteLogs(c echo.Context) error {
 		}
 		return nil
 	})
+	if deleteErr != nil {
+		return h.RespondWithError(c, deleteErr)
+	}
 
 	return h.RespondWithData(c, true)
 }
@@ -299,6 +339,10 @@ func (h *Handler) HandleDeleteLogs(c echo.Context) error {
 //	@route /api/v1/logs/latest [GET]
 //	@returns string
 func (h *Handler) HandleGetLatestLogContent(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	if h.App.Config == nil || h.App.Config.Logs.Dir == "" {
 		return h.RespondWithData(c, "")
 	}
@@ -473,6 +517,10 @@ func (h *Handler) HandleGetMemoryStats(c echo.Context) error {
 //	@route /api/v1/memory/profile [GET]
 //	@returns nil
 func (h *Handler) HandleGetMemoryProfile(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	// Parse query parameters
 	heap := c.QueryParam("heap") == "true"
 	allocs := c.QueryParam("allocs") == "true"
@@ -523,6 +571,10 @@ func (h *Handler) HandleGetMemoryProfile(c echo.Context) error {
 //	@route /api/v1/memory/goroutine [GET]
 //	@returns nil
 func (h *Handler) HandleGetGoRoutineProfile(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
 	filename := fmt.Sprintf("seanime-goroutine-profile-%s.pprof", timestamp)
 
@@ -551,6 +603,10 @@ func (h *Handler) HandleGetGoRoutineProfile(c echo.Context) error {
 //	@route /api/v1/memory/cpu [GET]
 //	@returns nil
 func (h *Handler) HandleGetCPUProfile(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	// Parse duration from query parameter (default to 30 seconds)
 	durationStr := c.QueryParam("duration")
 	duration := 30 * time.Second
@@ -590,6 +646,10 @@ func (h *Handler) HandleGetCPUProfile(c echo.Context) error {
 //	@route /api/v1/memory/gc [POST]
 //	@returns handlers.MemoryStatsResponse
 func (h *Handler) HandleForceGC(c echo.Context) error {
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+
 	h.App.Logger.Info().Msg("handlers: Forcing garbage collection")
 
 	// Force garbage collection

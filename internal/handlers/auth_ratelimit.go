@@ -25,7 +25,7 @@ type authFailureState struct {
 
 const (
 	authFailureThreshold = 5
-	authFailureWindow    = 10 * time.Minute
+	authLimiterFailureWindow    = 10 * time.Minute
 	authBaseBlock        = 30 * time.Second
 	authMaxBlock         = 10 * time.Minute
 )
@@ -40,7 +40,7 @@ func (rl *authRateLimiter) check(ip string) (time.Duration, bool) {
 	if !exists {
 		return 0, true
 	}
-	if time.Since(st.lastFailure) > authFailureWindow {
+	if time.Since(st.lastFailure) > authLimiterFailureWindow {
 		delete(rl.failures, ip)
 		return 0, true
 	}
@@ -56,7 +56,7 @@ func (rl *authRateLimiter) fail(ip string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	st, exists := rl.failures[ip]
-	if !exists || time.Since(st.lastFailure) > authFailureWindow {
+	if !exists || time.Since(st.lastFailure) > authLimiterFailureWindow {
 		st = &authFailureState{}
 		rl.failures[ip] = st
 	}
@@ -72,7 +72,7 @@ func (rl *authRateLimiter) fail(ip string) {
 	// Opportunistic cleanup so the map can't grow unboundedly
 	if len(rl.failures) > 1000 {
 		for k, v := range rl.failures {
-			if time.Since(v.lastFailure) > authFailureWindow {
+			if time.Since(v.lastFailure) > authLimiterFailureWindow {
 				delete(rl.failures, k)
 			}
 		}

@@ -94,7 +94,7 @@ export function PluginTray(props: TrayPluginProps) {
     React.useEffect(() => {
         setBadgeNumber(props.trayIcon.badgeNumber)
         setBadgeIntent(props.trayIcon.badgeIntent)
-    }, [])
+    }, [props.trayIcon.badgeNumber, props.trayIcon.badgeIntent])
 
     const firstRender = React.useRef(true)
     React.useEffect(() => {
@@ -273,7 +273,7 @@ export function PluginTray(props: TrayPluginProps) {
                                 <IconButton
                                     icon={<BiX />}
                                     data-plugin-tray-vaul-close-button
-                                    intent="gray-glass"
+                                    intent="gray-subtle"
                                     size="sm"
                                     className="rounded-full"
                                     onClick={() => setOpen(false)}

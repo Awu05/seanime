@@ -11,7 +11,8 @@ import {
     Continuity_WatchHistory,
     Manga_MangaLatestChapterNumberItem,
 } from "@/api/generated/types"
-import { getMangaEntryLatestChapterNumber, MangaEntryFilters } from "@/app/(main)/manga/_lib/handle-manga-selected-provider"
+import { MangaEntryFilters } from "@/app/(main)/manga/_lib/manga-preferences"
+import { getMangaEntryUnreadState } from "@/app/(main)/manga/_lib/manga-unread"
 import sortBy from "lodash/sortBy"
 import { anilist_getUnwatchedCount } from "./media"
 
@@ -22,6 +23,8 @@ type BaseCollectionSorting =
     | "END_DATE_DESC"
     | "SCORE"
     | "SCORE_DESC"
+    | "AUDIENCE_SCORE"
+    | "AUDIENCE_SCORE_DESC"
     | "RELEASE_DATE"
     | "RELEASE_DATE_DESC"
     | "PROGRESS"
@@ -36,9 +39,9 @@ type CollectionSorting<T extends CollectionType> = BaseCollectionSorting | (T ex
     | "AIRDATE"
     | "AIRDATE_DESC"
     : T extends "manga" ?
-        "PROGRESS"
-        | "PROGRESS_DESC"
-        : never)
+    "PROGRESS"
+    | "PROGRESS_DESC"
+    : never)
 
 
 type ContinueWatchingSorting =
@@ -76,6 +79,8 @@ export const COLLECTION_SORTING_OPTIONS = [
     { label: "Lowest score", value: "SCORE" },
     { label: "Title", value: "TITLE" },
     { label: "Title (Z-A)", value: "TITLE_DESC" },
+    { label: "Highest audience score", value: "AUDIENCE_SCORE_DESC" },
+    { label: "Lowest audience score", value: "AUDIENCE_SCORE" },
     { label: "Highest progress", value: "PROGRESS_DESC" },
     { label: "Lowest progress", value: "PROGRESS" },
     { label: "Started recently", value: "START_DATE_DESC" },
@@ -107,6 +112,7 @@ export type CollectionType = "anime" | "manga"
 export type CollectionParams<T extends CollectionType> = {
     sorting: CollectionSorting<T>
     genre: string[] | null
+    tags: string[] | null
     status: AL_MediaStatus | null
     format: AL_MediaFormat | null
     season: AL_MediaSeason | null
@@ -122,6 +128,7 @@ export type CollectionParams<T extends CollectionType> = {
 export const DEFAULT_COLLECTION_PARAMS: CollectionParams<"anime"> = {
     sorting: "SCORE_DESC",
     genre: null,
+    tags: null,
     status: null,
     format: null,
     season: null,
@@ -133,6 +140,7 @@ export const DEFAULT_COLLECTION_PARAMS: CollectionParams<"anime"> = {
 export const DEFAULT_ANIME_COLLECTION_PARAMS: CollectionParams<"anime"> = {
     sorting: "SCORE_DESC",
     genre: null,
+    tags: null,
     status: null,
     format: null,
     season: null,
@@ -144,6 +152,7 @@ export const DEFAULT_ANIME_COLLECTION_PARAMS: CollectionParams<"anime"> = {
 export const DEFAULT_MANGA_COLLECTION_PARAMS: CollectionParams<"manga"> = {
     sorting: "SCORE_DESC",
     genre: null,
+    tags: null,
     status: null,
     format: null,
     season: null,
@@ -183,6 +192,7 @@ export function filterListEntries<T extends AL_MangaCollection_MediaListCollecti
     entries: T | null | undefined,
     params: CollectionParams<V>,
     showAdultContent: boolean | undefined,
+    mediaTagMap?: Record<number, Array<string>> | null,
 ) {
     if (!entries) return []
     let arr = [...entries]
@@ -214,6 +224,15 @@ export function filterListEntries<T extends AL_MangaCollection_MediaListCollecti
         })
     }
 
+    if (!!arr && !!params.tags?.length && !!mediaTagMap) {
+        arr = arr.filter(n => {
+            const mediaId = n.media?.id
+            const tags = mediaId ? (mediaTagMap[mediaId] ?? []) : []
+
+            return params.tags?.every(tag => tags.includes(tag))
+        })
+    }
+
     // Initial sort by name
     arr = sortBy(arr, n => n?.media?.title?.userPreferred).reverse()
 
@@ -239,6 +258,11 @@ export function filterListEntries<T extends AL_MangaCollection_MediaListCollecti
         arr = sortBy(arr, n => n?.score || 999999)
     if (getParamValue(params.sorting) === "SCORE_DESC")
         arr = sortBy(arr, n => n?.score || 0).reverse()
+
+    if (getParamValue(params.sorting) === "AUDIENCE_SCORE")
+        arr = sortBy(arr, n => n?.media?.meanScore || 999999)
+    if (getParamValue(params.sorting) === "AUDIENCE_SCORE_DESC")
+        arr = sortBy(arr, n => n?.media?.meanScore || 0).reverse()
 
     // Sort by start date
     // if (getParamValue(params.sorting) === "START_DATE" || getParamValue(params.sorting) === "START_DATE_DESC") {
@@ -272,6 +296,7 @@ export function filterCollectionEntries<T extends Anime_LibraryCollectionEntry[]
     entries: T | null | undefined,
     params: CollectionParams<V>,
     showAdultContent: boolean | undefined,
+    mediaTagMap?: Record<number, Array<string>> | null,
 ) {
     if (!entries) return []
     let arr = [...entries]
@@ -298,6 +323,15 @@ export function filterCollectionEntries<T extends Anime_LibraryCollectionEntry[]
     if (!!arr && !!params.genre?.length) {
         arr = arr.filter(n => {
             return params.genre?.every(genre => n.media?.genres?.includes(genre))
+        })
+    }
+
+    if (!!arr && !!params.tags?.length && !!mediaTagMap) {
+        arr = arr.filter(n => {
+            const mediaId = n.media?.id
+            const tags = mediaId ? (mediaTagMap[mediaId] ?? []) : []
+
+            return params.tags?.every(tag => tags.includes(tag))
         })
     }
 
@@ -363,8 +397,9 @@ export function filterAnimeCollectionEntries<T extends Anime_LibraryCollectionEn
     showAdultContent: boolean | undefined,
     continueWatchingList: Anime_Episode[] | null | undefined,
     watchHistory: Continuity_WatchHistory | null | undefined,
+    mediaTagMap?: Record<number, Array<string>> | null,
 ) {
-    let arr = filterCollectionEntries("anime", entries, params, showAdultContent)
+    let arr = filterCollectionEntries("anime", entries, params, showAdultContent, mediaTagMap)
 
     if (params.continueWatchingOnly) {
         arr = arr.filter(n => continueWatchingList?.findIndex(e => e.baseAnime?.id === n.media?.id) !== -1)
@@ -425,33 +460,31 @@ export function filterMangaCollectionEntries<T extends Anime_LibraryCollectionEn
     storedProviderFilters: Record<number, MangaEntryFilters> | null | undefined,
     latestChapterNumbers: Record<number, Manga_MangaLatestChapterNumberItem[]> | null | undefined,
 ) {
-    if (!latestChapterNumbers || !storedProviders || !storedProviderFilters) return []
     let arr = filterCollectionEntries("manga", entries, params, showAdultContent)
+    if (!latestChapterNumbers || !storedProviders || !storedProviderFilters) return params.unreadOnly ? [] : arr
 
 
     if (params.unreadOnly) {
         arr = arr.filter(n => {
-            const latestChapterNumber = getMangaEntryLatestChapterNumber(n.media?.id!, latestChapterNumbers, storedProviders, storedProviderFilters)
-            const mangaChapterCount = latestChapterNumber || 999999
-            return mangaChapterCount - (n.listData?.progress || 0) > 0
+            const state = getMangaEntryUnreadState(n.media?.id!, n.listData?.progress || 0,
+                latestChapterNumbers, storedProviders, storedProviderFilters)
+            return state.known && state.unread > 0
         })
     }
 
     // Sort by unwatched chapters
     if (getParamValue(params.sorting) === "UNREAD_CHAPTERS") {
         arr = sortBy(arr, n => {
-            const latestChapterNumber = getMangaEntryLatestChapterNumber(n.media?.id!, latestChapterNumbers, storedProviders, storedProviderFilters)
-            // console.log(n.media?.id, latestChapterNumber)
-            const mangaChapterCount = latestChapterNumber || 999999
-            return mangaChapterCount - (n.listData?.progress || 0)
+            const state = getMangaEntryUnreadState(n.media?.id!, n.listData?.progress || 0,
+                latestChapterNumbers, storedProviders, storedProviderFilters)
+            return state.known ? state.unread : Number.POSITIVE_INFINITY
         })
     }
     if (getParamValue(params.sorting) === "UNREAD_CHAPTERS_DESC") {
         arr = sortBy(arr, n => {
-            const latestChapterNumber = getMangaEntryLatestChapterNumber(n.media?.id!, latestChapterNumbers, storedProviders, storedProviderFilters)
-            // console.log(n.media?.id, latestChapterNumber)
-            const mangaChapterCount = latestChapterNumber || 0
-            return mangaChapterCount - (n.listData?.progress || 0)
+            const state = getMangaEntryUnreadState(n.media?.id!, n.listData?.progress || 0,
+                latestChapterNumbers, storedProviders, storedProviderFilters)
+            return state.known ? state.unread : -1
         }).reverse()
     }
 

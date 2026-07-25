@@ -1,5 +1,7 @@
 export const enum WSEvents {
+    CLIENT_IDENTITY = "client-identity",
     ANILIST_DATA_LOADED = "server-ready",
+    ANILIST_RATE_LIMIT = "anilist-rate-limit",
     SERVER_LOGGED_OUT_ANILIST = "server-logged-out-anilist",
     SCAN_PROGRESS = "scan-progress",
     SCAN_STATUS = "scan-status",
@@ -26,11 +28,16 @@ export const enum WSEvents {
     REFRESHED_MANGA_DOWNLOAD_DATA = "refreshed-manga-download-data",
     CHAPTER_DOWNLOAD_QUEUE_UPDATED = "chapter-download-queue-updated",
     OFFLINE_SNAPSHOT_CREATED = "offline-snapshot-created",
+    MANGA_PREFERENCES_UPDATED = "manga-preferences-updated",
+    MANGA_SOURCE_REFRESH_UPDATED = "manga-source-refresh-job-updated",
     MEDIASTREAM_SHUTDOWN_STREAM = "mediastream-shutdown-stream",
     EXTENSIONS_RELOADED = "extensions-reloaded",
     EXTENSION_UPDATES_FOUND = "extension-updates-found",
     PLUGIN_UNLOADED = "plugin-unloaded",
     PLUGIN_LOADED = "plugin-loaded",
+    EXTENSION_PROMPT = "extension-prompt",
+    EXTENSION_PROMPT_SYNC = "extension-prompt-sync",
+    EXTENSION_PROMPT_RESPONSE = "extension-prompt-response",
     ACTIVE_TORRENT_COUNT_UPDATED = "active-torrent-count-updated",
     SYNC_LOCAL_QUEUE_STATE = "sync-local-queue-state",
     SYNC_LOCAL_FINISHED = "sync-local-finished",
@@ -38,6 +45,7 @@ export const enum WSEvents {
     TORRENTSTREAM_STATE = "torrentstream-state",
     DEBRID_DOWNLOAD_PROGRESS = "debrid-download-progress",
     DEBRID_STREAM_STATE = "debrid-stream-state",
+    STREAM_AUTO_SELECT_STATUS = "stream-auto-select-status",
     CHECK_FOR_UPDATES = "check-for-updates",
     CHECK_FOR_ANNOUNCEMENTS = "check-for-announcements",
     INVALIDATE_QUERIES = "invalidate-queries",
@@ -45,6 +53,7 @@ export const enum WSEvents {
     CONSOLE_WARN = "console-warn",
     NATIVE_PLAYER = "native-player",
     VIDEOCORE = "videocore",
+    MPVCORE = "mpvcore",
     NAKAMA_HOST_STARTED = "nakama-host-started",
     NAKAMA_HOST_STOPPED = "nakama-host-stopped",
     NAKAMA_PEER_CONNECTED = "nakama-peer-connected",
@@ -71,7 +80,8 @@ export const enum WSEvents {
     HIDE_INDEFINITE_LOADER = "hide-indefinite-loader",
     NAKAMA_ONLINE_STREAM_EVENT = "nakama-online-stream-event",
     NAKAMA_ONLINE_STREAM_CLIENT_EVENT = "nakama-online-stream-client-event",
-    PLAYLIST = "playlist"
+    PLAYLIST = "playlist",
+    SETTINGS_CHANGED = "settings-changed",
 }
 
 export const enum WebviewEvents {

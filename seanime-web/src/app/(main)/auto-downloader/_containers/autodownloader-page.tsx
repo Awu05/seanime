@@ -63,6 +63,8 @@ export function AutoDownloaderPage() {
     const userMedia = useAtomValue(__anilist_userAnimeMediaAtom)
     const { data: extensions, isLoading: isLoadingExtensions } = useAnimeListTorrentProviderExtensions()
 
+    const [tab, setTab] = React.useState("rules")
+
     const createRuleModal = useBoolean(false)
     const createBatchRuleModal = useBoolean(false)
 
@@ -114,11 +116,11 @@ export function AutoDownloaderPage() {
             <ConfirmationDialog {...confirmDeleteNoLongerAiring} />
 
             <Tabs
-                defaultValue="rules"
-                triggerClass={"text-base px-6 h-auto py-2 rounded-[--radius-md] w-fit md:w-full border-none data-[state=active]:bg-[--subtle] data-[state=active]:text-white dark:hover:text-white"}
-                listClass={"w-full flex flex-wrap md:flex-nowrap h-fit"}
+                variant="pill"
+                value={tab}
+                onValueChange={setTab}
             >
-                <TabsList className="flex-wrap max-w-full bg-[--paper] p-2 border rounded-xl">
+                <TabsList>
                     <TabsTrigger value="rules">Rules</TabsTrigger>
                     <TabsTrigger value="profiles">Profiles</TabsTrigger>
                     <TabsTrigger value="queue">
@@ -136,6 +138,21 @@ export function AutoDownloaderPage() {
                         {(isLoading && isLoadingExtensions) && <LoadingSpinner />}
                         {(!isLoading && !isLoadingExtensions) && (
                             <div className="space-y-4">
+
+                                {!serverStatus?.settings?.autoDownloader?.enabled && (
+                                    <Alert
+                                        intent="warning"
+                                        description={<p>
+                                            The auto downloader is currently disabled. <Button
+                                            className="py-0 h-auto"
+                                            intent="white-link"
+                                            onClick={() => setTab("settings")}
+                                        >Enable
+                                                                                                                                                      it
+                                                                                                                                                      here.</Button>
+                                        </p>}
+                                    />
+                                )}
 
                                 <Card className="p-4 space-y-4">
                                     <ul className="text-base text-[--muted]">

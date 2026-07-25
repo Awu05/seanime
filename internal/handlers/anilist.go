@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
-	"strings"
+	"seanime/internal/core"
 	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/util/result"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -62,6 +63,55 @@ func (h *Handler) HandleGetRawAnimeCollection(c echo.Context) error {
 	}
 
 	return h.RespondWithData(c, animeCollection)
+}
+
+// tagsCache is keyed by profileID ("" in single-user mode) so tags fetched
+// for one profile's AniList account are never served back to another.
+var tagsCache = result.NewMap[string, anilist.MediaTagMap]()
+
+// HandleGetRawAnimeCollectionTags
+//
+//	@summary returns the AniList tags for the user's raw anime collection.
+//	@desc This runs a dedicated AniList tags query used by the lists page filters.
+//	@returns anilist.MediaTagMap
+//	@route /api/v1/anilist/collection/raw/tags [GET]
+func (h *Handler) HandleGetRawAnimeCollectionTags(c echo.Context) error {
+	h.App.OnRefreshAnilistCollectionFuncs.Set("HandleGetRawAnimeCollectionTags", func() {
+		tagsCache.Clear()
+	})
+
+	profileID := ""
+	if h.App.MultiUserEnabled {
+		profileID = core.GetProfileIDFromContext(c)
+	}
+
+	if tags, found := tagsCache.Get(profileID); found {
+		return h.RespondWithData(c, tags)
+	}
+
+	var userName string
+	if h.App.MultiUserEnabled && profileID != "" {
+		acc, _ := h.App.Database.GetAccountByProfileID(profileID)
+		if acc == nil || acc.Token == "" || acc.Username == "" {
+			return h.RespondWithData(c, anilist.MediaTagMap{})
+		}
+		userName = acc.Username
+	} else {
+		userName = h.App.GetUsername()
+		if userName == "" || h.App.GetUser().IsSimulated {
+			return h.RespondWithData(c, anilist.MediaTagMap{})
+		}
+	}
+
+	ret, err := h.getAnilistPlatform(c).GetAnilistClient().AnimeCollectionTags(c.Request().Context(), &userName)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	tags := anilist.MediaTagMapFromAnimeCollectionTags(ret)
+	tagsCache.Set(profileID, tags)
+
+	return h.RespondWithData(c, tags)
 }
 
 // HandleEditAnilistListEntry
@@ -276,6 +326,7 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 		Sort                []*anilist.MediaSort   `json:"sort,omitempty"`
 		Status              []*anilist.MediaStatus `json:"status,omitempty"`
 		Genres              []*string              `json:"genres,omitempty"`
+		Tags                []*string              `json:"tags,omitempty"`
 		AverageScoreGreater *int                   `json:"averageScore_greater,omitempty"`
 		Season              *anilist.MediaSeason   `json:"season,omitempty"`
 		SeasonYear          *int                   `json:"seasonYear,omitempty"`
@@ -294,13 +345,14 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 		*p.PerPage = 20
 	}
 
-	isAdult := false
+	var isAdult *bool = nil
 	if p.IsAdult != nil {
 		enableAdult := false
 		if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil && currentSettings.GetAnilist() != nil {
 			enableAdult = currentSettings.GetAnilist().EnableAdultContent
 		}
-		isAdult = *p.IsAdult && enableAdult
+		val := *p.IsAdult && enableAdult
+		isAdult = &val
 	}
 
 	cacheKey := anilist.ListAnimeCacheKey(
@@ -310,11 +362,12 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 		p.Sort,
 		p.Status,
 		p.Genres,
+		p.Tags,
 		p.AverageScoreGreater,
 		p.Season,
 		p.SeasonYear,
 		p.Format,
-		&isAdult,
+		isAdult,
 		p.CountryOfOrigin,
 	)
 
@@ -324,18 +377,19 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 	}
 
 	ret, err := anilist.ListAnimeM(
-		shared_platform.NewCacheLayer(h.App.AnilistClientRef),
+		h.App.AnilistPlatformRef.Get().GetAnilistClient(),
 		p.Page,
 		p.Search,
 		p.PerPage,
 		p.Sort,
 		p.Status,
 		p.Genres,
+		p.Tags,
 		p.AverageScoreGreater,
 		p.Season,
 		p.SeasonYear,
 		p.Format,
-		&isAdult,
+		isAdult,
 		p.CountryOfOrigin,
 		h.App.Logger,
 		h.App.GetUserAnilistToken(),
@@ -412,6 +466,7 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 			p.Sort,
 			nil, // status
 			nil, // genres
+			nil, // tags
 			nil, // averageScoreGreater
 			p.Season,
 			p.SeasonYear,
@@ -487,7 +542,7 @@ func (h *Handler) HandleAnilistListRecentAiringAnime(c echo.Context) error {
 	}
 
 	ret, err := anilist.ListRecentAiringAnimeM(
-		shared_platform.NewCacheLayer(h.App.AnilistClientRef),
+		h.App.AnilistPlatformRef.Get().GetAnilistClient(),
 		p.Page,
 		p.Search,
 		p.PerPage,
@@ -531,7 +586,7 @@ func (h *Handler) HandleAnilistListMissedSequels(c echo.Context) error {
 	}
 
 	ret, err := anilist.ListMissedSequels(
-		shared_platform.NewCacheLayer(h.App.AnilistClientRef),
+		h.App.AnilistPlatformRef.Get().GetAnilistClient(),
 		animeCollection,
 		h.App.Logger,
 		h.App.GetUserAnilistToken(),
