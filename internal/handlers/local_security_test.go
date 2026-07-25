@@ -420,11 +420,13 @@ func TestIsAuthenticatedMultiUserSession(t *testing.T) {
 		assert.True(t, isAuthenticatedMultiUserSession(newApp(true), req))
 	})
 
-	t.Run("rejects an access-scoped token (profile not yet selected)", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", nil)
+	t.Run("accepts an access-scoped token (issued after login, before profile selection)", func(t *testing.T) {
+		// needed to reach /api/v1/auth/select-profile, /profiles, /create-profile after a
+		// successful admin-login/access-code exchange but before a profile is chosen.
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/select-profile", nil)
 		req.AddCookie(&http.Cookie{Name: "seanime-auth", Value: accessToken})
 
-		assert.False(t, isAuthenticatedMultiUserSession(newApp(true), req))
+		assert.True(t, isAuthenticatedMultiUserSession(newApp(true), req))
 	})
 
 	t.Run("rejects a token signed with the wrong secret", func(t *testing.T) {
@@ -452,6 +454,55 @@ func TestIsAuthenticatedMultiUserSession(t *testing.T) {
 
 		app := newApp(true)
 		assert.True(t, isRequestPermitted(req, app.Config.Server.Password, app.Config.Server.AccessAllowlist, isAuthenticatedMultiUserSession(app, req)))
+	})
+}
+
+func TestTrustedLocalRequestMiddlewareAllowsMultiUserBootstrapPaths(t *testing.T) {
+	t.Cleanup(func() {
+		security.SetSecureMode("")
+	})
+
+	e := echo.New()
+	h := &Handler{App: &core.App{Config: &core.Config{}, MultiUserEnabled: true}}
+
+	next := func(c echo.Context) error {
+		return c.NoContent(http.StatusOK)
+	}
+
+	bootstrapPaths := []string{
+		"/api/v1/status",
+		"/api/v1/auth/admin-login",
+		"/api/v1/auth/access-code",
+		"/api/v1/auth/setup",
+		"/api/v1/auth/setup-check",
+	}
+
+	for _, path := range bootstrapPaths {
+		t.Run(path, func(t *testing.T) {
+			// a fresh browser hitting a multi-user instance through a reverse proxy/custom domain
+			// has no session yet - these endpoints must stay reachable so login is even possible.
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Host = "seanime.example"
+			req.Header.Set("Origin", "https://seanime.example")
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			err := h.trustedLocalRequestMiddleware(next)(c)
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code)
+		})
+	}
+
+	t.Run("still blocks privileged paths without a session", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/settings", nil)
+		req.Host = "seanime.example"
+		req.Header.Set("Origin", "https://seanime.example")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := h.trustedLocalRequestMiddleware(next)(c)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 }
 
