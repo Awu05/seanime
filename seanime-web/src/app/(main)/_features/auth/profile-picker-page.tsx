@@ -117,22 +117,22 @@ export function ProfilePickerPage() {
             <div className="text-center">
                 <h1 className="text-2xl font-bold text-white">Who's watching?</h1>
             </div>
-            <div className="flex flex-wrap justify-center gap-4">
-                {profiles?.map((profile: any) => (
-                    <button
-                        key={profile.id}
-                        onClick={() => handleSelect(profile.id, !!profile.hasPin)}
-                        className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-700 hover:border-brand-500 transition-all"
-                    >
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white text-xl font-bold">
-                            {profile.name?.[0]?.toUpperCase()}
-                        </div>
-                        <span className="text-white font-medium">{profile.name}</span>
-                    </button>
-                ))}
+            {!showCreate && (
+                <div className="flex flex-wrap justify-center gap-4">
+                    {profiles?.map((profile: any) => (
+                        <button
+                            key={profile.id}
+                            onClick={() => handleSelect(profile.id, !!profile.hasPin)}
+                            className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-700 hover:border-brand-500 transition-all"
+                        >
+                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white text-xl font-bold">
+                                {profile.name?.[0]?.toUpperCase()}
+                            </div>
+                            <span className="text-white font-medium">{profile.name}</span>
+                        </button>
+                    ))}
 
-                {/* Add Profile button */}
-                {!showCreate && (
+                    {/* Add Profile button */}
                     <button
                         onClick={() => setShowCreate(true)}
                         className="flex flex-col items-center gap-2 p-4 rounded-lg border border-dashed border-gray-700 hover:border-gray-500 transition-all"
@@ -142,8 +142,8 @@ export function ProfilePickerPage() {
                         </div>
                         <span className="text-gray-400 font-medium">Add Profile</span>
                     </button>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Inline profile creation form */}
             {showCreate && (
