@@ -40,7 +40,7 @@ type ScanFilePathsRetrievedEvent struct {
 // The event does not include local files that are skipped.
 type ScanLocalFilesParsedEvent struct {
 	hook_resolver.Event
-	ProfileID  string              `json:"profileId"`
+	ProfileID  string             `json:"profileId"`
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 }
 
@@ -49,7 +49,7 @@ type ScanLocalFilesParsedEvent struct {
 // Right after this event, the local files will be inserted as a new entry.
 type ScanCompletedEvent struct {
 	hook_resolver.Event
-	ProfileID  string              `json:"profileId"`
+	ProfileID  string             `json:"profileId"`
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 	Duration   int                `json:"duration"` // in milliseconds
 }
@@ -114,7 +114,7 @@ type ScanLocalFileMatchedEvent struct {
 // ScanMatchingCompletedEvent is triggered when the matching process completes.
 type ScanMatchingCompletedEvent struct {
 	hook_resolver.Event
-	ProfileID  string              `json:"profileId"`
+	ProfileID  string             `json:"profileId"`
 	LocalFiles []*anime.LocalFile `json:"localFiles"`
 }
 
@@ -133,7 +133,7 @@ type ScanHydrationStartedEvent struct {
 // Prevent default to skip the default hydration and override the hydration.
 type ScanLocalFileHydrationStartedEvent struct {
 	hook_resolver.Event
-	ProfileID string                  `json:"profileId"`
+	ProfileID string                 `json:"profileId"`
 	LocalFile *anime.LocalFile       `json:"localFile"`
 	Media     *anime.NormalizedMedia `json:"media"`
 }
@@ -146,3 +146,19 @@ type ScanLocalFileHydratedEvent struct {
 	MediaId   int              `json:"mediaId"`
 	Episode   int              `json:"episode"`
 }
+
+// GetProfileID overrides hook_resolver.Event's promoted method — each event above
+// redeclares its own ProfileID field (rather than using the embedded one), so the
+// embedded method would otherwise always read back an empty string.
+func (e *ScanStartedEvent) GetProfileID() string                   { return e.ProfileID }
+func (e *ScanFilePathsRetrievedEvent) GetProfileID() string        { return e.ProfileID }
+func (e *ScanLocalFilesParsedEvent) GetProfileID() string          { return e.ProfileID }
+func (e *ScanCompletedEvent) GetProfileID() string                 { return e.ProfileID }
+func (e *ScanMediaFetcherStartedEvent) GetProfileID() string       { return e.ProfileID }
+func (e *ScanMediaFetcherCompletedEvent) GetProfileID() string     { return e.ProfileID }
+func (e *ScanMatchingStartedEvent) GetProfileID() string           { return e.ProfileID }
+func (e *ScanLocalFileMatchedEvent) GetProfileID() string          { return e.ProfileID }
+func (e *ScanMatchingCompletedEvent) GetProfileID() string         { return e.ProfileID }
+func (e *ScanHydrationStartedEvent) GetProfileID() string          { return e.ProfileID }
+func (e *ScanLocalFileHydrationStartedEvent) GetProfileID() string { return e.ProfileID }
+func (e *ScanLocalFileHydratedEvent) GetProfileID() string         { return e.ProfileID }

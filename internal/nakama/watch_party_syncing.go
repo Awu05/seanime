@@ -149,40 +149,11 @@ func (wpm *WatchPartyManager) handleWatchPartyPlaybackStatusEvent(payload *Watch
 			wpm.logger.Debug().Msg("nakama: Host paused, handling peer pause")
 			wpm.handleHostPause(payloadStatus, playbackStatus, timeSinceMessage)
 		}
+		return
 	}
 
-	// Handle position sync for different state combinations
-	if payloadStatus.Paused == playbackStatus.Paused {
-		// Both in same state, use normal sync
-		wpm.syncPlaybackPosition(payloadStatus, playbackStatus, timeSinceMessage, session)
-	} else if !payloadStatus.Paused && playbackStatus.Paused {
-		// Host playing, peer paused, sync position and resume
-		hostExpectedPosition := payloadStatus.CurrentTime + timeSinceMessage
-
-		wpm.logger.Debug().
-			Float64("hostPosition", hostExpectedPosition).
-			Float64("peerPosition", playbackStatus.CurrentTime).
-			Msg("nakama: Host is playing but peer is paused, syncing and resuming")
-
-		// Resume and sync to host position
-		wpm.manager.genericPlayer.Resume()
-
-		// Track pending seek
-		now := time.Now()
-		wpm.seekMu.Lock()
-		wpm.pendingSeekTime = now
-		wpm.pendingSeekPosition = hostExpectedPosition
-		wpm.seekMu.Unlock()
-
-		wpm.manager.genericPlayer.SeekTo(hostExpectedPosition)
-	} else if payloadStatus.Paused && !playbackStatus.Paused {
-		// Host paused, peer playing, pause immediately
-		wpm.logger.Debug().Msg("nakama: Host is paused but peer is playing, pausing immediately")
-
-		// Cancel catch-up and pause
-		wpm.cancelCatchUp()
-		wpm.handleHostPause(payloadStatus, playbackStatus, timeSinceMessage)
-	}
+	// Both in the same state, use normal sync.
+	wpm.syncPlaybackPosition(payloadStatus, playbackStatus, timeSinceMessage, session)
 }
 
 // handleHostPause handles when the host pauses playback

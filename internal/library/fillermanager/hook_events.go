@@ -32,3 +32,10 @@ type HydrateEpisodeFillerDataRequestedEvent struct {
 	ProfileID string           `json:"profileId"`
 	Episodes  []*anime.Episode `json:"episodes"`
 }
+
+// GetProfileID overrides hook_resolver.Event's promoted method — each event above
+// redeclares its own ProfileID field (rather than using the embedded one), so the
+// embedded method would otherwise always read back an empty string.
+func (e *HydrateFillerDataRequestedEvent) GetProfileID() string             { return e.ProfileID }
+func (e *HydrateOnlinestreamFillerDataRequestedEvent) GetProfileID() string { return e.ProfileID }
+func (e *HydrateEpisodeFillerDataRequestedEvent) GetProfileID() string      { return e.ProfileID }

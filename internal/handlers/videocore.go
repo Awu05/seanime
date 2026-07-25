@@ -53,7 +53,7 @@ func (h *Handler) HandleVideoCoreSaveScreenshot(c echo.Context) error {
 		return h.RespondWithError(c, fmt.Errorf("missing required fields"))
 	}
 
-	settings, err := h.App.Database.GetSettings()
+	settings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

@@ -58,6 +58,7 @@ func (h *Handler) newRestrictedStatus() *Status {
 		User:              user.NewSimulatedUser(),
 		ServerReady:       h.App.ServerReady,
 		ServerHasPassword: h.App.Config.Server.Password != "",
+		MultiUserEnabled:  h.App.MultiUserEnabled,
 	}
 }
 
@@ -151,17 +152,6 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		MultiUserEnabled:      h.App.MultiUserEnabled,
 		DisabledFeatures:      h.App.FeatureManager.DisabledFeatures,
 		ShowChangelogTour:     h.App.ShowTour,
-	}
-
-	if c.Get("unauthenticated") != nil && c.Get("unauthenticated").(bool) {
-		// unauthenticated -> return bare minimum
-		status = &Status{
-			User:              user.NewSimulatedUser(),
-			ServerReady:       h.App.ServerReady,
-			ServerHasPassword: h.App.Config.Server.Password != "",
-			MultiUserEnabled:  h.App.MultiUserEnabled,
-			Settings:          &models.Settings{},
-		}
 	}
 
 	return status

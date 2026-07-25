@@ -366,7 +366,7 @@ func (h *Handler) HandlePatchSetting(c echo.Context) error {
 		return h.RespondWithError(c, errors.New("settings path is empty"))
 	}
 
-	prevSettings, err := h.App.Database.GetSettings()
+	prevSettings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -383,21 +383,27 @@ func (h *Handler) HandlePatchSetting(c echo.Context) error {
 		return err
 	}
 
-	nextSettings.BaseModel = models.BaseModel{
-		ID:        1,
-		UpdatedAt: time.Now(),
-	}
+	profileID := core.GetProfileIDFromContext(c)
 
-	settings, err := h.App.Database.UpsertSettings(nextSettings)
+	var settings *models.Settings
+	if h.App.MultiUserEnabled && profileID != "" {
+		settings, err = h.App.Database.UpsertSettingsForProfile(profileID, nextSettings)
+	} else {
+		nextSettings.BaseModel = models.BaseModel{
+			ID:        1,
+			UpdatedAt: time.Now(),
+		}
+		settings, err = h.App.Database.UpsertSettings(nextSettings)
+	}
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
-	h.App.WSEventManager.SendEvent("settings", settings)
+	h.App.WSEventManager.SendToProfile(profileID, "settings", settings)
 
 	status := h.NewStatus(c)
 
-	h.App.InitOrRefreshModules("")
+	h.App.InitOrRefreshModules(profileID)
 
 	return h.RespondWithData(c, status)
 }

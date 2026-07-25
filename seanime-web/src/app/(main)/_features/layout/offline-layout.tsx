@@ -64,12 +64,13 @@ export function OfflineLayout(props: OfflineLayoutProps) {
             <ErrorExplainer />
             <SeaCommand />
             <PluginManager />
-            <React.Suspense fallback={null}>
-                <NativePlayerLazyWrapper />
-            </React.Suspense>
-            {(__isElectronDesktop__ && serverStatus?.settings?.mediaPlayer?.mpvPrismEnabled) && (
+            {(__isElectronDesktop__ && serverStatus?.settings?.mediaPlayer?.mpvPrismEnabled) ? (
                 <React.Suspense fallback={null}>
                     <MpvCoreLazyWrapper />
+                </React.Suspense>
+            ) : (
+                <React.Suspense fallback={null}>
+                    <NativePlayerLazyWrapper />
                 </React.Suspense>
             )}
             <TopIndefiniteLoader />

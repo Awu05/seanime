@@ -175,10 +175,12 @@ func (p *VideoCore) playLocalFile(path string) goja.Value {
 		return p.vm.ToValue(promise)
 	}
 
+	profileID := getProfileIDFromVM(p.vm)
+
 	go func() {
 		clientId := p.getDenshiClientId()
 
-		lfs, _, err := db_bridge.GetLocalFiles(db, "")
+		lfs, _, err := db_bridge.GetLocalFiles(db, profileID)
 		if err != nil {
 			p.scheduler.ScheduleAsync(func() error {
 				reject(p.vm.NewGoError(err))

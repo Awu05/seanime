@@ -218,8 +218,10 @@ func (m *Anime) getEntryDownloadInfo(call goja.FunctionCall) goja.Value {
 		return m.vm.ToValue(promise)
 	}
 
+	profileID := m.getProfileID()
+
 	go func() {
-		lfs, _, err := db_bridge.GetLocalFiles(database, "")
+		lfs, _, err := db_bridge.GetLocalFiles(database, profileID)
 		if err != nil {
 			_ = reject(m.vm.ToValue(err.Error()))
 			return

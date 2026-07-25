@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
-	"strings"
+	"seanime/internal/core"
 	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/util/result"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -64,7 +65,9 @@ func (h *Handler) HandleGetRawAnimeCollection(c echo.Context) error {
 	return h.RespondWithData(c, animeCollection)
 }
 
-var tagsCache *anilist.MediaTagMap
+// tagsCache is keyed by profileID ("" in single-user mode) so tags fetched
+// for one profile's AniList account are never served back to another.
+var tagsCache = result.NewMap[string, anilist.MediaTagMap]()
 
 // HandleGetRawAnimeCollectionTags
 //
@@ -74,25 +77,39 @@ var tagsCache *anilist.MediaTagMap
 //	@route /api/v1/anilist/collection/raw/tags [GET]
 func (h *Handler) HandleGetRawAnimeCollectionTags(c echo.Context) error {
 	h.App.OnRefreshAnilistCollectionFuncs.Set("HandleGetRawAnimeCollectionTags", func() {
-		tagsCache = nil
+		tagsCache.Clear()
 	})
 
-	if tagsCache != nil {
-		return h.RespondWithData(c, *tagsCache)
+	profileID := ""
+	if h.App.MultiUserEnabled {
+		profileID = core.GetProfileIDFromContext(c)
 	}
 
-	userName := h.App.GetUsername()
-	if userName == "" || h.App.GetUser().IsSimulated {
-		return h.RespondWithData(c, anilist.MediaTagMap{})
+	if tags, found := tagsCache.Get(profileID); found {
+		return h.RespondWithData(c, tags)
 	}
 
-	ret, err := h.App.AnilistPlatformRef.Get().GetAnilistClient().AnimeCollectionTags(c.Request().Context(), &userName)
+	var userName string
+	if h.App.MultiUserEnabled && profileID != "" {
+		acc, _ := h.App.Database.GetAccountByProfileID(profileID)
+		if acc == nil || acc.Token == "" || acc.Username == "" {
+			return h.RespondWithData(c, anilist.MediaTagMap{})
+		}
+		userName = acc.Username
+	} else {
+		userName = h.App.GetUsername()
+		if userName == "" || h.App.GetUser().IsSimulated {
+			return h.RespondWithData(c, anilist.MediaTagMap{})
+		}
+	}
+
+	ret, err := h.getAnilistPlatform(c).GetAnilistClient().AnimeCollectionTags(c.Request().Context(), &userName)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
 
 	tags := anilist.MediaTagMapFromAnimeCollectionTags(ret)
-	tagsCache = &tags
+	tagsCache.Set(profileID, tags)
 
 	return h.RespondWithData(c, tags)
 }

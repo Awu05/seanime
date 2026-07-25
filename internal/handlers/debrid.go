@@ -219,10 +219,6 @@ func (h *Handler) HandleDebridDownloadTorrent(c echo.Context) error {
 		return err
 	}
 
-	if err := h.guardStrictFilesystemPath(c, b.Destination); err != nil {
-		return err
-	}
-
 	if !filepath.IsAbs(b.Destination) {
 		return h.RespondWithError(c, errors.New("destination must be an absolute path"))
 	}

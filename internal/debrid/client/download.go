@@ -239,7 +239,7 @@ func (r *Repository) downloadTorrentItemThen(tId string, torrentName string, tor
 		// The UI uses this to show a "downloaded" indicator and offer "play locally".
 		// LocalPath records the actual created path — never the raw destination,
 		// which may be the library root (deleting it would delete the library).
-		if successCount.Load() > 0 {
+		if successCount.Load() > 0 && r.db != nil {
 			localPath := destination
 			if len(createdPaths) == 1 {
 				localPath = createdPaths[0]

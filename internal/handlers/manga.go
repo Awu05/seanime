@@ -106,7 +106,7 @@ func (h *Handler) HandleStartMangaSourceRefresh(c echo.Context) error {
 	if job != nil {
 		return h.RespondWithData(c, job)
 	}
-	collection, err := h.App.GetMangaCollection(false)
+	collection, err := h.getAnilistPlatform(c).GetMangaCollection(c.Request().Context(), false)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

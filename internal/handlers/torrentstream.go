@@ -50,7 +50,7 @@ func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	prevSettings, _ := h.App.Database.GetTorrentstreamSettings()
+	prevSettings := h.getTorrentstreamSettings(c)
 	if err := h.guardStrictTorrentstreamRootMutation(c, prevSettings, &b.Settings); err != nil {
 		return err
 	}

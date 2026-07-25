@@ -47,9 +47,10 @@ func (a *AppContextImpl) BindScannerToContextObj(vm *goja.Runtime, obj *goja.Obj
 
 		autoDownloader, _ := a.autoDownloader.Get()
 		refreshAnimeCollection, _ := a.onRefreshAnilistAnimeCollection.Get()
+		profileID := getProfileIDFromVM(vm)
 
 		go func() {
-			settings, err := database.GetSettings()
+			settings, err := database.GetSettingsForProfile(profileID)
 			if err != nil || settings == nil || settings.Library == nil {
 				scheduler.ScheduleAsync(func() error {
 					reject(vm.NewGoError(errors.New("library settings not found")))
@@ -74,8 +75,17 @@ func (a *AppContextImpl) BindScannerToContextObj(vm *goja.Runtime, obj *goja.Obj
 				})
 				return
 			}
+			if profileID != "" {
+				if dbPaths, pathErr := database.GetLibraryPathStringsForProfile(profileID); pathErr == nil {
+					for _, p := range dbPaths {
+						if p != libraryPath {
+							additionalLibraryPaths = append(additionalLibraryPaths, p)
+						}
+					}
+				}
+			}
 
-			existingLfs, _, err := db_bridge.GetLocalFiles(database, "")
+			existingLfs, _, err := db_bridge.GetLocalFiles(database, profileID)
 			if err != nil {
 				scheduler.ScheduleAsync(func() error {
 					reject(vm.NewGoError(err))
@@ -84,7 +94,7 @@ func (a *AppContextImpl) BindScannerToContextObj(vm *goja.Runtime, obj *goja.Obj
 				return
 			}
 
-			existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(database, "")
+			existingShelvedLfs, err := db_bridge.GetShelvedLocalFiles(database, profileID)
 			if err != nil {
 				scheduler.ScheduleAsync(func() error {
 					reject(vm.NewGoError(err))
@@ -101,6 +111,7 @@ func (a *AppContextImpl) BindScannerToContextObj(vm *goja.Runtime, obj *goja.Obj
 			}
 
 			scn := scanner.Scanner{
+				ProfileID:                  profileID,
 				DirPath:                    libraryPath,
 				OtherDirPaths:              additionalLibraryPaths,
 				Enhanced:                   opts.Enhanced,
@@ -139,7 +150,7 @@ func (a *AppContextImpl) BindScannerToContextObj(vm *goja.Runtime, obj *goja.Obj
 				return
 			}
 
-			lfs, err := db_bridge.InsertLocalFiles(database, "", allLfs)
+			lfs, err := db_bridge.InsertLocalFiles(database, profileID, allLfs)
 			if err != nil {
 				scheduler.ScheduleAsync(func() error {
 					reject(vm.NewGoError(err))
@@ -148,7 +159,7 @@ func (a *AppContextImpl) BindScannerToContextObj(vm *goja.Runtime, obj *goja.Obj
 				return
 			}
 
-			if err := db_bridge.SaveShelvedLocalFiles(database, "", scn.GetShelvedLocalFiles()); err != nil {
+			if err := db_bridge.SaveShelvedLocalFiles(database, profileID, scn.GetShelvedLocalFiles()); err != nil {
 				scheduler.ScheduleAsync(func() error {
 					reject(vm.NewGoError(err))
 					return nil

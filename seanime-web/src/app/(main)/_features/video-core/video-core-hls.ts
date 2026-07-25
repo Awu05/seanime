@@ -68,7 +68,6 @@ export function useVideoCoreHls({
     const hlsRef = useRef<Hls | null>(null)
     const hlsAutoPlayTriggered = useRef(false)
     const networkRecoveryAttempts = useRef(0)
-    const mediaRecoveryAttempts = useRef(0)
     const preferredQualityRef = useRef(preferredQuality)
 
     useEffect(() => {
@@ -115,14 +114,19 @@ export function useVideoCoreHls({
             }
             hlsAutoPlayTriggered.current = false
             networkRecoveryAttempts.current = 0
-            mediaRecoveryAttempts.current = 0
 
-            // Extract clientId from the stream URL to propagate to all HLS sub-requests
+            // Extract clientId and the HMAC auth token from the stream URL to propagate to all
+            // HLS sub-requests — HLS.js resolves segment/key URIs relative to the master playlist
+            // URL, which drops the query string, so without this every segment request 401s when
+            // a server password is set.
             let clientIdParam = ""
+            let tokenParam = ""
             try {
                 const urlObj = new URL(streamUrl, window.location.origin)
                 const cid = urlObj.searchParams.get("clientId")
                 if (cid) clientIdParam = cid
+                const tok = urlObj.searchParams.get("token")
+                if (tok) tokenParam = tok
             } catch {}
 
             // Create new HLS instance
@@ -163,11 +167,19 @@ export function useVideoCoreHls({
                         errorRetry: { maxNumRetry: 5, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
                     },
                 },
-                // Propagate clientId to all HLS sub-requests (index.m3u8, segments.ts)
-                xhrSetup: clientIdParam ? (xhr, url) => {
-                    if (!url.includes("clientId=")) {
-                        const sep = url.includes("?") ? "&" : "?"
-                        xhr.open("GET", `${url}${sep}clientId=${clientIdParam}`, true)
+                // Propagate clientId and the auth token to all HLS sub-requests (index.m3u8, segments.ts)
+                xhrSetup: (clientIdParam || tokenParam) ? (xhr, url) => {
+                    let nextUrl = url
+                    if (clientIdParam && !nextUrl.includes("clientId=")) {
+                        const sep = nextUrl.includes("?") ? "&" : "?"
+                        nextUrl = `${nextUrl}${sep}clientId=${clientIdParam}`
+                    }
+                    if (tokenParam && !nextUrl.includes("token=")) {
+                        const sep = nextUrl.includes("?") ? "&" : "?"
+                        nextUrl = `${nextUrl}${sep}token=${tokenParam}`
+                    }
+                    if (nextUrl !== url) {
+                        xhr.open("GET", nextUrl, true)
                     }
                 } : undefined,
             })
@@ -320,9 +332,8 @@ export function useVideoCoreHls({
             // Reset recovery counters on each successful fragment load
             // so that transient network issues don't accumulate over a long session
             hls.on(Events.FRAG_LOADED, () => {
-                if (networkRecoveryAttempts.current > 0 || mediaRecoveryAttempts.current > 0) {
+                if (networkRecoveryAttempts.current > 0) {
                     networkRecoveryAttempts.current = 0
-                    mediaRecoveryAttempts.current = 0
                 }
             })
 
