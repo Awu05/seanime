@@ -131,7 +131,7 @@ func (h *Handler) directStreamManagerFor(c echo.Context) *directstream.Manager {
 }
 
 func (h *Handler) HandleDirectstreamGetStream(c echo.Context) error {
-	if !canConsumeMedia(c.Request(), h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist) {
+	if !canConsumeMedia(c.Request(), h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist, isAuthenticatedMultiUserSession(h.App, c.Request())) {
 		return h.RespondWithStatusError(c, http.StatusForbidden, errPrivilegedExecutionDenied)
 	}
 

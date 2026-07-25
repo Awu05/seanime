@@ -8,6 +8,7 @@ import (
 	"seanime/internal/security"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -377,9 +378,81 @@ func TestCanAccessLocalServer(t *testing.T) {
 				req.Header.Set("Sec-Fetch-Site", "cross-site")
 			}
 
-			assert.Equal(t, tt.want, isRequestPermitted(req, tt.serverPassword, tt.accessAllowlist))
+			assert.Equal(t, tt.want, isRequestPermitted(req, tt.serverPassword, tt.accessAllowlist, false))
 		})
 	}
+}
+
+func TestIsAuthenticatedMultiUserSession(t *testing.T) {
+	const secret = "test-jwt-secret"
+
+	newApp := func(multiUserEnabled bool) *core.App {
+		return &core.App{Config: &core.Config{}, MultiUserEnabled: multiUserEnabled, JWTSecret: secret}
+	}
+
+	profileToken, err := core.GenerateToken(secret, "profile-1", false, "profile", time.Hour)
+	assert.NoError(t, err)
+	adminToken, err := core.GenerateToken(secret, "", true, "admin", time.Hour)
+	assert.NoError(t, err)
+	accessToken, err := core.GenerateToken(secret, "", false, "access", time.Hour)
+	assert.NoError(t, err)
+	wrongSecretToken, err := core.GenerateToken("other-secret", "profile-1", false, "profile", time.Hour)
+	assert.NoError(t, err)
+
+	t.Run("rejects when multi-user is disabled even with a valid token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", nil)
+		req.AddCookie(&http.Cookie{Name: "seanime-auth", Value: profileToken})
+
+		assert.False(t, isAuthenticatedMultiUserSession(newApp(false), req))
+	})
+
+	t.Run("accepts a valid profile-scoped session cookie", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", nil)
+		req.AddCookie(&http.Cookie{Name: "seanime-auth", Value: profileToken})
+
+		assert.True(t, isAuthenticatedMultiUserSession(newApp(true), req))
+	})
+
+	t.Run("accepts a valid admin-scoped bearer token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", nil)
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+
+		assert.True(t, isAuthenticatedMultiUserSession(newApp(true), req))
+	})
+
+	t.Run("rejects an access-scoped token (profile not yet selected)", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", nil)
+		req.AddCookie(&http.Cookie{Name: "seanime-auth", Value: accessToken})
+
+		assert.False(t, isAuthenticatedMultiUserSession(newApp(true), req))
+	})
+
+	t.Run("rejects a token signed with the wrong secret", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", nil)
+		req.AddCookie(&http.Cookie{Name: "seanime-auth", Value: wrongSecretToken})
+
+		assert.False(t, isAuthenticatedMultiUserSession(newApp(true), req))
+	})
+
+	t.Run("rejects requests without a token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", nil)
+
+		assert.False(t, isAuthenticatedMultiUserSession(newApp(true), req))
+	})
+
+	t.Run("an authenticated session unblocks a request from a reverse-proxied domain", func(t *testing.T) {
+		// This is the reported bug: a household multi-user instance behind a reverse proxy/custom
+		// domain has no Server.Password set, so trustedLocalRequestMiddleware used to deny every
+		// privileged action even for logged-in profiles, since the request host isn't
+		// local/private/tailscale. A valid session should carry the same trust as a server password.
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/settings", nil)
+		req.Host = "seanime.example"
+		req.Header.Set("Origin", "https://seanime.example")
+		req.AddCookie(&http.Cookie{Name: "seanime-auth", Value: profileToken})
+
+		app := newApp(true)
+		assert.True(t, isRequestPermitted(req, app.Config.Server.Password, app.Config.Server.AccessAllowlist, isAuthenticatedMultiUserSession(app, req)))
+	})
 }
 
 func TestTrustedCORSOrigin(t *testing.T) {
@@ -638,7 +711,7 @@ func TestCanMutatePrivilegedSettings(t *testing.T) {
 				req.Header.Set("Origin", tt.origin)
 			}
 
-			assert.Equal(t, tt.want, canMutatePrivilegedSettings(req, tt.serverPassword, prev, tt.nextMedia, tt.nextTorrent))
+			assert.Equal(t, tt.want, canMutatePrivilegedSettings(req, tt.serverPassword, prev, tt.nextMedia, tt.nextTorrent, false))
 		})
 	}
 
@@ -659,7 +732,7 @@ func TestCanMutatePrivilegedSettings(t *testing.T) {
 			MpvArgs: "--no-config",
 		}
 
-		assert.False(t, canMutatePrivilegedSettings(req, "configured", prev, nextMedia, nil))
+		assert.False(t, canMutatePrivilegedSettings(req, "configured", prev, nextMedia, nil, false))
 	})
 }
 
@@ -764,7 +837,7 @@ func TestCanMutatePrivilegedMediastreamSettings(t *testing.T) {
 				req.Header.Set("Origin", tt.origin)
 			}
 
-			assert.Equal(t, tt.want, canMutatePrivilegedMediastreamSettings(req, tt.serverPassword, prev, tt.next))
+			assert.Equal(t, tt.want, canMutatePrivilegedMediastreamSettings(req, tt.serverPassword, prev, tt.next, false))
 		})
 	}
 
@@ -784,7 +857,7 @@ func TestCanMutatePrivilegedMediastreamSettings(t *testing.T) {
 			FfprobePath: "ffprobe",
 		}
 
-		assert.False(t, canMutatePrivilegedMediastreamSettings(req, "configured", prev, next))
+		assert.False(t, canMutatePrivilegedMediastreamSettings(req, "configured", prev, next, false))
 	})
 }
 
@@ -872,7 +945,7 @@ func TestCanUsePrivilegedExtensionManagement(t *testing.T) {
 				req.Header.Set("Origin", tt.origin)
 			}
 
-			assert.Equal(t, tt.want, canUsePrivilegedExtensionManagement(req, tt.serverPassword))
+			assert.Equal(t, tt.want, canUsePrivilegedExtensionManagement(req, tt.serverPassword, false))
 		})
 	}
 
@@ -887,7 +960,7 @@ func TestCanUsePrivilegedExtensionManagement(t *testing.T) {
 		req.RemoteAddr = "203.0.113.10:51111"
 		req.Header.Set("Origin", "http://127.0.0.1:43211")
 
-		assert.False(t, canUsePrivilegedExtensionManagement(req, "configured"))
+		assert.False(t, canUsePrivilegedExtensionManagement(req, "configured", false))
 	})
 }
 
@@ -946,7 +1019,7 @@ func TestCanConsumeMedia(t *testing.T) {
 				req.Header.Set("Origin", tt.origin)
 			}
 
-			assert.Equal(t, tt.want, canConsumeMedia(req, tt.serverPassword, tt.accessAllowlist))
+			assert.Equal(t, tt.want, canConsumeMedia(req, tt.serverPassword, tt.accessAllowlist, false))
 		})
 	}
 }

@@ -76,7 +76,7 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 
 	requestUpgrader := upgrader
 	requestUpgrader.CheckOrigin = func(r *http.Request) bool {
-		return isRequestPermitted(r, h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist)
+		return isRequestPermitted(r, h.App.Config.Server.Password, h.App.Config.Server.AccessAllowlist, isAuthenticatedMultiUserSession(h.App, r))
 	}
 
 	ws, err := requestUpgrader.Upgrade(c.Response(), c.Request(), nil)
