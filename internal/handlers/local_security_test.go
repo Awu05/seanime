@@ -506,6 +506,166 @@ func TestTrustedLocalRequestMiddlewareAllowsMultiUserBootstrapPaths(t *testing.T
 	})
 }
 
+func TestIsAuthenticatedNakamaPeer(t *testing.T) {
+	newApp := func(enabled, isHost bool, hostPassword string) *core.App {
+		return &core.App{
+			Config: &core.Config{},
+			Settings: &models.Settings{
+				Nakama: &models.NakamaSettings{
+					Enabled:      enabled,
+					IsHost:       isHost,
+					HostPassword: hostPassword,
+				},
+			},
+		}
+	}
+
+	t.Run("accepts a matching host-password token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		req.Header.Set("X-Seanime-Nakama-Token", "correct-password")
+
+		assert.True(t, isAuthenticatedNakamaPeer(newApp(true, true, "correct-password"), req))
+	})
+
+	t.Run("rejects a wrong token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		req.Header.Set("X-Seanime-Nakama-Token", "wrong-password")
+
+		assert.False(t, isAuthenticatedNakamaPeer(newApp(true, true, "correct-password"), req))
+	})
+
+	t.Run("rejects when nakama is disabled", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		req.Header.Set("X-Seanime-Nakama-Token", "correct-password")
+
+		assert.False(t, isAuthenticatedNakamaPeer(newApp(false, true, "correct-password"), req))
+	})
+
+	t.Run("rejects when this instance is not the host", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		req.Header.Set("X-Seanime-Nakama-Token", "correct-password")
+
+		assert.False(t, isAuthenticatedNakamaPeer(newApp(true, false, "correct-password"), req))
+	})
+
+	t.Run("rejects when no host password is configured", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		req.Header.Set("X-Seanime-Nakama-Token", "")
+
+		assert.False(t, isAuthenticatedNakamaPeer(newApp(true, true, ""), req))
+	})
+}
+
+func TestTrustedLocalRequestMiddlewareAllowsAuthenticatedNakamaPeers(t *testing.T) {
+	e := echo.New()
+	h := &Handler{
+		App: &core.App{
+			Config:           &core.Config{},
+			MultiUserEnabled: true,
+			Settings: &models.Settings{
+				Nakama: &models.NakamaSettings{
+					Enabled:      true,
+					IsHost:       true,
+					HostPassword: "correct-password",
+				},
+			},
+		},
+	}
+
+	next := func(c echo.Context) error {
+		return c.NoContent(http.StatusOK)
+	}
+
+	nakamaPaths := []string{
+		"/api/v1/nakama/ws",
+		"/api/v1/nakama/host/anime/library",
+		"/api/v1/nakama/host/torrentstream/stream",
+	}
+
+	for _, path := range nakamaPaths {
+		t.Run(path, func(t *testing.T) {
+			// a watch-party peer hosted on a reverse-proxied/custom-domain instance has no
+			// server password and no profile on this instance - only its own nakama token.
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Host = "seanime.example"
+			req.Header.Set("Origin", "https://friend.example")
+			req.Header.Set("X-Seanime-Nakama-Token", "correct-password")
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			err := h.trustedLocalRequestMiddleware(next)(c)
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code)
+		})
+	}
+
+	t.Run("still blocks nakama paths with a wrong token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		req.Host = "seanime.example"
+		req.Header.Set("Origin", "https://friend.example")
+		req.Header.Set("X-Seanime-Nakama-Token", "wrong-password")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := h.trustedLocalRequestMiddleware(next)(c)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+}
+
+func TestMultiUserAuthMiddlewareAllowsAuthenticatedNakamaPeers(t *testing.T) {
+	e := echo.New()
+	h := &Handler{
+		App: &core.App{
+			Config:           &core.Config{},
+			MultiUserEnabled: true,
+			Settings: &models.Settings{
+				Nakama: &models.NakamaSettings{
+					Enabled:      true,
+					IsHost:       true,
+					HostPassword: "correct-password",
+				},
+			},
+		},
+	}
+
+	next := func(c echo.Context) error {
+		return c.NoContent(http.StatusOK)
+	}
+
+	t.Run("a peer with a valid host-password token skips the profile JWT requirement", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		req.Header.Set("X-Seanime-Nakama-Token", "correct-password")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := h.MultiUserAuthMiddleware(next)(c)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("a peer with no token still needs a profile JWT", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nakama/host/anime/library", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := h.MultiUserAuthMiddleware(next)(c)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+
+	t.Run("unrelated paths still require a profile JWT even with a nakama token present", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/settings", nil)
+		req.Header.Set("X-Seanime-Nakama-Token", "correct-password")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := h.MultiUserAuthMiddleware(next)(c)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+}
+
 func TestTrustedCORSOrigin(t *testing.T) {
 	tests := []struct {
 		name            string
