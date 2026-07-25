@@ -19,6 +19,17 @@ var publicPaths = []string{
 
 func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		// A Nakama watch-party peer is a different person's Seanime instance, not a profile on
+		// this one - it authenticates with its own host-password token (checked further down the
+		// chain in OptionalAuthMiddleware), never a profile JWT. Exempt these paths from the JWT
+		// requirement so peer connections aren't rejected before that token is ever checked.
+		if isNakamaPeerPath(c.Request().URL.Path) && isAuthenticatedNakamaPeer(h.App, c.Request()) {
+			c.Set("profileId", "")
+			c.Set("isAdmin", false)
+			c.Set("authScope", "nakama-peer")
+			return next(c)
+		}
+
 		// In Electron sidecar mode without multi-user, still allow public paths
 		// (setup-check, setup) so first-time registration works.
 		// Only auto-grant admin for non-public paths after admin exists.

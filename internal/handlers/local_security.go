@@ -96,6 +96,38 @@ func isMultiUserBootstrapPath(path string) bool {
 	return false
 }
 
+// isNakamaPeerPath reports whether path is one a Nakama watch-party peer's own backend calls
+// directly on this host: the peer WebSocket connection and the host-served library/stream data.
+// A peer is a different person's Seanime instance entirely - it authenticates with its own
+// X-Seanime-Nakama-Token/host-password credential, never a profile JWT on this instance.
+func isNakamaPeerPath(path string) bool {
+	return path == "/api/v1/nakama/ws" || strings.HasPrefix(path, "/api/v1/nakama/host/")
+}
+
+// isAuthenticatedNakamaPeer reports whether the request carries a valid Nakama host-password
+// token. Checked independently of OptionalAuthMiddleware's existing nakama check because that
+// check only runs when Config.Server.Password is set, while MultiUserAuthMiddleware and
+// trustedLocalRequestMiddleware both run earlier in the chain and know nothing about it -
+// meaning peer connections to a multi-user instance with no server password configured (the
+// common case for this fork) were rejected before their token was ever checked.
+func isAuthenticatedNakamaPeer(app *core.App, req *http.Request) bool {
+	if app == nil || app.Settings == nil || req == nil {
+		return false
+	}
+
+	nakamaSettings := app.Settings.GetNakama()
+	if !nakamaSettings.Enabled || !nakamaSettings.IsHost {
+		return false
+	}
+
+	hostPassword := strings.TrimSpace(nakamaSettings.HostPassword)
+	if hostPassword == "" {
+		return false
+	}
+
+	return req.Header.Get("X-Seanime-Nakama-Token") == hostPassword
+}
+
 func reqHasOriginMetadata(req *http.Request) bool {
 	if req == nil {
 		return false
@@ -320,6 +352,10 @@ func (h *Handler) trustedLocalRequestMiddleware(next echo.HandlerFunc) echo.Hand
 		}
 
 		if h.App.MultiUserEnabled && isMultiUserBootstrapPath(req.URL.Path) {
+			return next(c)
+		}
+
+		if isNakamaPeerPath(req.URL.Path) && isAuthenticatedNakamaPeer(h.App, req) {
 			return next(c)
 		}
 
