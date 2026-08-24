@@ -286,6 +286,13 @@ export function useWebsocketMessageListener<TData = unknown>({ type, onMessage, 
     const status = useServerStatus()
     const password = useAtomValue(serverAuthTokenAtom)
 
+    // onMessage is frequently passed as an inline arrow that's recreated every render.
+    // Mirroring it into a ref lets the effect below re-subscribe only when the caller's own
+    // `deps` (or the socket) change, as intended, instead of tearing down and re-adding the
+    // socket listener on essentially every render of the calling component.
+    const onMessageRef = useRef(onMessage)
+    onMessageRef.current = onMessage
+
     useEffect(() => {
         if (socket) {
             const messageHandler = (event: MessageEvent) => {
@@ -296,7 +303,7 @@ export function useWebsocketMessageListener<TData = unknown>({ type, onMessage, 
                 try {
                     const parsed = JSON.parse(event.data) as SeaWebsocketEvent<TData>
                     if (!!parsed.type && parsed.type === type) {
-                        onMessage(parsed.payload)
+                        onMessageRef.current(parsed.payload)
                     }
                 }
                 catch (e) {
@@ -310,7 +317,7 @@ export function useWebsocketMessageListener<TData = unknown>({ type, onMessage, 
                 socket.removeEventListener("message", messageHandler)
             }
         }
-    }, [socket, onMessage, ...(deps ?? [])])
+    }, [socket, ...(deps ?? [])])
 
     return null
 }

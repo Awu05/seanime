@@ -282,7 +282,7 @@ export class MediaCaptionsManager extends EventTarget {
             isTranslated = true
         }
 
-        const index = this.tracks.length - 1
+        const index = this.tracks.length
         track.index = index
         this.tracks.push(track)
         this.loadedTracks.push({

@@ -93,6 +93,13 @@ export function useVideoCoreSetupEvents(id: string,
     currentSkipDataRef: React.RefObject<NormalizedSkipData | undefined>,
 ) {
     const { sendEvent } = useVideoCoreEvents()
+    // handleUpload below is a stable (empty-deps) useCallback so its drop/paste listeners don't
+    // get torn down and re-added on every render - but that means it can't close over sendEvent
+    // directly, since clientIdAtom starts null and is only populated after mount, and a plain
+    // closure would keep using whatever clientId existed when handleUpload was first created.
+    // Mirroring sendEvent into a ref every render lets handleUpload always call the latest one.
+    const sendEventRef = React.useRef(sendEvent)
+    sendEventRef.current = sendEvent
 
     const clientId = useAtomValue(clientIdAtom)
     const activePlayer = useAtomValue(vc_activePlayerId)
@@ -460,7 +467,7 @@ export function useVideoCoreSetupEvents(id: string,
             for (const f of actualFiles) {
                 if (f && isSubtitleFile(f.name)) {
                     const content = await f.text()
-                    sendEvent<ClientSubtitleFileUploadedEventPayload>("subtitle-file-uploaded", {
+                    sendEventRef.current<ClientSubtitleFileUploadedEventPayload>("subtitle-file-uploaded", {
                         filename: f.name,
                         content: content,
                     })
@@ -487,7 +494,7 @@ export function useVideoCoreSetupEvents(id: string,
                         return
                     }
                     const filename = `PLACEHOLDER.${type}`
-                    sendEvent<ClientSubtitleFileUploadedEventPayload>("subtitle-file-uploaded", {
+                    sendEventRef.current<ClientSubtitleFileUploadedEventPayload>("subtitle-file-uploaded", {
                         filename: filename,
                         content: str,
                     })

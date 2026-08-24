@@ -43,9 +43,12 @@ export function NativePlayer() {
     // AniSkip
     const { data: aniSkipData } = useSkipData(state?.playbackInfo?.media?.idMal, state?.playbackInfo?.episode?.progressNumber ?? -1)
 
+    // Scoped to the (media, episode) pair rather than the whole state object, which gets a new
+    // reference on every websocket lifecycle event (open-and-await, watch, error, stall, etc) -
+    // that was invalidating continuity watch-history far more often than actual progress changes.
     React.useEffect(() => {
         qc.invalidateQueries({ queryKey: [API_ENDPOINTS.CONTINUITY.GetContinuityWatchHistoryItem.key] })
-    }, [state])
+    }, [state?.playbackInfo?.media?.idMal, state?.playbackInfo?.episode?.progressNumber])
 
     //
     // Subtitle event buffering

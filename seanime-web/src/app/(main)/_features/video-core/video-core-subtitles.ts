@@ -129,8 +129,12 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
     // Translation is active
     private translationTargetLang: string | null = null
     private shouldTranslate: string | null = null
-    // Event translation queue. Once translated the event is removed
-    private eventTranslationQueue = new Map<string, CachedEvent>()
+    // Event translation queue, keyed by raw dialogue text. Values are arrays because multiple
+    // events can share identical text (e.g. a repeated "What?"); the server is only sent the
+    // text (not an event id), so a single translation response is fanned out to every queued
+    // event with that text instead of only the most recently queued one. Once translated, the
+    // whole entry is removed.
+    private eventTranslationQueue = new Map<string, CachedEvent[]>()
     // Remember the translated file tracks to avoid re-fetching them
     private translatedFileTracks = new Map<number, { translating: boolean }>()
     // Spaces out translation requests instead of firing one per line the instant a translated
@@ -172,8 +176,15 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
         this.sendTranslateRequest = sendTranslateRequest
         this.translateFn = function (cached: CachedEvent) {
             cached.isTranslating = true
-            // Add it to the queue
-            this.eventTranslationQueue.set(cached.event.text, cached)
+            // Add it to the queue. If another event with identical text is already queued, fan
+            // this one out alongside it instead of overwriting - only one translation request
+            // goes out per distinct text either way.
+            const alreadyQueued = this.eventTranslationQueue.get(cached.event.text)
+            if (alreadyQueued) {
+                alreadyQueued.push(cached)
+                return
+            }
+            this.eventTranslationQueue.set(cached.event.text, [cached])
             // Throttled: selecting a translated track can enqueue hundreds of dialogue lines at
             // once (see _populateEventTrack) - firing one request per line immediately would
             // compete with playback buffering right when the user starts watching.
@@ -620,17 +631,19 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
     }
 
     processEventTranslationQueue(original: string, translated: string) {
-        const cached = this.eventTranslationQueue.get(original)
-        if (!cached) return
+        const cachedEvents = this.eventTranslationQueue.get(original)
+        if (!cachedEvents) return
         this.eventTranslationQueue.delete(original)
-        cached.translatedAssEvent = {
-            ...cached.assEvent,
-            Text: translated,
-        }
-        cached.isTranslating = false
-        // If the track is still the active one, inject the new event immediately
-        if (this.currentTrackNumber === cached.event.trackNumber && this.libassRenderer) {
-            this.libassRenderer.renderer.createEvent(cached.translatedAssEvent)
+        for (const cached of cachedEvents) {
+            cached.translatedAssEvent = {
+                ...cached.assEvent,
+                Text: translated,
+            }
+            cached.isTranslating = false
+            // If the track is still the active one, inject the new event immediately
+            if (this.currentTrackNumber === cached.event.trackNumber && this.libassRenderer) {
+                this.libassRenderer.renderer.createEvent(cached.translatedAssEvent)
+            }
         }
     }
 
