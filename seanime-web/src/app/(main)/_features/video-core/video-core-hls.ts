@@ -1,5 +1,6 @@
 import { vc_audioManager } from "@/app/(main)/_features/video-core/video-core"
 import { getPreferredHlsQualityLevel } from "@/app/(main)/_features/video-core/_lib/hls-quality"
+import { attemptHlsAutoplay } from "@/app/(main)/_features/video-core/video-core-autoplay"
 import { vc_autoPlayVideoAtom } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { logger } from "@/lib/helpers/debug"
 import Hls, { ErrorData, Events, Level } from "hls.js"
@@ -246,6 +247,16 @@ export function useVideoCoreHls({
             }
             setSetAudioTrack(() => audioTrackSetter)
 
+            // Fallback autoplay trigger: HLS.js's FRAG_BUFFERED (registered below, once the
+            // manifest parses) can be significantly delayed or never fire for a torrent stream
+            // whose pieces aren't downloaded yet. `canplay` is the browser's own "enough data
+            // to start" signal and fires independently, so it races FRAG_BUFFERED and whichever
+            // comes first wins (attemptHlsAutoplay is idempotent via hlsAutoPlayTriggered).
+            const onCanPlay = () => {
+                if (autoPlay) attemptHlsAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
+            }
+            videoElement.addEventListener("canplay", onCanPlay)
+
             // Attach media element
             hls.attachMedia(videoElement)
 
@@ -316,15 +327,11 @@ export function useVideoCoreHls({
                     setCurrentAudioTrack(-1)
                 }
 
-                // Defer autoplay until first fragment is buffered
+                // Defer autoplay until first fragment is buffered (races the `canplay` fallback
+                // registered above - whichever fires first wins).
                 if (autoPlay && !hlsAutoPlayTriggered.current) {
                     hls.once(Events.FRAG_BUFFERED, () => {
-                        if (!hlsAutoPlayTriggered.current) {
-                            hlsAutoPlayTriggered.current = true
-                            videoElement.play().catch(err => {
-                                hlsLog.error("Failed to autoplay", err)
-                            })
-                        }
+                        attemptHlsAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
                     })
                 }
             })
@@ -380,6 +387,7 @@ export function useVideoCoreHls({
             })
 
             return () => {
+                videoElement.removeEventListener("canplay", onCanPlay)
                 if (hlsRef.current) {
                     hlsLog.info("Destroying HLS instance")
                     hlsRef.current.destroy()

@@ -101,6 +101,7 @@ type (
 		anilistClientRef       *util.Ref[anilist.AnilistClient]
 		fileCacher             *filecache.Cacher
 		buckets                map[string]filecache.PermanentBucket
+		bucketTTLs             map[string]time.Duration // How long a cached entry is served without hitting the network
 		logger                 *zerolog.Logger
 		collectionMediaIDs     *result.Map[int, struct{}] // Track which media IDs are in collections
 		lastCollectionUpdate   time.Time                  // When collections were last fetched
@@ -138,6 +139,15 @@ const (
 	maxNonCollectionMediaCacheEntries = 50
 	// Collection update interval (refresh collection tracking every 30 minutes)
 	collectionUpdateInterval = 30 * time.Minute
+
+	// Freshness TTLs: how long a cached entry is served without hitting the network at all.
+	// This is independent from the permanent fallback cache above (which never expires and
+	// exists to survive AniList being down) - it's what keeps repeated, identical requests
+	// from burning through AniList's rate limit during normal operation.
+	longCacheTTL       = 24 * time.Hour   // media/studio metadata - rarely changes
+	mediumCacheTTL     = 30 * time.Minute // viewer stats, airing schedule, collection tags
+	shortCacheTTL      = 10 * time.Minute // list/search results, custom queries
+	collectionCacheTTL = 5 * time.Minute  // the user's own anime/manga list
 )
 
 // addFailureRecord adds a new failure record to the tracking
@@ -233,6 +243,31 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	buckets[CustomQueryBucket] = filecache.NewPermanentBucket(CustomQueryBucket)
 	buckets[PendingMediaListUpdatesBucket] = filecache.NewPermanentBucket(PendingMediaListUpdatesBucket)
 
+	bucketTTLs := map[string]time.Duration{
+		AnimeCollectionBucket:          collectionCacheTTL,
+		AnimeCollectionTagsBucket:      mediumCacheTTL,
+		AnimeCollectionRelationsBucket: collectionCacheTTL,
+		MangaCollectionBucket:          collectionCacheTTL,
+		MangaCollectionTagsBucket:      mediumCacheTTL,
+		BaseAnimeBucket:                longCacheTTL,
+		BaseAnimeMalBucket:             longCacheTTL,
+		CompleteAnimeBucket:            longCacheTTL,
+		AnimeDetailsBucket:             longCacheTTL,
+		BaseMangaBucket:                longCacheTTL,
+		MangaDetailsBucket:             longCacheTTL,
+		ViewerBucket:                   mediumCacheTTL,
+		ViewerStatsBucket:              mediumCacheTTL,
+		StudioDetailsBucket:            longCacheTTL,
+		AnimeAiringScheduleBucket:      mediumCacheTTL,
+		AnimeAiringScheduleRawBucket:   mediumCacheTTL,
+		ListAnimeBucket:                shortCacheTTL,
+		ListRecentAnimeBucket:          shortCacheTTL,
+		SearchBaseMangaBucket:          shortCacheTTL,
+		ListMangaBucket:                shortCacheTTL,
+		SearchBaseAnimeByIdsBucket:     shortCacheTTL,
+		CustomQueryBucket:              shortCacheTTL,
+	}
+
 	logger := util.NewLogger()
 
 	var logout func()
@@ -244,6 +279,7 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 		anilistClientRef:   anilistClientRef,
 		fileCacher:         fileCacher,
 		buckets:            buckets,
+		bucketTTLs:         bucketTTLs,
 		logger:             logger,
 		collectionMediaIDs: result.NewMap[int, struct{}](),
 		logoutFunc:         logout,
@@ -269,6 +305,13 @@ func (c *CacheLayer) CustomQuery(body []byte, logger *zerolog.Logger, token ...s
 	// Use the stringified body as cache key
 	cacheKey := string(body)
 	bucket := c.buckets[CustomQueryBucket]
+
+	if ShouldCache.Load() {
+		var fresh interface{}
+		if c.freshCacheGet(CustomQueryBucket, cacheKey, &fresh) {
+			return fresh, nil
+		}
+	}
 
 	// Try network first if API is working
 	if IsWorking.Load() {
@@ -500,10 +543,27 @@ func (c *CacheLayer) updateCollectionTracking() {
 	}()
 }
 
+// freshCacheGet reports whether bucketName/cacheKey holds a cached entry younger than its
+// configured TTL, and if so decodes it into out. A fresh hit lets callers skip the network
+// entirely instead of just falling back to cache on failure.
+func (c *CacheLayer) freshCacheGet(bucketName string, cacheKey string, out interface{}) bool {
+	ttl, ok := c.bucketTTLs[bucketName]
+	if !ok || ttl <= 0 {
+		return false
+	}
+	found, age, err := c.fileCacher.GetPermWithAge(c.buckets[bucketName], cacheKey, out)
+	return err == nil && found && age < ttl
+}
+
 // networkFirstGet performs a network-first get operation with caching
 func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, networkFn func() (*T, error)) (*T, error) {
 	if !ShouldCache.Load() {
 		return networkFn()
+	}
+
+	var fresh T
+	if c.freshCacheGet(bucketName, cacheKey, &fresh) {
+		return &fresh, nil
 	}
 
 	bucket := c.buckets[bucketName]
@@ -767,6 +827,13 @@ func (c *CacheLayer) extractBaseMangaFromCollection(mediaID int) *anilist.BaseMa
 
 // networkFirstGetWithBoundedCache performs a network-first get operation with bounded caching for list/search results
 func networkFirstGetWithBoundedCache[T any](c *CacheLayer, bucketName string, cacheKey string, networkFn func() (*T, error)) (*T, error) {
+	if ShouldCache.Load() {
+		var fresh T
+		if c.freshCacheGet(bucketName, cacheKey, &fresh) {
+			return &fresh, nil
+		}
+	}
+
 	bucket := c.buckets[bucketName]
 
 	// Try network first if API is working

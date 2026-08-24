@@ -191,3 +191,54 @@ func TestCacherSetAndGet(t *testing.T) {
 	wg.Wait()
 
 }
+
+func TestGetPermWithAge(t *testing.T) {
+	cacher, err := NewCacher(filepath.Join(t.TempDir(), "cache"))
+	if err != nil {
+		t.Fatalf("Failed to create cacher: %v", err)
+	}
+
+	bucket := NewPermanentBucket("test-age")
+
+	var out string
+	found, _, err := cacher.GetPermWithAge(bucket, "missing", &out)
+	if err != nil {
+		t.Fatalf("unexpected error for missing key: %v", err)
+	}
+	if found {
+		t.Fatal("expected missing key to not be found")
+	}
+
+	if err := cacher.SetPerm(bucket, "key", "value"); err != nil {
+		t.Fatalf("Failed to set the value: %v", err)
+	}
+
+	found, age, err := cacher.GetPermWithAge(bucket, "key", &out)
+	if err != nil {
+		t.Fatalf("Failed to get the value: %v", err)
+	}
+	if !found || out != "value" {
+		t.Fatalf("Failed to get the correct value. Expected %v, got %v", "value", out)
+	}
+	if age < 0 || age > time.Second {
+		t.Fatalf("expected a freshly-set entry to have a near-zero age, got %v", age)
+	}
+
+	// Backdate the entry to simulate a stale cache without sleeping in the test.
+	store := cacher.stores[bucket.name]
+	store.mu.Lock()
+	old := time.Now().Add(-2 * time.Hour)
+	store.data["key"].UpdatedAt = &old
+	store.mu.Unlock()
+
+	found, age, err = cacher.GetPermWithAge(bucket, "key", &out)
+	if err != nil {
+		t.Fatalf("Failed to get the value: %v", err)
+	}
+	if !found {
+		t.Fatal("expected the backdated entry to still be found (permanent bucket)")
+	}
+	if age < 2*time.Hour {
+		t.Fatalf("expected the backdated entry's age to reflect the backdate, got %v", age)
+	}
+}

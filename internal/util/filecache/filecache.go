@@ -298,6 +298,34 @@ func (c *Cacher) GetPerm(bucket PermanentBucket, key string, out interface{}) (b
 	return true, json.Unmarshal(data, out)
 }
 
+// GetPermWithAge retrieves the value for the given key from the permanent bucket along with
+// how long ago it was cached. Used to serve cached data without a network round-trip while
+// it's still fresh, without evicting it once it goes stale (unlike the TTL Bucket above, a
+// permanent entry is never auto-deleted for staleness).
+func (c *Cacher) GetPermWithAge(bucket PermanentBucket, key string, out interface{}) (found bool, age time.Duration, err error) {
+	store, err := c.getStore(bucket.name)
+	if err != nil {
+		return false, 0, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	item, ok := store.data[key]
+	if !ok {
+		return false, 0, nil
+	}
+	data, err := json.Marshal(item.Value)
+	if err != nil {
+		return false, 0, err
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return false, 0, err
+	}
+	if item.UpdatedAt != nil {
+		age = time.Since(*item.UpdatedAt)
+	}
+	return true, age, nil
+}
+
 // DeletePerm deletes the value for the given key from the permanent bucket.
 func (c *Cacher) DeletePerm(bucket PermanentBucket, key string) error {
 	store, err := c.getStore(bucket.name)

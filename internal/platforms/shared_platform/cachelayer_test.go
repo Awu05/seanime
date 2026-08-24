@@ -3,10 +3,12 @@ package shared_platform
 import (
 	"context"
 	"errors"
+	"os"
 	"seanime/internal/api/anilist"
 	"seanime/internal/events"
 	"seanime/internal/util"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +23,7 @@ type cacheLayerTestClient struct {
 	mangaCollection     *anilist.MangaCollection
 	updateEntryCalls    []cacheLayerUpdateEntryCall
 	updateProgressCalls []cacheLayerUpdateProgressCall
+	baseAnimeCalls      int32
 }
 
 type cacheLayerUpdateEntryCall struct {
@@ -47,6 +50,7 @@ func (c *cacheLayerTestClient) GetCacheDir() string {
 }
 
 func (c *cacheLayerTestClient) BaseAnimeByID(_ context.Context, id *int, _ ...clientv2.RequestInterceptor) (*anilist.BaseAnimeByID, error) {
+	atomic.AddInt32(&c.baseAnimeCalls, 1)
 	mediaID := 0
 	if id != nil {
 		mediaID = *id
@@ -237,6 +241,35 @@ func TestCacheLayerLiveEntryUpdateClearsQueuedUpdate(t *testing.T) {
 	require.Len(t, client.updateEntryCalls, 1)
 	require.Equal(t, 90, *client.updateEntryCalls[0].ScoreRaw)
 	require.Equal(t, 13, *client.updateEntryCalls[0].Progress)
+}
+
+func TestCacheLayerServesFreshDataWithoutHittingNetwork(t *testing.T) {
+	// boundedCacheSet writes to the cache dir from a background goroutine after a successful
+	// BaseAnimeByID call, so t.TempDir()'s auto-cleanup can race that write on Windows
+	// ("directory is not empty"). Use a plain temp dir we don't remove instead.
+	cacheDir, err := os.MkdirTemp("", "seanime-cachelayer-freshness-test-*")
+	require.NoError(t, err)
+
+	client := &cacheLayerTestClient{cacheDir: cacheDir}
+	cacheLayer := newTestCacheLayer(t, client)
+	cacheLayer.bucketTTLs[BaseAnimeBucket] = 50 * time.Millisecond
+
+	id := 1
+
+	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, atomic.LoadInt32(&client.baseAnimeCalls), "expected 1 network call after the first fetch")
+
+	// A repeated call within the TTL window should be served from cache, not the network.
+	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, atomic.LoadInt32(&client.baseAnimeCalls), "expected the cached call to skip the network")
+
+	// Once the TTL expires, the next call should hit the network again.
+	time.Sleep(80 * time.Millisecond)
+	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, atomic.LoadInt32(&client.baseAnimeCalls), "expected the stale entry to trigger a fresh network call")
 }
 
 func newTestCacheLayer(t *testing.T, client *cacheLayerTestClient) *CacheLayer {
