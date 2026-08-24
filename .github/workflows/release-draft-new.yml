@@ -19,13 +19,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       # Web
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -39,12 +39,12 @@ jobs:
           cd ..
       # Upload the output to be used in the next job
       - name: Upload web folder
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web
           path: seanime-web/out # output dir of build
       - name: Upload web folder (Electron)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-denshi
           path: seanime-web/out-denshi # output dir of build:denshi
@@ -79,7 +79,7 @@ jobs:
             go_flags: -trimpath -ldflags="-s -w"
     steps:
       - name: Checkout code ⬇️
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Fetch all history
           fetch-tags: true # Fetch all tags
@@ -90,7 +90,7 @@ jobs:
 
       # Go
       - name: Set up Go ⬇️
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.2'
 
@@ -108,7 +108,7 @@ jobs:
       # Download the web folders
       # TODO Uncomment if building web
       - name: Download web folder artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: web
           path: web
@@ -197,7 +197,7 @@ jobs:
 
       # Upload the binaries to be used in the next job
       - name: Upload binary folder (UNIX) 📤
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest'
         with:
           # go-seanime-server-linux
@@ -207,7 +207,7 @@ jobs:
           path: binaries-${{ matrix.id }}.tar
 
       - name: Upload binary folder (Windows) 📤
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: matrix.os == 'windows-latest'
         with:
           # go-seanime-server-windows
@@ -228,7 +228,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Determine version and registry owner 🔎
         run: |
@@ -243,17 +243,17 @@ jobs:
           echo "REPO_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry 🔑
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image (default) 🐳
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -264,7 +264,7 @@ jobs:
             ghcr.io/${{ env.REPO_OWNER }}/seanime:${{ env.VERSION }}
 
       - name: Build and push Docker image (rootless) 🐳
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -275,7 +275,7 @@ jobs:
             ghcr.io/${{ env.REPO_OWNER }}/seanime:${{ env.VERSION }}-rootless
 
       - name: Build and push Docker image (hwaccel) 🐳
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -286,7 +286,7 @@ jobs:
             ghcr.io/${{ env.REPO_OWNER }}/seanime:${{ env.VERSION }}-hwaccel
 
       - name: Build and push Docker image (CUDA) 🐳
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.cuda
@@ -301,12 +301,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download electron artifacts 📥
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: electron-*
           path: ./artifacts
@@ -331,7 +331,7 @@ jobs:
         run: echo "Version is ${{ env.VERSION }}"
 
       - name: Download server binaries 📥
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: go-*
           path: ./artifacts
@@ -445,7 +445,7 @@ jobs:
 
       # Go
       - name: Set up Go ⬇️
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.2'
 
@@ -475,7 +475,7 @@ jobs:
 
       - name: Create release draft 🚀🚀🚀
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           fail_on_unmatched_files: false
           files: |

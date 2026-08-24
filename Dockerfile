@@ -22,7 +22,7 @@ COPY seanime-web ./
 RUN npm run build
 
 # Stage 2: Go Builder
-FROM --platform=$BUILDPLATFORM golang:latest AS go-builder
+FROM --platform=$BUILDPLATFORM golang:1.26.2 AS go-builder
 
 ARG TARGETOS
 ARG TARGETARCH
