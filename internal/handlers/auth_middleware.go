@@ -5,6 +5,7 @@ import (
 	"seanime/internal/core"
 	"seanime/internal/util"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -15,6 +16,38 @@ var publicPaths = []string{
 	"/api/v1/auth/access-code",
 	"/api/v1/auth/setup",
 	"/api/v1/auth/setup-check",
+}
+
+// authTokenLifetime is the duration a freshly (re)issued seanime-auth session token is valid for.
+var authTokenLifetime = 24 * time.Hour
+
+// authTokenRenewalThreshold: renewAuthCookieIfNeeded reissues the session once less than this
+// much of the token's lifetime remains, so a session in active use (streaming, polling,
+// websocket traffic) never hits a hard expiry mid-use - only a session with zero requests for a
+// full authTokenLifetime ever needs to re-login.
+var authTokenRenewalThreshold = 12 * time.Hour
+
+// renewAuthCookieIfNeeded reissues the seanime-auth cookie with a fresh authTokenLifetime if the
+// current token is within authTokenRenewalThreshold of expiring. Called after claims have already
+// been validated (and, where applicable, the profile confirmed to still exist) by the caller.
+func (h *Handler) renewAuthCookieIfNeeded(c echo.Context, claims *core.AuthClaims) {
+	if claims.ExpiresAt == nil || time.Until(claims.ExpiresAt.Time) >= authTokenRenewalThreshold {
+		return
+	}
+
+	newToken, err := core.GenerateToken(h.App.JWTSecret, claims.ProfileID, claims.IsAdmin, claims.Scope, authTokenLifetime)
+	if err != nil {
+		return
+	}
+
+	c.SetCookie(&http.Cookie{
+		Name:     "seanime-auth",
+		Value:    newToken,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(authTokenLifetime.Seconds()),
+	})
 }
 
 func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
@@ -97,6 +130,10 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "PROFILE_NOT_FOUND"})
 			}
 		}
+
+		// Keep an actively-used session alive instead of hard-expiring it exactly
+		// authTokenLifetime after login regardless of activity (e.g. mid-stream).
+		h.renewAuthCookieIfNeeded(c, claims)
 
 		if path == "/api/v1/auth/select-profile" || path == "/api/v1/auth/profiles" || path == "/api/v1/auth/create-profile" {
 			if claims.Scope == "access" || claims.Scope == "admin" || claims.Scope == "profile" {
