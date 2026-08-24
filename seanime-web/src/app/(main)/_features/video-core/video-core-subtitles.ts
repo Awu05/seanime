@@ -2,6 +2,7 @@ import { getServerBaseUrl } from "@/api/client/server-url"
 import { MKVParser_SubtitleEvent, MKVParser_TrackInfo } from "@/api/generated/types"
 import { VideoCorePgsRenderer } from "@/app/(main)/_features/video-core/video-core-pgs-renderer"
 import { vc_getSubtitleStyle } from "@/app/(main)/_features/video-core/video-core-settings-menu"
+import { ThrottledDispatcher } from "@/app/(main)/_features/video-core/video-core-throttled-dispatcher"
 import { VideoCore_VideoPlaybackInfo, VideoCore_VideoSubtitleTrack, VideoCoreSettings } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { logger } from "@/lib/helpers/debug"
 import { detectTrackLanguage, isTrackLanguageMatch } from "@/lib/helpers/language"
@@ -132,6 +133,13 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
     private eventTranslationQueue = new Map<string, CachedEvent>()
     // Remember the translated file tracks to avoid re-fetching them
     private translatedFileTracks = new Map<number, { translating: boolean }>()
+    // Spaces out translation requests instead of firing one per line the instant a translated
+    // track is selected (a track can have hundreds of lines).
+    private translationDispatcher = new ThrottledDispatcher<string>(
+        text => this.sendTranslateRequest?.(text),
+        5,
+        250,
+    )
 
     constructor({
         videoElement,
@@ -164,10 +172,12 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
         this.sendTranslateRequest = sendTranslateRequest
         this.translateFn = function (cached: CachedEvent) {
             cached.isTranslating = true
-            // Send the request to the server
-            this.sendTranslateRequest?.(cached.event.text)
             // Add it to the queue
             this.eventTranslationQueue.set(cached.event.text, cached)
+            // Throttled: selecting a translated track can enqueue hundreds of dialogue lines at
+            // once (see _populateEventTrack) - firing one request per line immediately would
+            // compete with playback buffering right when the user starts watching.
+            this.translationDispatcher.enqueue(cached.event.text)
         }
 
         /*
