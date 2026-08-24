@@ -24,17 +24,35 @@ func newHandler(repository *Repository) *handler {
 	}
 }
 
+// resolveStreamTarget picks which torrent/file to serve for this request. If the URL carries a
+// clientId matching a registered activeStreams entry, that client's own stream is used - so two
+// devices/tabs on the same profile playing different episodes don't cross-wire. Otherwise (no
+// clientId, or no matching entry - e.g. an older external-player URL generated before this
+// field existed) it falls back to the shared legacy currentTorrent/currentFile fields.
+func (h *handler) resolveStreamTarget(r *http.Request) (*torrent.Torrent, *torrent.File, bool) {
+	if clientId := r.URL.Query().Get("clientId"); clientId != "" {
+		if active := h.repository.client.GetActiveStream(clientId); active != nil && active.Torrent != nil && active.File != nil {
+			return active.Torrent, active.File, true
+		}
+	}
+
+	if h.repository.client.currentFile.IsAbsent() || h.repository.client.currentTorrent.IsAbsent() {
+		return nil, nil, false
+	}
+	return h.repository.client.currentTorrent.MustGet(), h.repository.client.currentFile.MustGet(), true
+}
+
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.repository.logger.Trace().Str("range", r.Header.Get("Range")).Msg("torrentstream: Stream endpoint hit")
 
-	if h.repository.client.currentFile.IsAbsent() || h.repository.client.currentTorrent.IsAbsent() {
+	t, file, ok := h.resolveStreamTarget(r)
+	if !ok {
 		h.repository.logger.Error().Msg("torrentstream: No torrent to stream")
 		http.Error(w, "No torrent to stream", http.StatusNotFound)
 		return
 	}
 
 	if r.Method == http.MethodHead {
-		file := h.repository.client.currentFile.MustGet()
 		w.Header().Set("Content-Type", "video/mp4")
 		w.Header().Set("Content-Length", strconv.FormatInt(file.Length(), 10))
 		w.Header().Set("Content-Disposition", "inline; filename="+file.DisplayPath())
@@ -47,7 +65,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file := h.repository.client.currentFile.MustGet()
 	h.repository.logger.Trace().Str("file", file.DisplayPath()).Msg("torrentstream: New reader")
 	tr := file.NewReader()
 	defer func(tr torrent.Reader) {
@@ -62,8 +79,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// If this is a range request for a later part of the file, prioritize those pieces
 	rangeHeader := r.Header.Get("Range")
-	if rangeHeader != "" && h.repository.client.currentTorrent.IsPresent() {
-		t := h.repository.client.currentTorrent.MustGet()
+	if rangeHeader != "" {
 		// Attempt to prioritize the pieces requested in the range
 		torrentutil.PrioritizeRangeRequestPieces(rangeHeader, t, file, h.repository.logger)
 	}

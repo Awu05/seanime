@@ -319,7 +319,12 @@ func (c *Client) monitorLoop(ctx context.Context) {
 	}
 }
 
-func (c *Client) GetStreamingUrl() string {
+// GetStreamingUrl returns the URL for the legacy external-player HTTP stream endpoint.
+// clientId is embedded as a query param so the handler can serve this specific client's
+// active stream (via activeStreams) instead of falling back to whichever torrent happens to be
+// "current" for the profile - which, without it, two devices/tabs on the same profile playing
+// different episodes could cross-wire.
+func (c *Client) GetStreamingUrl(clientId string) string {
 	if c.torrentClient.IsAbsent() {
 		return ""
 	}
@@ -344,10 +349,15 @@ func (c *Client) GetStreamingUrl() string {
 		ret = strings.Replace(ret, "http://http", "http", 1)
 	}
 	ret += c.repository.directStreamManager.GetHMACTokenQueryParam("/api/v1/torrentstream/stream", "?")
+	if clientId != "" {
+		ret += "&clientId=" + url.QueryEscape(clientId)
+	}
 	return ret
 }
 
-func (c *Client) GetExternalPlayerStreamingUrl() string {
+// GetExternalPlayerStreamingUrl returns the URL template used by the desktop/systray external
+// player integration. See GetStreamingUrl for why clientId is embedded.
+func (c *Client) GetExternalPlayerStreamingUrl(clientId string) string {
 	if c.torrentClient.IsAbsent() {
 		return ""
 	}
@@ -357,6 +367,9 @@ func (c *Client) GetExternalPlayerStreamingUrl() string {
 
 	ret := fmt.Sprintf("{{SCHEME}}://{{HOST}}/api/v1/torrentstream/stream/%s", url.PathEscape(c.currentFile.MustGet().DisplayPath()))
 	ret += c.repository.directStreamManager.GetHMACTokenQueryParam("/api/v1/torrentstream/stream", "?")
+	if clientId != "" {
+		ret += "&clientId=" + url.QueryEscape(clientId)
+	}
 	return ret
 }
 

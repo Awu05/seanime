@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -30,6 +29,12 @@ type FileStream struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	logger    *zerolog.Logger
+
+	// dataAvailable is closed (and immediately replaced with a fresh channel) every time new
+	// data is written or the stream closes, waking any reader blocked waiting for more data.
+	// Guarded by mu. A blocked reader snapshots this while holding mu, then selects on it - so
+	// it can never miss a wakeup that happens after the snapshot, and never busy-polls.
+	dataAvailable chan struct{}
 }
 
 type FileStreamReader interface {
@@ -59,13 +64,21 @@ func NewFileStream(ctx context.Context, logger *zerolog.Logger, contentLength in
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &FileStream{
-		file:   file,
-		ctx:    ctx,
-		cancel: cancel,
-		logger: logger,
-		pieces: make(map[int64]*piece),
-		length: contentLength,
+		file:          file,
+		ctx:           ctx,
+		cancel:        cancel,
+		logger:        logger,
+		pieces:        make(map[int64]*piece),
+		length:        contentLength,
+		dataAvailable: make(chan struct{}),
 	}, nil
+}
+
+// broadcastDataAvailableLocked wakes any readers blocked waiting for new data by closing the
+// current dataAvailable channel and installing a fresh one. Must be called while holding mu.
+func (fs *FileStream) broadcastDataAvailableLocked() {
+	close(fs.dataAvailable)
+	fs.dataAvailable = make(chan struct{})
 }
 
 // WriteAndFlush writes the stream to the file at the given offset and flushes it to the HTTP writer
@@ -100,6 +113,7 @@ func (fs *FileStream) WriteAndFlush(src io.Reader, dst io.Writer, offset int64) 
 				// Update pieces map
 				pieceEnd := currentOffset + int64(n) - 1
 				fs.updatePieces(currentOffset, pieceEnd)
+				fs.broadcastDataAvailableLocked()
 			}
 			fs.mu.Unlock()
 
@@ -211,6 +225,7 @@ func (fs *FileStream) Close() error {
 
 	fs.closed = true
 	fs.cancel()
+	fs.broadcastDataAvailableLocked()
 
 	// Close all readers
 	fs.readersMu.Lock()
@@ -293,6 +308,10 @@ func (r *fileStreamReader) Read(p []byte) (int, error) {
 			}
 			actualReadSize = maxRead
 		}
+		// Snapshot while still holding the lock that guards writes to dataAvailable, so a
+		// write that happens between this snapshot and the select below still wakes us - it
+		// closes exactly this channel, not one that's already been closed-and-replaced.
+		notifyCh := r.fs.dataAvailable
 		r.fs.mu.Unlock()
 
 		// If we have some data to read, or if stream is closed, attempt the read
@@ -327,13 +346,13 @@ func (r *fileStreamReader) Read(p []byte) (int, error) {
 			return n, err
 		}
 
-		// Wait a bit before checking again
+		// Wait for new data instead of polling on a fixed interval.
 		r.mu.Unlock()
 		select {
 		case <-r.fs.ctx.Done():
 			r.mu.Lock()
 			return 0, r.fs.ctx.Err()
-		case <-time.After(10 * time.Millisecond):
+		case <-notifyCh:
 			r.mu.Lock()
 		}
 	}

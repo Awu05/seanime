@@ -304,7 +304,7 @@ func (r *Repository) sendStreamToExternalPlayer(generation int64, opts *StartStr
 
 	event := &TorrentStreamSendStreamToMediaPlayerEvent{
 		WindowTitle:  "",
-		StreamURL:    r.client.GetStreamingUrl(),
+		StreamURL:    r.client.GetStreamingUrl(opts.ClientId),
 		Media:        baseAnime,
 		AniDbEpisode: aniDbEpisode,
 		PlaybackType: string(opts.PlaybackType),
@@ -370,7 +370,7 @@ func (r *Repository) sendStreamToExternalPlayer(generation int64, opts *StartStr
 			EpisodeNumber int    `json:"episodeNumber"`
 			MediaTitle    string `json:"mediaTitle"`
 		}{
-			Url:           r.client.GetExternalPlayerStreamingUrl(),
+			Url:           r.client.GetExternalPlayerStreamingUrl(opts.ClientId),
 			MediaId:       opts.MediaId,
 			EpisodeNumber: opts.EpisodeNumber,
 			MediaTitle:    baseAnime.GetPreferredTitle(),
