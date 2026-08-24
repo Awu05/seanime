@@ -114,7 +114,7 @@ export class VideoCoreAnime4KManager extends EventTarget {
         frameDropCount: 0,
         totalFrameDrops: 0,
         lastFrameTime: 0,
-        targetFrameTime: 1000 / 16, // 30fps target
+        targetFrameTime: 1000 / 30, // 30fps target (was 1000/16 ≈ 16fps - the 1.5x tolerance below meant the frame-drop safety net only tripped below ~10.6fps sustained, far more lenient than intended)
         performanceGracePeriod: 1000,
         initTime: 0,
     }

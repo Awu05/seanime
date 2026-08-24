@@ -1,3 +1,4 @@
+import { wrapCaptionText } from "@/app/(main)/_features/video-core/video-core-caption-text-wrap"
 import { vc_getCaptionStyle } from "@/app/(main)/_features/video-core/video-core-settings-menu"
 import { getDefaultSubtitleTrackNumber } from "@/app/(main)/_features/video-core/video-core-subtitles"
 import { VideoCore_VideoSubtitleTrack, VideoCoreSettings } from "@/app/(main)/_features/video-core/video-core.atoms"
@@ -103,6 +104,12 @@ export class MediaCaptionsManager extends EventTarget {
     private wrapperElement: HTMLDivElement | null = null
     private overlayElement: HTMLDivElement | null = null
     private currentTrackIndex: number = NO_TRACK_IDX
+    // renderToCanvas runs on every requestVideoFrameCallback tick (PIP), so word-wrapping a cue's
+    // text via repeated canvas measureText calls every frame - even while the same cue stays
+    // active for seconds - is wasted work. Cache the wrap result per (text, maxWidth); still
+    // bounded so a long session with many distinct cues doesn't grow this forever.
+    private _wrapCache = new Map<string, { lines: string[], maxLineWidth: number }>()
+    private static readonly WRAP_CACHE_LIMIT = 100
     private timeUpdateListener: (() => void) | null = null
     private readonly settings: VideoCoreSettings
     private captionCustomization: VideoCoreSettings["captionCustomization"]
@@ -366,32 +373,23 @@ export class MediaCaptionsManager extends EventTarget {
             context.textAlign = "center"
             context.textBaseline = "bottom"
 
-            // Word wrap the text
-            const words = text.split(" ")
-            const lines: string[] = []
-            let currentLine = ""
-
-            for (const word of words) {
-                const testLine = currentLine ? `${currentLine} ${word}` : word
-                const metrics = context.measureText(testLine)
-
-                if (metrics.width > maxWidth && currentLine) {
-                    lines.push(currentLine)
-                    currentLine = word
-                } else {
-                    currentLine = testLine
+            // Word wrap the text (cached - this cue is typically still active across many
+            // consecutive frames, and re-measuring every word on every frame is wasted work)
+            const wrapCacheKey = `${maxWidth}|${text}`
+            let wrapped = this._wrapCache.get(wrapCacheKey)
+            if (!wrapped) {
+                const lines = wrapCaptionText(text, maxWidth, s => context.measureText(s).width)
+                let maxLineWidth = 0
+                for (const line of lines) {
+                    maxLineWidth = Math.max(maxLineWidth, context.measureText(line).width)
                 }
+                wrapped = { lines, maxLineWidth }
+                if (this._wrapCache.size >= MediaCaptionsManager.WRAP_CACHE_LIMIT) {
+                    this._wrapCache.clear()
+                }
+                this._wrapCache.set(wrapCacheKey, wrapped)
             }
-            if (currentLine) {
-                lines.push(currentLine)
-            }
-
-            // Calculate dimensions for all lines
-            let maxLineWidth = 0
-            lines.forEach(line => {
-                const metrics = context.measureText(line)
-                maxLineWidth = Math.max(maxLineWidth, metrics.width)
-            })
+            const { lines, maxLineWidth } = wrapped
 
             const totalHeight = lines.length * lineHeight
             const x = width / 2

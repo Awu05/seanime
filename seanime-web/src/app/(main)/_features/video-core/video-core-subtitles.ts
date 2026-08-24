@@ -293,6 +293,7 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
         this._disableNativeTextTracks()
         this.libassRenderer?.renderer?.setTrack(this.defaultSubtitleHeader)
         this.libassRenderer?.resize?.()
+        this.pgsRenderer?.setActive(false)
         this.pgsRenderer?.clear()
         this._onSelectedTrackChanged?.(NO_TRACK_NUMBER)
 
@@ -344,6 +345,7 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
         // If it is, fetch/convert the content and add it to the libass renderer
         const fileTrack = this.fileTracks[trackNumber]
         if (fileTrack) {
+            this.pgsRenderer?.setActive(false) // file tracks are ASS-based, never PGS
             this._handleFileTrack(trackNumber, fileTrack)
             return
         }
@@ -370,6 +372,7 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
         // Check if this is a PGS track
         if (isPGS(eventTrack.info.codecID)) {
             // Clear PGS renderer and libass
+            this.pgsRenderer?.setActive(true)
             this.pgsRenderer?.clear()
             this.libassRenderer?.renderer?.setTrack(this.defaultSubtitleHeader)
 
@@ -386,6 +389,7 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
             }
         } else {
             // Handle regular ASS/text subtitles
+            this.pgsRenderer?.setActive(false)
             this.pgsRenderer?.clear()
 
             // Set the track

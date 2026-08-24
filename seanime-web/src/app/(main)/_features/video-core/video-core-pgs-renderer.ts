@@ -33,6 +33,12 @@ export class VideoCorePgsRenderer {
     private _canvasWidth: number = 0
     private _canvasHeight: number = 0
     private _resizeObserver: ResizeObserver | null = null
+    // Whether PGS is the currently selected subtitle track. The renderer instance lives for the
+    // whole file (created once a PGS-capable track is detected), but the render loop shouldn't
+    // keep posting frames to the worker every tick for the entire session if the user is
+    // actually watching ASS subs or nothing at all - the caller (VideoCoreSubtitleManager) flips
+    // this via setActive() on track selection.
+    private _isActive: boolean = false
 
     constructor(options: VideoCorePgsRendererOptions) {
         this._videoElement = options.videoElement
@@ -40,6 +46,11 @@ export class VideoCorePgsRenderer {
         this._setupCanvas()
         this._setupWorker()
         this._startRenderLoop()
+    }
+
+    /** Whether PGS is the currently selected subtitle track - gates the render loop. */
+    setActive(active: boolean) {
+        this._isActive = active
     }
 
     addEvent(event: PgsEvent) {
@@ -273,7 +284,7 @@ export class VideoCorePgsRenderer {
             }
 
             // Send render request to worker with current video state
-            if (this._worker && (!this._videoElement.paused || this._videoElement.seeking)) {
+            if (this._isActive && this._worker && (!this._videoElement.paused || this._videoElement.seeking)) {
                 this._worker.postMessage({
                     type: "render",
                     payload: {
