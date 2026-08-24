@@ -4,6 +4,7 @@ import (
 	"seanime/internal/util"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/anacrolix/torrent"
 	"github.com/samber/mo"
@@ -85,4 +86,37 @@ func TestCurrentTorrentAndFileConcurrentAccessNeverObservesTornPair(t *testing.T
 	}
 
 	wg.Wait()
+}
+
+// TestDropUnclaimedTorrentsLockedDoesNotDeadlockWhenCMuAlreadyHeld reproduces a real production
+// incident: initializeClient, StopStream, and CleanupSession all call dropUnclaimedTorrents
+// while already holding c.mu. dropUnclaimedTorrents calls claimedHashes(), which (after the
+// currentTorrentAndFile refactor above) locks c.mu again for every client in the registry -
+// including, for this call, the very client whose mu the caller already holds. sync.Mutex is not
+// reentrant, so that second Lock() call blocks forever: the whole app hung on startup inside
+// initializeClient, and identically on every StopStream/CleanupSession call, since none of those
+// call sites' goroutines could ever make progress again.
+//
+// dropUnclaimedTorrentsLocked exists specifically for callers already holding c.mu - this test
+// simulates exactly that calling convention and must complete promptly, not hang.
+func TestDropUnclaimedTorrentsLockedDoesNotDeadlockWhenCMuAlreadyHeld(t *testing.T) {
+	repo := &Repository{logger: util.NewLogger()}
+	c := NewClient(repo)
+	t.Cleanup(func() { unregisterClient(c) })
+
+	done := make(chan struct{})
+	go func() {
+		c.mu.Lock()
+		c.dropUnclaimedTorrentsLocked()
+		c.mu.Unlock()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// completed without deadlocking - correct
+	case <-time.After(2 * time.Second):
+		t.Fatal("dropUnclaimedTorrentsLocked deadlocked while c.mu was already held by the caller " +
+			"- this reproduces the production hang in initializeClient/StopStream/CleanupSession")
+	}
 }

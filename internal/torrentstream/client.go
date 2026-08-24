@@ -114,7 +114,14 @@ func (c *Client) currentTorrentAndFile() (mo.Option[*torrent.Torrent], mo.Option
 
 // claimedHashes returns the infohashes any live wrapper still uses:
 // per-client active streams, the legacy current torrent, and preloaded streams.
-func claimedHashes() map[metainfo.Hash]bool {
+//
+// selfHeld, if non-nil, is the Client whose c.mu the caller already holds (e.g.
+// dropUnclaimedTorrentsLocked, called from inside initializeClient/StopStream/CleanupSession's
+// own c.mu.Lock()). For that one client, currentTorrent is read directly instead of through
+// currentTorrentAndFile(), which would re-lock the same non-reentrant mutex and deadlock the
+// caller against itself. Every other client's mutex is a different instance, so locking it via
+// currentTorrentAndFile() is always safe regardless of selfHeld.
+func claimedHashes(selfHeld *Client) map[metainfo.Hash]bool {
 	keep := make(map[metainfo.Hash]bool)
 	allClientsMu.RLock()
 	defer allClientsMu.RUnlock()
@@ -126,7 +133,11 @@ func claimedHashes() map[metainfo.Hash]bool {
 			}
 		}
 		cl.streamsMu.RUnlock()
-		if torrentOpt, _ := cl.currentTorrentAndFile(); torrentOpt.IsPresent() {
+		if cl == selfHeld {
+			if t, ok := cl.currentTorrent.Get(); ok {
+				keep[t.InfoHash()] = true
+			}
+		} else if torrentOpt, _ := cl.currentTorrentAndFile(); torrentOpt.IsPresent() {
 			keep[torrentOpt.MustGet().InfoHash()] = true
 		}
 		if cl.repository != nil {
@@ -217,7 +228,7 @@ func (c *Client) initializeClient() error {
 	}
 	c.repository.logger.Info().Msgf("torrentstream: Initialized torrent client on port %d", settings.TorrentClientPort)
 	c.torrentClient = mo.Some(client)
-	c.dropUnclaimedTorrents()
+	c.dropUnclaimedTorrentsLocked()
 	c.mu.Unlock()
 
 	go c.monitorLoop(ctx)
@@ -566,12 +577,25 @@ func (c *Client) RemoveTorrent(infoHash string) error {
 // dropUnclaimedTorrents drops torrents that NO live session claims (across
 // every wrapper sharing the engine) and deletes only those torrents'
 // directories. Torrents another session is streaming are left untouched.
+// dropUnclaimedTorrents drops any torrent this client's shared engine holds that no session
+// (this one or any other sharing the engine) still claims. Must NOT be called while already
+// holding c.mu - use dropUnclaimedTorrentsLocked for that case, or this deadlocks (claimedHashes
+// would try to re-lock c.mu for this same client while reading its currentTorrent).
 func (c *Client) dropUnclaimedTorrents() {
+	c.dropUnclaimedTorrentsWithClaims(claimedHashes(nil))
+}
+
+// dropUnclaimedTorrentsLocked is dropUnclaimedTorrents for callers that already hold c.mu (e.g.
+// initializeClient, StopStream, CleanupSession, all mid-critical-section when they need to drop
+// unclaimed torrents).
+func (c *Client) dropUnclaimedTorrentsLocked() {
+	c.dropUnclaimedTorrentsWithClaims(claimedHashes(c))
+}
+
+func (c *Client) dropUnclaimedTorrentsWithClaims(keepHashes map[metainfo.Hash]bool) {
 	if c.torrentClient.IsAbsent() {
 		return
 	}
-
-	keepHashes := claimedHashes()
 
 	droppedCount := 0
 	for _, t := range c.torrentClient.MustGet().Torrents() {

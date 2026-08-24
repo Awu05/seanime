@@ -433,7 +433,7 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	// Drop torrents no session claims any more — stops seeding and frees disk
 	// without touching torrents other users are still streaming
 	if hadTorrent {
-		r.client.dropUnclaimedTorrents()
+		r.client.dropUnclaimedTorrentsLocked()
 	}
 
 	// Reset playback state

@@ -363,7 +363,7 @@ func (r *Repository) CleanupSession() {
 
 	// Drop torrents that no remaining session claims (only this session's
 	// torrents can become unclaimed here)
-	r.client.dropUnclaimedTorrents()
+	r.client.dropUnclaimedTorrentsLocked()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
