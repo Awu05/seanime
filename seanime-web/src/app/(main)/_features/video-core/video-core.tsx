@@ -688,6 +688,12 @@ export function VideoCore(props: VideoCoreProps) {
         dispatchTranslateSubtitleTrackEvent,
     } = useVideoCoreSetupEvents(props.id, state, onTerminateStream, setPluginSkipDataOverride, currentSkipDataRef)
 
+    // Mirrored into a ref so the pagehide/beforeunload listener below (registered once, on
+    // mount) always calls the latest dispatchTerminatedEvent instead of a closure frozen at
+    // whatever render it was first added on.
+    const dispatchTerminatedEventRef = useRef(dispatchTerminatedEvent)
+    dispatchTerminatedEventRef.current = dispatchTerminatedEvent
+
     const { width: windowWidth } = useWindowSize()
     const [isMobilePlayer, setIsMobilePlayer] = useAtom(vc_isMobile)
     React.useEffect(() => {
@@ -840,6 +846,26 @@ export function VideoCore(props: VideoCoreProps) {
             setActivePlayer(null)
         }
     })
+
+    // useUnmount only fires when React actually unmounts this component - a hard browser-tab/
+    // window close doesn't trigger that in time (the JS execution is torn down first), so the
+    // backend never learns the stream ended and keeps downloading/seeding until either the next
+    // stream starts or a multi-hour idle timeout. pagehide/beforeunload are the only reliable
+    // hooks for that case; best-effort since the browser doesn't guarantee delivery, but it
+    // covers the common "closed the tab" exit that useUnmount can't.
+    React.useEffect(() => {
+        function handlePageHide() {
+            if (shouldDispatchTerminatedOnUnmount.current) {
+                dispatchTerminatedEventRef.current()
+            }
+        }
+        window.addEventListener("pagehide", handlePageHide)
+        window.addEventListener("beforeunload", handlePageHide)
+        return () => {
+            window.removeEventListener("pagehide", handlePageHide)
+            window.removeEventListener("beforeunload", handlePageHide)
+        }
+    }, [])
 
     function onTerminateStream() {
         closeTerminateConfirm()

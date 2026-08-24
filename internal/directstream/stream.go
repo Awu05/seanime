@@ -200,6 +200,32 @@ func (m *Manager) loadStream(stream Stream) {
 	m.nativePlayer.Watch(clientId, playbackInfo)
 }
 
+// handleVideoCompleted pushes an AniList progress update for the given stream, at most once
+// (guarded by BaseStream.updateProgress). On success it also refreshes the app's local AniList
+// collection cache, matching the equivalent external-player path in playbackmanager - without
+// this, the AniList write can succeed while Seanime's own UI (anything reading the cached
+// collection) never reflects it until some unrelated refresh happens to occur.
+func (m *Manager) handleVideoCompleted(cs Stream) {
+	bs, ok := m.getBaseStream(cs)
+	if !ok {
+		return
+	}
+	bs.updateProgress.Do(func() {
+		mediaId := bs.media.GetID()
+		epNum := bs.episode.GetProgressNumber()
+		totalEpisodes := bs.media.GetTotalEpisodeCount()
+
+		if err := bs.manager.platformRef.Get().UpdateEntryProgress(context.Background(), mediaId, epNum, &totalEpisodes); err != nil {
+			m.Logger.Error().Err(err).Str("clientId", cs.ClientId()).Msg("directstream: Failed to update progress on AniList")
+			return
+		}
+		if bs.manager.refreshAnimeCollectionFunc != nil {
+			bs.manager.refreshAnimeCollectionFunc()
+		}
+		m.Logger.Info().Str("clientId", cs.ClientId()).Msg("directstream: Updated progress on AniList")
+	})
+}
+
 // getBaseStream extracts the BaseStream from any Stream implementation.
 func (m *Manager) getBaseStream(s Stream) (*BaseStream, bool) {
 	switch v := s.(type) {
@@ -265,16 +291,7 @@ func (m *Manager) listenToPlayerEvents() {
 				m.streams.DeleteIfSame(cs.ClientId(), cs)
 			case *videocore.VideoCompletedEvent:
 				m.Logger.Debug().Str("clientId", cs.ClientId()).Msg("directstream: Video completed")
-
-				if bs, ok := m.getBaseStream(cs); ok {
-					bs.updateProgress.Do(func() {
-						mediaId := bs.media.GetID()
-						epNum := bs.episode.GetProgressNumber()
-						totalEpisodes := bs.media.GetTotalEpisodeCount()
-
-						_ = bs.manager.platformRef.Get().UpdateEntryProgress(context.Background(), mediaId, epNum, &totalEpisodes)
-					})
-				}
+				m.handleVideoCompleted(cs)
 			}
 		}
 	}()
