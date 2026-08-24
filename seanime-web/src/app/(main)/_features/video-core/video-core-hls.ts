@@ -1,6 +1,7 @@
 import { vc_audioManager } from "@/app/(main)/_features/video-core/video-core"
 import { getPreferredHlsQualityLevel } from "@/app/(main)/_features/video-core/_lib/hls-quality"
 import { attemptHlsAutoplay } from "@/app/(main)/_features/video-core/video-core-autoplay"
+import { RollingFailureTracker } from "@/app/(main)/_features/video-core/video-core-rolling-failure-tracker"
 import { vc_autoPlayVideoAtom } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { logger } from "@/lib/helpers/debug"
 import Hls, { ErrorData, Events, Level } from "hls.js"
@@ -150,6 +151,19 @@ export function useVideoCoreHls({
                 maxBufferHole: 2, // Tolerate up to 2 second gaps in buffer
                 highBufferWatchdogPeriod: 3, // Wait 3 seconds before stall detection
                 nudgeMaxRetry: 10, // More retries before giving up
+                // ABR defaults (EWMA windows of 3s/9s) assume steady CDN-like throughput. A
+                // torrent-backed stream delivers segments in bursts as pieces complete, which can
+                // fool the fast EWMA window into over-estimating bandwidth during a burst and
+                // switching up to a quality the sustained throughput can't back up, then dropping
+                // again - visible as quality thrashing. Widen the windows so an upward switch
+                // needs more sustained evidence, and lower the up-switch factor for the same
+                // reason (leave the down-switch factor alone - dropping quality quickly when
+                // genuinely starved is still the right call).
+                abrEwmaFastLive: 5,
+                abrEwmaSlowLive: 15,
+                abrEwmaFastVoD: 5,
+                abrEwmaSlowVoD: 15,
+                abrBandWidthUpFactor: 0.5,
                 fragLoadPolicy: {
                     default: {
                         maxTimeToFirstByteMs: 30000,
@@ -196,6 +210,12 @@ export function useVideoCoreHls({
             let recoveringMediaError = false
             let mediaErrorRecoveryAttempts = 0
             let fatalErrorReported = false
+            // Each fatal-error episode's own retry counter (networkRecoveryAttempts,
+            // mediaErrorRecoveryAttempts) resets once that episode recovers. That's fine for a
+            // single blip, but lets a chronically flaky stream oscillate between micro-recoveries
+            // and near-fatal failures forever without ever tripping a real error. This is the
+            // backstop: too many fatal-error episodes in a short window gives up for good.
+            const episodeFailureTracker = new RollingFailureTracker(60_000, 4)
 
             hlsRef.current = hls
 
@@ -390,6 +410,12 @@ export function useVideoCoreHls({
                 }
 
                 if (!data.fatal) return
+
+                if (episodeFailureTracker.recordFailure()) {
+                    hlsLog.error("Too many fatal HLS errors in a short window, giving up", data)
+                    reportFatalError(data)
+                    return
+                }
 
                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                     if (networkRecoveryAttempts.current < MAX_NETWORK_RECOVERY_ATTEMPTS) {
