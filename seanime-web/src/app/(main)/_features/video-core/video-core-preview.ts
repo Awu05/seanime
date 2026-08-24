@@ -6,7 +6,13 @@ const log = logger("VIDEO CORE PREVIEW")
 
 export const VIDEOCORE_PREVIEW_THUMBNAIL_SIZE = 200
 export const VIDEOCORE_PREVIEW_CAPTURE_INTERVAL_SECONDS = 4
-const MAX_CONCURRENT_JOBS = 5
+// Jobs share a single dummy <video>/canvas (see _dummyVideoElement below), so running more than
+// one at a time is unsafe: each job's waitForSeek() just listens for the shared element's next
+// generic "seeked" event, not specifically the seek *it* initiated - a second job's seek can
+// resolve a first job's wait, which then reads whatever currentTime/frame the second job left
+// behind. Serialize instead of trying to pool per-job video elements (meaningfully heavier,
+// especially for HLS sources where each would need its own hls.attachMedia).
+const MAX_CONCURRENT_JOBS = 1
 const PREFETCH_AHEAD_COUNT = 10
 
 export class VideoCorePreviewManager {

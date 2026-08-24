@@ -1124,7 +1124,10 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
                 if (fileTrack.info.src) subtitleLog.info("Fetching subtitle content", fileTrack.info.src)
                 // fetch subtitle file content
                 const content = fileTrack.info.src ? await fetch(fileTrack.info.src).then(res => res.text()) : (fileTrack.info.content || "")
-                this.fileTracks[trackNumber].content = content // cache it
+                this.fileTracks[trackNumber].content = content // cache it, even if this track was since superseded
+                // The user may have switched tracks again while this fetch was in flight - if so,
+                // don't let this stale result overwrite the newer track's subtitles.
+                if (this.currentTrackNumber !== trackNumber) return
                 this.libassRenderer?.renderer?.setTrack(content) // load it
                 await this._applySubtitleCustomization()
                 await this.libassRenderer?.resize?.()
@@ -1146,6 +1149,8 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
                 }
                 // Cache the converted content
                 this.fileTracks[trackNumber].content = assContent
+                // Same as above: a newer track selection may have superseded this conversion.
+                if (this.currentTrackNumber !== trackNumber) return
                 subtitleLog.info("Loading converted ASS content")
                 this.libassRenderer?.renderer?.setTrack(assContent) // load it
                 await this._applySubtitleCustomization()
@@ -1157,6 +1162,8 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
                 toast.error("Failed to load subtitle track: " + error)
             }
         }
+
+        if (this.currentTrackNumber !== trackNumber) return
 
         const selectedEvent: SubtitleManagerTrackSelectedEvent = new CustomEvent("trackselected", { detail: { trackNumber, kind: "file" } })
         this.dispatchEvent(selectedEvent)

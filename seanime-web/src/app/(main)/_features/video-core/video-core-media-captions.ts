@@ -242,6 +242,10 @@ export class MediaCaptionsManager extends EventTarget {
                     track.regions = res.regions
                 }
                 track.loaded = true
+                // The user may have selected a different track while this one was loading - the
+                // load result above is still cached for next time, but don't apply it to the
+                // renderer now and overwrite whatever the newer selection put there.
+                if (this.currentTrackIndex !== index) return
             }
             this.renderer.changeTrack({
                 cues: track.cues,

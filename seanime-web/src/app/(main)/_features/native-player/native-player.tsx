@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { useWebsocketMessageListener, useWebsocketSender } from "../../_hooks/handle-websockets"
 import { useSkipData } from "../video-core/_lib/aniskip"
 import { formatHlsFatalErrorMessage } from "./native-player-error"
+import { shouldApplyNativePlayerEvent } from "./native-player-lifecycle"
 import { getSubtitleEvents, isSubtitleBatchCurrent } from "./native-player-subtitles"
 import { nativePlayer_stateAtom } from "./native-player.atoms"
 
@@ -58,6 +59,9 @@ export function NativePlayer() {
     const staleSubtitleManagerRef = React.useRef<typeof subtitleManager>(null)
     const activePlaybackIdRef = React.useRef(state.playbackInfo?.id ?? "")
     const latestSubtitleGenRef = React.useRef(-1)
+    // See native-player-lifecycle.ts: guards against a "watch"/"abort-open" server event that
+    // was already in flight when the user closed the player from resurrecting it.
+    const terminatedRef = React.useRef(false)
 
     const resetSubtitleBuffer = React.useCallback(() => {
         subtitleBufferRef.current = []
@@ -160,6 +164,9 @@ export function NativePlayer() {
                 // The server is loading the stream
                 case "open-and-await":
                     log.info("Open and await event received", { payload })
+                    // A new stream lifecycle is starting - re-arm the guard for the events
+                    // that follow it, even if the previous one ended in termination.
+                    terminatedRef.current = false
                     resetSubtitleState("")
                     _preserveMiniPlayerRef.current = state.active && miniPlayer
                     setState(draft => {
@@ -175,6 +182,10 @@ export function NativePlayer() {
 
                     break
                 case "abort-open":
+                    if (!shouldApplyNativePlayerEvent("abort-open", terminatedRef.current)) {
+                        log.info("Ignoring stale abort-open event received after termination", { payload })
+                        break
+                    }
                     log.info("Abort open event received", { payload })
                     resetSubtitleState("")
                     _preserveMiniPlayerRef.current = false
@@ -203,6 +214,10 @@ export function NativePlayer() {
                 // 2. Watch
                 // We received the playback info
                 case "watch":
+                    if (!shouldApplyNativePlayerEvent("watch", terminatedRef.current)) {
+                        log.info("Ignoring stale watch event received after termination", { payload })
+                        break
+                    }
                     log.info("Watch event received", { payload })
                     const playbackInfo = payload as NativePlayer_PlaybackInfo
                     resetSubtitleState(playbackInfo.id)
@@ -297,6 +312,10 @@ export function NativePlayer() {
     function handleTerminateStream() {
         const playbackId = state.playbackInfo?.id || ""
         const playbackType = state.playbackInfo?.streamType || ""
+
+        // Guards against a "watch"/"abort-open" event already in flight from resurrecting this
+        // stream after the user closed it. Re-armed by the next legitimate "open-and-await".
+        terminatedRef.current = true
 
         resetSubtitleState("")
 
