@@ -351,7 +351,8 @@ type StartUntrackedStreamOptions struct {
 // If fromNativePlayer is true, it will not stop the native player again.
 func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	defer func() {
-		if r := recover(); r != nil {
+		if rec := recover(); rec != nil {
+			logRecoveredPanic(r.logger, "StopStream", rec)
 		}
 	}()
 	r.logger.Info().Msg("torrentstream: Stopping stream")

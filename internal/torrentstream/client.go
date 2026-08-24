@@ -418,12 +418,25 @@ func (c *Client) addTorrentFromFile(fp string) (*torrent.Torrent, error) {
 	return t, nil
 }
 
+// torrentURLFetchTimeout bounds how long addTorrentFromDownloadURL waits on the .torrent-file
+// host (connection + headers + body). A var (not const) so tests can shrink it instead of
+// waiting out the real deadline.
+var torrentURLFetchTimeout = 1 * time.Minute
+
 func (c *Client) addTorrentFromDownloadURL(url string) (*torrent.Torrent, error) {
 	if c.torrentClient.IsAbsent() {
 		return nil, errors.New("torrent client is not initialized")
 	}
 
-	resp, err := http.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), torrentURLFetchTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -467,10 +480,23 @@ func (c *Client) Shutdown() (errs []error) {
 		return
 	}
 	c.dropUnclaimedTorrents()
+
+	// Stop monitorLoop (started by initializeClient/UseSharedTorrentClient) so it doesn't
+	// keep polling a closed torrent client every 3s, and take the same lock monitorLoop uses
+	// so this doesn't race its reads/writes of currentTorrent/currentTorrentStatus.
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+	}
+
+	c.mu.Lock()
 	c.currentTorrent = mo.None[*torrent.Torrent]()
 	c.currentTorrentStatus = TorrentStatus{}
+	tc := c.torrentClient
+	c.torrentClient = mo.None[*torrent.Client]()
+	c.mu.Unlock()
+
 	c.repository.logger.Debug().Msg("torrentstream: Closing torrent client")
-	return c.torrentClient.MustGet().Close()
+	return tc.MustGet().Close()
 }
 
 func (c *Client) FindTorrent(infoHash string) (*torrent.Torrent, error) {

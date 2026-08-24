@@ -146,6 +146,10 @@ func (m *Manager) TerminateAllStreams() {
 // Safe to call multiple times.
 func (m *Manager) Shutdown() {
 	m.TerminateAllStreams()
+	// Session eviction: this Manager instance won't handle any of these clientIds again,
+	// so it's safe to drop their load mutexes rather than leaking one per distinct clientId
+	// ever seen for the process lifetime.
+	m.clientLoadMu.Clear()
 	if m.videoCore != nil && m.videoCoreSubscriber != nil {
 		m.videoCore.Unsubscribe(m.videoCoreSubscriber.GetId())
 	}

@@ -357,6 +357,7 @@ func (s *DebridStream) GetStreamHandler() http.Handler {
 		if err != nil {
 			s.logger.Error().Err(err).Msg("directstream(debrid): Failed to create reader for stream url")
 			http.Error(w, "Failed to create reader for stream url", http.StatusInternalServerError)
+			return
 		}
 
 		if isThumbnailRequest(r) {

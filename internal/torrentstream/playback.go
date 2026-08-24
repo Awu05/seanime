@@ -45,7 +45,8 @@ func (r *Repository) listenToMediaPlayerEvents() {
 					if r.client.currentTorrent.IsPresent() {
 						go func() {
 							defer func() {
-								if r := recover(); r != nil {
+								if rec := recover(); rec != nil {
+									logRecoveredPanic(r.logger, "StreamingTrackingStoppedEvent handler", rec)
 								}
 							}()
 							r.logger.Debug().Msg("torrentstream: Media player stopped event received")
@@ -118,7 +119,7 @@ func (r *Repository) listenToNativePlayerEvents() {
 					go func() {
 						defer func() {
 							if rec := recover(); rec != nil {
-								r.logger.Error().Msg("torrentstream: Recovered from panic in VideoTerminatedEvent handler")
+								logRecoveredPanic(r.logger, "VideoTerminatedEvent handler", rec)
 							}
 						}()
 						r.logger.Debug().Msg("torrentstream: Stopping stream due to native player termination")

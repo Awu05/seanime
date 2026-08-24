@@ -282,6 +282,20 @@ func (m *Manager) listenToPlayerEvents() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// swapServeContentCancelFunc cancels the previous serveContent call's context (if any) and
+// installs next as the current one, atomically. Overlapping Range requests for the same stream
+// are normal during seeking/scrubbing and call this concurrently from different goroutines;
+// without the lock, a stale cancel func can be lost (leaking the request it belonged to), or a
+// newer legitimate read can be cancelled by a request that arrived microseconds later.
+func (s *BaseStream) swapServeContentCancelFunc(next context.CancelFunc) {
+	s.serveContentCancelFuncMu.Lock()
+	defer s.serveContentCancelFuncMu.Unlock()
+	if s.serveContentCancelFunc != nil {
+		s.serveContentCancelFunc()
+	}
+	s.serveContentCancelFunc = next
+}
+
 type BaseStream struct {
 	logger                 *zerolog.Logger
 	clientId               string
@@ -295,9 +309,10 @@ type BaseStream struct {
 	playbackInfoErr        error
 	playbackInfoOnce       sync.Once
 	subtitleEventCache     *result.Map[string, *mkvparser.SubtitleEvent]
-	terminateOnce          sync.Once
-	serveContentCancelFunc context.CancelFunc
-	filename               string // Name of the file being streamed, if applicable
+	terminateOnce            sync.Once
+	serveContentCancelFuncMu sync.Mutex
+	serveContentCancelFunc   context.CancelFunc
+	filename                 string // Name of the file being streamed, if applicable
 
 	// Per-stream context — each stream has its own lifecycle context
 	streamCtx        context.Context

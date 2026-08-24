@@ -10,6 +10,7 @@ import (
 	"seanime/internal/mkvparser"
 	"seanime/internal/nativeplayer"
 	"seanime/internal/util"
+	"seanime/internal/util/result"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,17 @@ type SubtitleStream struct {
 
 	cleanupFunc func()
 	stopOnce    sync.Once
+}
+
+// newSubtitleStreamCleanup composes the cleanup work for a subtitle stream: cancelling its
+// context and removing it from the owning stream's activeSubtitleStreams. Without the removal,
+// entries only ever accumulate (every seek starts a new subtitle stream) for the lifetime of
+// the session, and a background goroutine scans all of them - live or dead - every second.
+func newSubtitleStreamCleanup(cancel context.CancelFunc, activeSubtitleStreams *result.Map[string, *SubtitleStream], streamId string) func() {
+	return func() {
+		cancel()
+		activeSubtitleStreams.Delete(streamId)
+	}
 }
 
 func (s *SubtitleStream) Stop(completed bool) {
@@ -74,9 +86,9 @@ func (s *BaseStream) StartSubtitleStreamP(stream Stream, playbackCtx context.Con
 	}
 
 	ctx, subtitleCtxCancel := context.WithCancel(playbackCtx)
-	subtitleStream.cleanupFunc = subtitleCtxCancel
 
 	subtitleStreamId := uuid.New().String()
+	subtitleStream.cleanupFunc = newSubtitleStreamCleanup(subtitleCtxCancel, s.activeSubtitleStreams, subtitleStreamId)
 	s.activeSubtitleStreams.Set(subtitleStreamId, subtitleStream)
 
 	subtitleCh, errCh, _ := subtitleStream.parser.ExtractSubtitles(ctx, newReader, offset, backoffBytes, 0)

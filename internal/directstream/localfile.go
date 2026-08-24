@@ -192,12 +192,8 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request, lfStream *LocalFileS
 		return
 	}
 
-	if lfStream.serveContentCancelFunc != nil {
-		lfStream.serveContentCancelFunc()
-	}
-
 	ct, cancel := context.WithCancel(lfStream.streamCtx)
-	lfStream.serveContentCancelFunc = cancel
+	lfStream.swapServeContentCancelFunc(cancel)
 
 	reader, err := lfStream.newReader()
 	if err != nil {
