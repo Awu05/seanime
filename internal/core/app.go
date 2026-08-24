@@ -192,6 +192,9 @@ type (
 )
 
 func (a *App) WithEpisodeAvailability(episodes []*anime.Episode) []*anime.Episode {
+	if a.episodeAvailability == nil {
+		return episodes
+	}
 	return a.episodeAvailability.WithEpisodes(episodes)
 }
 
