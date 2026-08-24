@@ -19,6 +19,7 @@ import React from "react"
 import { toast } from "sonner"
 import { useWebsocketMessageListener, useWebsocketSender } from "../../_hooks/handle-websockets"
 import { useSkipData } from "../video-core/_lib/aniskip"
+import { formatHlsFatalErrorMessage } from "./native-player-error"
 import { getSubtitleEvents, isSubtitleBatchCurrent } from "./native-player-subtitles"
 import { nativePlayer_stateAtom } from "./native-player.atoms"
 
@@ -273,6 +274,26 @@ export function NativePlayer() {
     // Handlers
     //
 
+    // A fatal error (client-detected HLS failure, or a plain video element error) previously
+    // had nowhere to go: nothing set state.playbackError except the backend's websocket "error"
+    // event, so an unrecoverable client-side failure left the player frozen on a buffering
+    // spinner forever with no indication anything was wrong.
+    function handleFatalPlaybackError(reason: string) {
+        log.error("Fatal playback error", reason)
+        toast.error("An error occurred while playing the stream. " + reason)
+        setState(draft => {
+            draft.playbackError = reason
+            return
+        })
+    }
+
+    // Non-fatal: HLS.js's own retry logic (or a stall watchdog) may still recover on its own,
+    // so this only surfaces a warning rather than tearing down the player.
+    function handlePlaybackStalled(reason: string) {
+        log.warn("Playback stalled", reason)
+        toast.warning("Playback stalled: " + reason)
+    }
+
     function handleTerminateStream() {
         const playbackId = state.playbackInfo?.id || ""
         const playbackType = state.playbackInfo?.streamType || ""
@@ -344,6 +365,9 @@ export function NativePlayer() {
                 state={ps}
                 aniSkipData={aniSkipData}
                 onTerminateStream={handleTerminateStream}
+                onError={handleFatalPlaybackError}
+                onStalled={handlePlaybackStalled}
+                onHlsFatalError={err => handleFatalPlaybackError(formatHlsFatalErrorMessage(err))}
             />
         </>
     )

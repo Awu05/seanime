@@ -134,7 +134,10 @@ export function useVideoCoreSetupEvents(id: string,
         return () => {
             fullscreenManager.removeEventListener("fullscreenchanged", handleFullscreenChange)
         }
-    }, [isActivePlayer, state, fullscreenManager])
+        // state isn't read here - including it forced this effect to tear down and re-attach
+        // its listener on every lifecycle update instead of just when isActivePlayer/the
+        // manager instance actually change.
+    }, [isActivePlayer, fullscreenManager])
 
     // subtitle events
     React.useLayoutEffect(() => {
@@ -163,7 +166,7 @@ export function useVideoCoreSetupEvents(id: string,
             subtitleManager.removeEventListener("trackselected", handleTrackSelected)
             subtitleManager.removeEventListener("trackdeselected", handleTrackDeselected)
         }
-    }, [isActivePlayer, state, subtitleManager])
+    }, [isActivePlayer, subtitleManager])
 
     // media captions events
     React.useLayoutEffect(() => {
@@ -183,9 +186,9 @@ export function useVideoCoreSetupEvents(id: string,
         mediaCaptionsManager.addEventListener("trackdeselected", handleTrackDeselected)
         return () => {
             mediaCaptionsManager.removeEventListener("trackselected", handleTrackSelected)
-            mediaCaptionsManager.addEventListener("trackdeselected", handleTrackDeselected)
+            mediaCaptionsManager.removeEventListener("trackdeselected", handleTrackDeselected)
         }
-    }, [isActivePlayer, state, mediaCaptionsManager])
+    }, [isActivePlayer, mediaCaptionsManager])
 
     // audio events
     React.useLayoutEffect(() => {
@@ -207,7 +210,7 @@ export function useVideoCoreSetupEvents(id: string,
             audioManager.removeEventListener("trackchanged", handleAudioTrackChanged)
             audioManager.removeEventListener("hlstrackchanged", handleHlsAudioTrackChanged)
         }
-    }, [isActivePlayer, state, audioManager])
+    }, [isActivePlayer, audioManager])
 
     // pip events
     React.useLayoutEffect(() => {
@@ -222,7 +225,7 @@ export function useVideoCoreSetupEvents(id: string,
         return () => {
             pipManager.removeEventListener("toggledpip", handleToggledPip)
         }
-    }, [isActivePlayer, state, pipManager])
+    }, [isActivePlayer, pipManager])
 
 
     // anime4k events
@@ -247,7 +250,7 @@ export function useVideoCoreSetupEvents(id: string,
             anime4kManager.removeEventListener("destroyed", handleDestroyed)
             anime4kManager.removeEventListener("error", handleDestroyed)
         }
-    }, [isActivePlayer, state, anime4kManager])
+    }, [isActivePlayer, anime4kManager])
 
     // video events
     React.useEffect(() => {

@@ -77,6 +77,14 @@ export function useVideoCoreHls({
 
     const audioManager = useAtomValue(vc_audioManager)
     const autoPlay = useAtomValue(vc_autoPlayVideoAtom)
+    // Mirrored into a ref (like preferredQualityRef) so toggling the autoplay setting mid-session
+    // takes effect on the current HLS attach - the effect below intentionally doesn't depend on
+    // autoPlay directly (deps: [streamUrl, videoElement, streamType]), so its closures would
+    // otherwise keep seeing whatever autoPlay was when the effect last ran.
+    const autoPlayRef = useRef(autoPlay)
+    useEffect(() => {
+        autoPlayRef.current = autoPlay
+    }, [autoPlay])
 
     const [currentAudioTrack, setCurrentAudioTrack] = useAtom(vc_hlsCurrentAudioTrack)
     const setQualityLevels = useSetAtom(vc_hlsQualityLevels)
@@ -200,6 +208,16 @@ export function useVideoCoreHls({
                     hlsRef.current = null
                 }
                 hls.destroy()
+                // Without this, the quality/audio selector menus stayed populated and clickable
+                // after a fatal error, and their setter closures still held a reference to the
+                // now-destroyed hls instance - a click after the error could call
+                // hls.currentLevel = x on a dead instance.
+                setQualityLevels([])
+                setCurrentQuality(-1)
+                setSetQuality(() => {})
+                setAudioTracks([])
+                setCurrentAudioTrack(-1)
+                setSetAudioTrack(() => {})
                 onFatalError?.(data)
             }
 
@@ -231,7 +249,9 @@ export function useVideoCoreHls({
 
             // Quality setter function
             const qualitySetter = (levelIndex: number) => {
-                if (!hls) return
+                // hls is a const, never falsy - guard against this specific instance having
+                // been destroyed/superseded instead (e.g. a fatal error, or a new stream load).
+                if (hlsRef.current !== hls) return
                 hlsLog.info("Setting quality level to", levelIndex)
                 hls.currentLevel = levelIndex
                 setCurrentQuality(levelIndex)
@@ -240,7 +260,7 @@ export function useVideoCoreHls({
 
             // Audio track setter function
             const audioTrackSetter = (trackId: number) => {
-                if (!hls) return
+                if (hlsRef.current !== hls) return
                 hlsLog.info("Setting audio track to", trackId)
                 hls.audioTrack = trackId
                 setCurrentAudioTrack(trackId)
@@ -253,7 +273,7 @@ export function useVideoCoreHls({
             // to start" signal and fires independently, so it races FRAG_BUFFERED and whichever
             // comes first wins (attemptHlsAutoplay is idempotent via hlsAutoPlayTriggered).
             const onCanPlay = () => {
-                if (autoPlay) attemptHlsAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
+                if (autoPlayRef.current) attemptHlsAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
             }
             videoElement.addEventListener("canplay", onCanPlay)
 
@@ -329,7 +349,7 @@ export function useVideoCoreHls({
 
                 // Defer autoplay until first fragment is buffered (races the `canplay` fallback
                 // registered above - whichever fires first wins).
-                if (autoPlay && !hlsAutoPlayTriggered.current) {
+                if (autoPlayRef.current && !hlsAutoPlayTriggered.current) {
                     hls.once(Events.FRAG_BUFFERED, () => {
                         attemptHlsAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
                     })
