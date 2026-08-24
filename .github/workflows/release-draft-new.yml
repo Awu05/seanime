@@ -501,7 +501,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ env.VERSION }}
           release_name: v${{ env.VERSION }}
-          draft: true
+          draft: false
           prerelease: false
           body: |
             ## What's new?
