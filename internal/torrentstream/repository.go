@@ -63,6 +63,12 @@ type (
 		shouldPreloadStream   atomic.Bool // Flag on whether the client should prepare a stream
 		currentClientIdMu     sync.RWMutex
 		currentClientId       string // Track the client ID of the current stream for session cleanup
+
+		// startStreamGeneration is bumped by every StartStream call. The readiness-polling
+		// goroutines it spawns capture the generation at start and abort once it's stale (a
+		// newer StartStream call has superseded them), instead of running to completion against
+		// whatever torrent/file happens to be "current" by the time they finish waiting.
+		startStreamGeneration atomic.Int64
 	}
 
 	Settings struct {

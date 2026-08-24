@@ -98,3 +98,22 @@ func TestReadSeekerStopsOnContextCancel(t *testing.T) {
 	require.NoError(t, reader.Close())
 	require.NoError(t, reader.Close())
 }
+
+func TestImmediatePlaybackPieceRangeMatchesPrioritizedNowWindow(t *testing.T) {
+	tor, file := newTestTorrent(t)
+
+	// newTestTorrent: 1MB pieces, 256 pieces, single file starting at offset 0.
+	// The "Now" window is the first 8MB -> pieces [0, 8].
+	first, immediateEnd, ok := immediatePlaybackPieceRange(tor, file)
+	require.True(t, ok)
+	require.EqualValues(t, 0, first)
+	require.EqualValues(t, 8, immediateEnd)
+}
+
+func TestImmediatePiecesCompleteFalseWhenNothingDownloaded(t *testing.T) {
+	tor, file := newTestTorrent(t)
+
+	// A freshly added torrent with no peers has downloaded nothing, so the pieces needed to
+	// start playback aren't done - this must not report ready.
+	require.False(t, ImmediatePiecesComplete(tor, file))
+}

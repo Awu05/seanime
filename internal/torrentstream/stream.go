@@ -2,6 +2,7 @@ package torrentstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
@@ -17,6 +18,52 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/samber/mo"
 )
+
+// errStreamSuperseded is returned by waitUntilReadyToStream when a newer StartStream call has
+// taken over. It's not a real failure - callers should abort quietly rather than surface an error.
+var errStreamSuperseded = errors.New("torrentstream: stream superseded by a newer StartStream call")
+
+// waitReadyPollInterval / waitReadyStallDeadline are vars (not consts) so tests can shrink them
+// instead of waiting out the real durations.
+var (
+	waitReadyPollInterval  = 3 * time.Second
+	waitReadyStallDeadline = 45 * time.Second
+)
+
+// waitUntilReadyToStream blocks until the client's current torrent/file becomes ready to
+// stream. It gives up and returns an error if: a newer StartStream call has superseded this one
+// (errStreamSuperseded); the torrent/client gets dropped; or the download makes no progress for
+// waitReadyStallDeadline (instead of leaving the caller polling forever with no way to tell a
+// legitimately slow torrent from a stalled/seederless one).
+func (r *Repository) waitUntilReadyToStream(generation int64) error {
+	var lastBytes int64 = -1
+	lastProgressAt := time.Now()
+
+	for {
+		if r.startStreamGeneration.Load() != generation {
+			return errStreamSuperseded
+		}
+		if r.client.torrentClient.IsAbsent() || r.client.currentTorrent.IsAbsent() {
+			return errors.New("torrentstream: torrent was dropped before it became ready to stream")
+		}
+		if r.client.readyToStream() {
+			return nil
+		}
+
+		if file, ok := r.client.currentFile.Get(); ok {
+			bytes := file.BytesCompleted()
+			if bytes > lastBytes {
+				lastBytes = bytes
+				lastProgressAt = time.Now()
+			} else if time.Since(lastProgressAt) > waitReadyStallDeadline {
+				return fmt.Errorf("torrentstream: download stalled, no progress in %s", waitReadyStallDeadline)
+			}
+		}
+
+		r.logger.Debug().Msg("torrentstream: Waiting for playable threshold to be reached")
+		time.Sleep(waitReadyPollInterval)
+	}
+}
 
 type PlaybackType string
 
@@ -48,6 +95,11 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//r.Shutdown()
 
 	r.previousStreamOptions = mo.Some(opts)
+
+	// Bumped so the readiness-polling goroutines below abort once a newer StartStream call
+	// (e.g. rapid episode switching) supersedes this one, instead of running to completion
+	// against whatever torrent/file happens to be "current" by the time they finish waiting.
+	myGeneration := r.startStreamGeneration.Add(1)
 
 	r.logger.Info().
 		Str("clientId", opts.ClientId).
@@ -173,18 +225,19 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 			r.logger.Warn().Msg("torrentstream: Playback type is set to 'noneAndAwait'")
 			// Signal to the client that the torrent has started playing (remove loading status)
 			// There will be no tracking
-			for {
-				if r.client.readyToStream() {
-					break
+			if err := r.waitUntilReadyToStream(myGeneration); err != nil {
+				if !errors.Is(err, errStreamSuperseded) {
+					r.logger.Warn().Err(err).Msg("torrentstream: Stream never became ready")
+					r.sendStateEvent(eventLoadingFailed)
 				}
-				time.Sleep(3 * time.Second) // Wait for 3 secs before checking again
+				return
 			}
 			r.sendStateEvent(eventTorrentStartedPlaying)
 		//
 		// External player
 		//
 		case PlaybackTypeExternal, PlaybackTypeExternalPlayerLink:
-			r.sendStreamToExternalPlayer(opts, media, aniDbEpisode)
+			r.sendStreamToExternalPlayer(myGeneration, opts, media, aniDbEpisode)
 		//
 		// Direct stream
 		//
@@ -211,16 +264,13 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 			}
 
 			// Make sure the client is ready and the torrent is partially downloaded
-			for {
-				if r.client.readyToStream() {
-					break
+			if err := r.waitUntilReadyToStream(myGeneration); err != nil {
+				if !errors.Is(err, errStreamSuperseded) {
+					r.logger.Warn().Err(err).Msg("torrentstream: Stream never became ready")
+					r.directStreamManager.AbortOpen(opts.ClientId, err)
+					r.sendStateEvent(eventLoadingFailed)
 				}
-				// If for some reason the torrent is dropped, we kill the goroutine
-				if r.client.torrentClient.IsAbsent() || r.client.currentTorrent.IsAbsent() {
-					return
-				}
-				r.logger.Debug().Msg("torrentstream: Waiting for playable threshold to be reached")
-				time.Sleep(3 * time.Second) // Wait for 3 secs before checking again
+				return
 			}
 			close(readyCh)
 		}
@@ -234,7 +284,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 
 // sendStreamToExternalPlayer sends the stream to the desktop player or external player link.
 // It blocks until the some pieces have been downloaded before sending the stream for faster playback.
-func (r *Repository) sendStreamToExternalPlayer(opts *StartStreamOptions, completeAnime *anilist.CompleteAnime, aniDbEpisode string) {
+func (r *Repository) sendStreamToExternalPlayer(generation int64, opts *StartStreamOptions, completeAnime *anilist.CompleteAnime, aniDbEpisode string) {
 
 	baseAnime := completeAnime.ToBaseAnime()
 
@@ -244,16 +294,12 @@ func (r *Repository) sendStreamToExternalPlayer(opts *StartStreamOptions, comple
 	}()
 
 	// Make sure the client is ready and the torrent is partially downloaded
-	for {
-		if r.client.readyToStream() {
-			break
+	if err := r.waitUntilReadyToStream(generation); err != nil {
+		if !errors.Is(err, errStreamSuperseded) {
+			r.logger.Warn().Err(err).Msg("torrentstream: Stream never became ready")
+			r.sendStateEvent(eventLoadingFailed)
 		}
-		// If for some reason the torrent is dropped, we kill the goroutine
-		if r.client.torrentClient.IsAbsent() || r.client.currentTorrent.IsAbsent() {
-			return
-		}
-		r.logger.Debug().Msg("torrentstream: Waiting for playable threshold to be reached")
-		time.Sleep(3 * time.Second) // Wait for 3 secs before checking again
+		return
 	}
 
 	event := &TorrentStreamSendStreamToMediaPlayerEvent{

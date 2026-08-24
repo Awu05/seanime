@@ -467,6 +467,59 @@ func (rs *ReadSeeker) Close() error {
 // First 8 MiB: Immediate (torrent.PiecePriorityNow)
 // Next 24 MiB: Readahead (torrent.PiecePriorityReadahead)
 // Last 4 MiB: High (torrent.PiecePriorityHigh)
+// immediatePlaybackPieceRange returns [firstPieceIdx, immediateEndIdx] - the "Now" priority
+// piece window PrioritizeDownloadPieces sets, i.e. the pieces that must be downloaded before
+// playback can safely start. ok is false if piece/file info isn't available yet.
+func immediatePlaybackPieceRange(t *torrent.Torrent, file *torrent.File) (firstPieceIdx, immediateEndIdx int64, ok bool) {
+	if t == nil || file == nil || t.Info() == nil {
+		return 0, 0, false
+	}
+	pieceLength := t.Info().PieceLength
+	if pieceLength <= 0 {
+		return 0, 0, false
+	}
+
+	fileOffset := file.Offset()
+	fileLength := file.Length()
+
+	getPieceIdx := func(offset int64) int64 {
+		if offset < 0 {
+			offset = 0
+		}
+		if offset > fileLength {
+			offset = fileLength
+		}
+		return (fileOffset + offset) / pieceLength
+	}
+
+	firstPieceIdx = fileOffset / pieceLength
+	immediateEndIdx = getPieceIdx(8 * 1024 * 1024)
+	return firstPieceIdx, immediateEndIdx, true
+}
+
+// ImmediatePiecesComplete reports whether every piece in the "Now" priority window (the first
+// ~8MB of the file) is fully downloaded. Prefer this over an aggregate byte/percentage
+// threshold for readiness checks: under rarest-first-influenced piece selection, a torrent can
+// cross a byte/percentage threshold via pieces scattered throughout the file while the pieces
+// actually needed to start playback (file headers, first cluster) are still missing - reporting
+// "ready" right before a stall.
+func ImmediatePiecesComplete(t *torrent.Torrent, file *torrent.File) bool {
+	firstPieceIdx, immediateEndIdx, ok := immediatePlaybackPieceRange(t, file)
+	if !ok {
+		return false
+	}
+	numTorrentPieces := int64(t.NumPieces())
+	for idx := firstPieceIdx; idx <= immediateEndIdx; idx++ {
+		if idx < 0 || idx >= numTorrentPieces {
+			continue
+		}
+		if !t.PieceState(int(idx)).Complete {
+			return false
+		}
+	}
+	return true
+}
+
 func PrioritizeDownloadPieces(t *torrent.Torrent, file *torrent.File, logger *zerolog.Logger) {
 	if t == nil || file == nil || t.Info() == nil {
 		return
@@ -480,7 +533,7 @@ func PrioritizeDownloadPieces(t *torrent.Torrent, file *torrent.File, logger *ze
 	fileLength := file.Length()
 	numTorrentPieces := int64(t.NumPieces())
 
-	firstPieceIdx := fileOffset / pieceLength
+	firstPieceIdx, immediateEndIdx, _ := immediatePlaybackPieceRange(t, file)
 	endPieceIdx := (fileOffset + fileLength - 1) / pieceLength
 
 	getPieceIdx := func(offset int64) int64 {
@@ -493,7 +546,6 @@ func PrioritizeDownloadPieces(t *torrent.Torrent, file *torrent.File, logger *ze
 		return (fileOffset + offset) / pieceLength
 	}
 
-	immediateEndIdx := getPieceIdx(8 * 1024 * 1024)
 	readaheadEndIdx := getPieceIdx((8 + 24) * 1024 * 1024)
 	finalStartIdx := getPieceIdx(fileLength - 4*1024*1024)
 

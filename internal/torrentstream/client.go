@@ -11,6 +11,7 @@ import (
 	"path"
 	"seanime/internal/mediaplayers/mediaplayer"
 	"seanime/internal/util"
+	"seanime/internal/util/torrentutil"
 	"strings"
 	"sync"
 	"time"
@@ -625,28 +626,11 @@ func (c *Client) readyToStream() bool {
 		return false
 	}
 
-	file := c.currentFile.MustGet()
-
-	// Always need at least 1MB to start playback (typical header size for many formats)
-	const minimumBufferBytes int64 = 1 * 1024 * 1024 // 1MB
-
-	// For large files, use a smaller percentage
-	var percentThreshold float64
-	fileSize := file.Length()
-
-	switch {
-	case fileSize > 5*1024*1024*1024: // > 5GB
-		percentThreshold = 0.1 // 0.1% for very large files
-	case fileSize > 1024*1024*1024: // > 1GB
-		percentThreshold = 0.5 // 0.5% for large files
-	default:
-		percentThreshold = 0.5 // 0.5% for smaller files
-	}
-
-	bytesCompleted := file.BytesCompleted()
-	percentCompleted := float64(bytesCompleted) / float64(fileSize) * 100
-
-	// Ready when both minimum buffer is met AND percentage threshold is reached
-	return bytesCompleted >= minimumBufferBytes && percentCompleted >= percentThreshold
+	// Require the pieces actually needed to start playback (file headers, first cluster) to be
+	// complete. An aggregate byte/percentage threshold isn't enough: under rarest-first-
+	// influenced piece selection, a torrent can cross a byte/percentage threshold via pieces
+	// scattered elsewhere in the file while these are still missing, reporting "ready" right
+	// before a stall.
+	return torrentutil.ImmediatePiecesComplete(c.currentTorrent.MustGet(), c.currentFile.MustGet())
 }
 
