@@ -116,11 +116,12 @@ func (s *BaseStream) StartSubtitleStreamP(stream Stream, playbackCtx context.Con
 				subtitleStream.Stop(false)
 				return
 			case <-ticker.C:
-				if lastSubtitleEvent == nil {
-					continue
-				}
 				shouldEnd := false
 				lastSubtitleEventRWMutex.RLock()
+				if lastSubtitleEvent == nil {
+					lastSubtitleEventRWMutex.RUnlock()
+					continue
+				}
 				s.activeSubtitleStreams.Range(func(key string, value *SubtitleStream) bool {
 					if key != subtitleStreamId {
 						// If the other stream is ahead of this stream

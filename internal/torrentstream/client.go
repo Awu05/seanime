@@ -102,6 +102,16 @@ func unregisterClient(c *Client) {
 	allClientsMu.Unlock()
 }
 
+// currentTorrentAndFile returns a locked snapshot of the legacy currentTorrent/currentFile
+// pair. StartStream/StopStream mutate both fields together under c.mu; every read outside of
+// code that already holds c.mu must go through this instead of touching the fields directly,
+// or it can observe a torn pair (one field updated, the other not yet).
+func (c *Client) currentTorrentAndFile() (mo.Option[*torrent.Torrent], mo.Option[*torrent.File]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.currentTorrent, c.currentFile
+}
+
 // claimedHashes returns the infohashes any live wrapper still uses:
 // per-client active streams, the legacy current torrent, and preloaded streams.
 func claimedHashes() map[metainfo.Hash]bool {
@@ -116,11 +126,11 @@ func claimedHashes() map[metainfo.Hash]bool {
 			}
 		}
 		cl.streamsMu.RUnlock()
-		if t, ok := cl.currentTorrent.Get(); ok {
-			keep[t.InfoHash()] = true
+		if torrentOpt, _ := cl.currentTorrentAndFile(); torrentOpt.IsPresent() {
+			keep[torrentOpt.MustGet().InfoHash()] = true
 		}
 		if cl.repository != nil {
-			if ps, ok := cl.repository.preloadedStream.Get(); ok && ps.Torrent != nil {
+			if ps, ok := cl.repository.getPreloadedStream(); ok && ps.Torrent != nil {
 				keep[ps.Torrent.InfoHash()] = true
 			}
 		}
@@ -225,7 +235,8 @@ func (c *Client) monitorLoop(ctx context.Context) {
 			return
 
 		case status := <-c.mediaPlayerPlaybackStatusCh:
-			if status != nil && c.currentFile.IsPresent() && c.repository.playback.currentVideoDuration == 0 {
+			_, fileOpt := c.currentTorrentAndFile()
+			if status != nil && fileOpt.IsPresent() && c.repository.playback.currentVideoDuration == 0 {
 				if c.repository.playback.currentVideoDuration == 0 && status.Duration > 0 {
 					c.repository.logger.Debug().Msg("torrentstream: Media player started playing the video, sending event")
 					c.repository.sendStateEvent(eventTorrentStartedPlaying)
@@ -328,7 +339,8 @@ func (c *Client) GetStreamingUrl(clientId string) string {
 	if c.torrentClient.IsAbsent() {
 		return ""
 	}
-	if c.currentFile.IsAbsent() {
+	_, fileOpt := c.currentTorrentAndFile()
+	if fileOpt.IsAbsent() {
 		return ""
 	}
 	settings, ok := c.repository.settings.Get()
@@ -344,7 +356,7 @@ func (c *Client) GetStreamingUrl(clientId string) string {
 	if settings.StreamUrlAddress != "" {
 		address = settings.StreamUrlAddress
 	}
-	ret := fmt.Sprintf("http://%s/api/v1/torrentstream/stream/%s", address, url.PathEscape(c.currentFile.MustGet().DisplayPath()))
+	ret := fmt.Sprintf("http://%s/api/v1/torrentstream/stream/%s", address, url.PathEscape(fileOpt.MustGet().DisplayPath()))
 	if strings.HasPrefix(ret, "http://http") {
 		ret = strings.Replace(ret, "http://http", "http", 1)
 	}
@@ -361,11 +373,12 @@ func (c *Client) GetExternalPlayerStreamingUrl(clientId string) string {
 	if c.torrentClient.IsAbsent() {
 		return ""
 	}
-	if c.currentFile.IsAbsent() {
+	_, fileOpt := c.currentTorrentAndFile()
+	if fileOpt.IsAbsent() {
 		return ""
 	}
 
-	ret := fmt.Sprintf("{{SCHEME}}://{{HOST}}/api/v1/torrentstream/stream/%s", url.PathEscape(c.currentFile.MustGet().DisplayPath()))
+	ret := fmt.Sprintf("{{SCHEME}}://{{HOST}}/api/v1/torrentstream/stream/%s", url.PathEscape(fileOpt.MustGet().DisplayPath()))
 	ret += c.repository.directStreamManager.GetHMACTokenQueryParam("/api/v1/torrentstream/stream", "?")
 	if clientId != "" {
 		ret += "&clientId=" + url.QueryEscape(clientId)
@@ -457,10 +470,14 @@ func (c *Client) addTorrentFromDownloadURL(url string) (*torrent.Torrent, error)
 	defer resp.Body.Close()
 
 	filename := path.Base(url)
-	file, err := os.Create(path.Join(os.TempDir(), filename))
+	// os.CreateTemp (rather than os.Create with a fixed name) avoids two concurrent downloads
+	// of URLs sharing a basename clobbering each other's file, and the deferred os.Remove below
+	// avoids leaking one file into the OS temp directory per download-URL torrent added.
+	file, err := os.CreateTemp(os.TempDir(), filename+"-*")
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = os.Remove(file.Name()) }()
 	defer file.Close()
 
 	_, err = io.Copy(file, resp.Body)
@@ -635,7 +652,8 @@ func (c *Client) getTorrentPercentage(t mo.Option[*torrent.Torrent], f mo.Option
 // readyToStream determines if enough of the file has been downloaded to begin streaming
 // Uses both absolute size (minimum buffer) and a percentage-based approach
 func (c *Client) readyToStream() bool {
-	if c.currentTorrent.IsAbsent() || c.currentFile.IsAbsent() {
+	torrentOpt, fileOpt := c.currentTorrentAndFile()
+	if torrentOpt.IsAbsent() || fileOpt.IsAbsent() {
 		return false
 	}
 
@@ -644,6 +662,6 @@ func (c *Client) readyToStream() bool {
 	// influenced piece selection, a torrent can cross a byte/percentage threshold via pieces
 	// scattered elsewhere in the file while these are still missing, reporting "ready" right
 	// before a stall.
-	return torrentutil.ImmediatePiecesComplete(c.currentTorrent.MustGet(), c.currentFile.MustGet())
+	return torrentutil.ImmediatePiecesComplete(torrentOpt.MustGet(), fileOpt.MustGet())
 }
 

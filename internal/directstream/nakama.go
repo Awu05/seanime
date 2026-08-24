@@ -270,7 +270,7 @@ func (s *Nakama) GetStreamHandler() http.Handler {
 		w.Header().Set("Content-Type", s.LoadContentType()) // overwrite the type
 		w.WriteHeader(resp.StatusCode)
 
-		_ = s.httpStream.WriteAndFlush(resp.Body, w, ra.Start)
+		_ = s.writeAndFlushToCache(resp.Body, w, ra.Start)
 	})
 }
 
@@ -379,4 +379,19 @@ func (s *Nakama) getReader() (io.ReadSeekCloser, error) {
 	}
 
 	return s.httpStream.NewReader()
+}
+
+// writeAndFlushToCache writes src into the shared FileStream cache and flushes it to w,
+// starting at fileOffset. Guarded by cacheMu (like getReader) since Close() - triggered by
+// Terminate on a rapid episode switch - can nil out httpStream concurrently with an in-flight
+// request here; a direct s.httpStream.WriteAndFlush(...) call would panic in that case.
+func (s *Nakama) writeAndFlushToCache(src io.Reader, w http.ResponseWriter, fileOffset int64) error {
+	s.cacheMu.RLock()
+	defer s.cacheMu.RUnlock()
+
+	if s.httpStream == nil {
+		return fmt.Errorf("FileStream not initialized")
+	}
+
+	return s.httpStream.WriteAndFlush(src, w, fileOffset)
 }

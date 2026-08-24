@@ -36,10 +36,11 @@ func (h *handler) resolveStreamTarget(r *http.Request) (*torrent.Torrent, *torre
 		}
 	}
 
-	if h.repository.client.currentFile.IsAbsent() || h.repository.client.currentTorrent.IsAbsent() {
+	torrentOpt, fileOpt := h.repository.client.currentTorrentAndFile()
+	if fileOpt.IsAbsent() || torrentOpt.IsAbsent() {
 		return nil, nil, false
 	}
-	return h.repository.client.currentTorrent.MustGet(), h.repository.client.currentFile.MustGet(), true
+	return torrentOpt.MustGet(), fileOpt.MustGet(), true
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

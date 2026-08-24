@@ -60,6 +60,13 @@ type (
 
 		previousStreamOptions mo.Option[*StartStreamOptions]
 		preloadedStream       mo.Option[*preloadedStream]
+		// preloadedStreamMu guards preloadedStream. PreloadStream/StartStream/StopStream/
+		// CancelPreparedStream/CleanupSession can all read or clear it from different
+		// goroutines, and claimedHashes (client.go) reads it from yet another goroutine (another
+		// session's) to decide what torrent data is safe to drop - so every access must go
+		// through the getPreloadedStream/setPreloadedStream/takePreloadedStream helpers below
+		// rather than touching the field directly.
+		preloadedStreamMu     sync.Mutex
 		shouldPreloadStream   atomic.Bool // Flag on whether the client should prepare a stream
 		currentClientIdMu     sync.RWMutex
 		currentClientId       string // Track the client ID of the current stream for session cleanup
@@ -133,6 +140,44 @@ func NewRepository(opts *NewRepositoryOptions) *Repository {
 	ret.client = NewClient(ret)
 	ret.handler = newHandler(ret)
 	return ret
+}
+
+// getPreloadedStream returns the currently preloaded stream, if any, without clearing it.
+func (r *Repository) getPreloadedStream() (*preloadedStream, bool) {
+	r.preloadedStreamMu.Lock()
+	defer r.preloadedStreamMu.Unlock()
+	return r.preloadedStream.Get()
+}
+
+// setPreloadedStream stores a newly prepared stream, replacing any previous one.
+func (r *Repository) setPreloadedStream(ps *preloadedStream) {
+	r.preloadedStreamMu.Lock()
+	defer r.preloadedStreamMu.Unlock()
+	r.preloadedStream = mo.Some(ps)
+}
+
+// takePreloadedStream atomically returns and clears the preloaded stream, so callers that mean
+// to consume or cancel it can't race each other into double-cancelling or losing it.
+func (r *Repository) takePreloadedStream() (*preloadedStream, bool) {
+	r.preloadedStreamMu.Lock()
+	defer r.preloadedStreamMu.Unlock()
+	ps, ok := r.preloadedStream.Get()
+	if ok {
+		r.preloadedStream = mo.None[*preloadedStream]()
+	}
+	return ps, ok
+}
+
+// cancelAndMaybeDropPreloaded cancels a taken-out preloaded stream's prepare context and drops
+// its torrent from the shared engine, unless that torrent is also the one currently playing.
+func (r *Repository) cancelAndMaybeDropPreloaded(prepared *preloadedStream) {
+	if prepared.CancelFunc != nil {
+		prepared.CancelFunc()
+	}
+	if torrentOpt, _ := r.client.currentTorrentAndFile(); torrentOpt.IsAbsent() ||
+		torrentOpt.MustGet().InfoHash() != prepared.Torrent.InfoHash() {
+		prepared.Torrent.Drop()
+	}
 }
 
 func (r *Repository) IsEnabled() bool {
@@ -296,12 +341,8 @@ func (r *Repository) CleanupSession() {
 	r.client.currentFile = mo.None[*itorrent.File]()
 
 	// Cancel any preloaded stream for this session
-	if r.preloadedStream.IsPresent() {
-		ps := r.preloadedStream.MustGet()
-		if ps.CancelFunc != nil {
-			ps.CancelFunc()
-		}
-		r.preloadedStream = mo.None[*preloadedStream]()
+	if ps, ok := r.takePreloadedStream(); ok && ps.CancelFunc != nil {
+		ps.CancelFunc()
 	}
 
 	// Reset per-session playback state

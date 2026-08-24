@@ -206,9 +206,6 @@ func (pm *priorityManager) updatePriorities() {
 		if position < 0 {
 			position = 0
 		}
-		if position < 0 {
-			position = 0
-		}
 
 		currentGlobalSeekPieceIdx := (file.Offset() + position) / pieceLength
 

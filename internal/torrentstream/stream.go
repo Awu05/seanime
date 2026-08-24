@@ -43,14 +43,15 @@ func (r *Repository) waitUntilReadyToStream(generation int64) error {
 		if r.startStreamGeneration.Load() != generation {
 			return errStreamSuperseded
 		}
-		if r.client.torrentClient.IsAbsent() || r.client.currentTorrent.IsAbsent() {
+		torrentOpt, fileOpt := r.client.currentTorrentAndFile()
+		if r.client.torrentClient.IsAbsent() || torrentOpt.IsAbsent() {
 			return errors.New("torrentstream: torrent was dropped before it became ready to stream")
 		}
 		if r.client.readyToStream() {
 			return nil
 		}
 
-		if file, ok := r.client.currentFile.Get(); ok {
+		if file, ok := fileOpt.Get(); ok {
 			bytes := file.BytesCompleted()
 			if bytes > lastBytes {
 				lastBytes = bytes
@@ -132,7 +133,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	var torrentToStream *playbackTorrent
 	usedPreparedStream := false
 
-	if prepared, ok := r.preloadedStream.Get(); ok {
+	if prepared, ok := r.takePreloadedStream(); ok {
 		if streamOptionsMatch(opts, prepared.Options) {
 			r.logger.Info().Msg("torrentstream: Using pre-downloaded stream")
 			torrentToStream = &playbackTorrent{
@@ -141,15 +142,14 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 			}
 			usedPreparedStream = true
 
-			// Cancel the prepared stream context and clear it
+			// Cancel the prepared stream context - it's now the active stream, not just prepared
 			if prepared.CancelFunc != nil {
 				prepared.CancelFunc()
 			}
-			r.preloadedStream = mo.None[*preloadedStream]()
 		} else {
 			// Different episode requested, cancel and drop the prepared stream
 			r.logger.Debug().Msg("torrentstream: Prepared stream doesn't match request, cancelling it")
-			r.CancelPreparedStream()
+			r.cancelAndMaybeDropPreloaded(prepared)
 		}
 	}
 
@@ -426,12 +426,8 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	r.client.currentTorrentStatus = TorrentStatus{}
 
 	// Clear preloaded/prepared stream
-	if r.preloadedStream.IsPresent() {
-		ps := r.preloadedStream.MustGet()
-		if ps.CancelFunc != nil {
-			ps.CancelFunc()
-		}
-		r.preloadedStream = mo.None[*preloadedStream]()
+	if ps, ok := r.takePreloadedStream(); ok && ps.CancelFunc != nil {
+		ps.CancelFunc()
 	}
 
 	// Drop torrents no session claims any more — stops seeding and frees disk
@@ -543,13 +539,11 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 		Msg("torrentstream: Preloading stream for future playback")
 
 	// Cancel any existing prepared stream
-	if r.preloadedStream.IsPresent() {
+	if prepared, ok := r.takePreloadedStream(); ok {
 		r.logger.Debug().Msg("torrentstream: Cancelling existing preloaded stream")
-		prepared := r.preloadedStream.MustGet()
 		if prepared.CancelFunc != nil {
 			prepared.CancelFunc()
 		}
-		r.preloadedStream = mo.None[*preloadedStream]()
 	}
 
 	// Get media info
@@ -589,7 +583,7 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 		Msg("torrentstream: Started preloading stream")
 
 	// Store prepared stream info
-	r.preloadedStream = mo.Some(&preloadedStream{
+	r.setPreloadedStream(&preloadedStream{
 		Torrent:    torrentToStream.Torrent,
 		File:       torrentToStream.File,
 		Options:    opts,
@@ -607,16 +601,8 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 
 // CancelPreparedStream cancels any ongoing stream preloading
 func (r *Repository) CancelPreparedStream() {
-	if prepared, ok := r.preloadedStream.Get(); ok {
+	if prepared, ok := r.takePreloadedStream(); ok {
 		r.logger.Debug().Msg("torrentstream: Cancelling prepared stream")
-		if prepared.CancelFunc != nil {
-			prepared.CancelFunc()
-		}
-		// Drop the prepared torrent if it's not the current one
-		if r.client.currentTorrent.IsAbsent() ||
-			r.client.currentTorrent.MustGet().InfoHash() != prepared.Torrent.InfoHash() {
-			prepared.Torrent.Drop()
-		}
-		r.preloadedStream = mo.None[*preloadedStream]()
+		r.cancelAndMaybeDropPreloaded(prepared)
 	}
 }

@@ -42,7 +42,7 @@ func (r *Repository) listenToMediaPlayerEvents() {
 					}
 				case mediaplayer.StreamingVideoCompletedEvent:
 				case mediaplayer.StreamingTrackingStoppedEvent:
-					if r.client.currentTorrent.IsPresent() {
+					if torrentOpt, _ := r.client.currentTorrentAndFile(); torrentOpt.IsPresent() {
 						go func() {
 							defer func() {
 								if rec := recover(); rec != nil {
@@ -56,7 +56,7 @@ func (r *Repository) listenToMediaPlayerEvents() {
 					}
 				case mediaplayer.StreamingPlaybackStatusEvent:
 					go func() {
-						if e.Status != nil && r.client.currentTorrent.IsPresent() {
+						if torrentOpt, _ := r.client.currentTorrentAndFile(); e.Status != nil && torrentOpt.IsPresent() {
 							r.client.mediaPlayerPlaybackStatusCh <- e.Status
 						}
 						if r.shouldPreloadStream.Load() && e.Status.CompletionPercentage >= 0.5 {
@@ -94,7 +94,7 @@ func (r *Repository) listenToNativePlayerEvents() {
 				}
 			case *videocore.VideoLoadedMetadataEvent:
 				go func() {
-					if r.client.currentFile.IsPresent() && r.playback.currentVideoDuration == 0 {
+					if _, fileOpt := r.client.currentTorrentAndFile(); fileOpt.IsPresent() && r.playback.currentVideoDuration == 0 {
 						// If the stored video duration is 0 but the media player status shows a duration that is not 0
 						// we know that the video has been loaded and is playing
 						if r.playback.currentVideoDuration == 0 && event.Duration > 0 {
@@ -115,7 +115,7 @@ func (r *Repository) listenToNativePlayerEvents() {
 				r.logger.Debug().Msg("torrentstream: Native player terminated event received")
 				r.playback.currentVideoDuration = 0
 				// Only handle the event if we actually have a current torrent to avoid unnecessary cleanup
-				if r.client.currentTorrent.IsPresent() {
+				if torrentOpt, _ := r.client.currentTorrentAndFile(); torrentOpt.IsPresent() {
 					go func() {
 						defer func() {
 							if rec := recover(); rec != nil {

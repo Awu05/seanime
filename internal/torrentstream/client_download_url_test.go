@@ -3,11 +3,15 @@ package torrentstream
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"seanime/internal/util"
 	"testing"
 	"time"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/samber/mo"
 	"github.com/stretchr/testify/require"
 )
@@ -55,4 +59,47 @@ func TestAddTorrentFromDownloadURLTimesOutOnHangingServer(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("addTorrentFromDownloadURL did not return within the deadline - it hung on the unresponsive server")
 	}
+}
+
+// TestAddTorrentFromDownloadURLCleansUpTempFile guards against a regression where
+// addTorrentFromDownloadURL wrote the fetched .torrent file into os.TempDir() and never removed
+// it, leaking one file per download-URL torrent add for the life of the host process.
+func TestAddTorrentFromDownloadURLCleansUpTempFile(t *testing.T) {
+	infoBytes, err := bencode.Marshal(metainfo.Info{
+		Name:        t.Name(),
+		Length:      1024,
+		PieceLength: 1024,
+		Pieces:      make([]byte, metainfo.HashSize),
+	})
+	require.NoError(t, err)
+	torrentBytes, err := bencode.Marshal(metainfo.MetaInfo{InfoBytes: infoBytes})
+	require.NoError(t, err)
+
+	// A basename unique to this test run, so the glob below can't match a leftover file from
+	// some other test or a previous run.
+	basename := t.Name() + "-unique.torrent"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(torrentBytes)
+	}))
+	t.Cleanup(srv.Close)
+
+	repo := &Repository{logger: util.NewLogger()}
+	c := NewClient(repo)
+	t.Cleanup(func() { unregisterClient(c) })
+
+	cfg := torrent.TestingConfig(t)
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	tc, err := torrent.NewClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { tc.Close() })
+	c.torrentClient = mo.Some(tc)
+
+	_, err = c.addTorrentFromDownloadURL(srv.URL + "/" + basename)
+	require.NoError(t, err)
+
+	leftover, err := filepath.Glob(filepath.Join(os.TempDir(), "*"+basename+"*"))
+	require.NoError(t, err)
+	require.Empty(t, leftover, "addTorrentFromDownloadURL left a temp file behind: %v", leftover)
 }
