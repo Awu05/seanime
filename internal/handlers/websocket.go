@@ -1,15 +1,26 @@
 package handlers
 
 import (
+	"net"
 	"net/http"
 	"seanime/internal/core"
 	"seanime/internal/events"
 	"seanime/internal/security"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 )
+
+// wsReadDeadline bounds how long the server waits for ANY message (the client pings every 15s,
+// see websocket-provider.tsx) before treating a native-player connection as dead. This exists
+// because ws.ReadMessage() alone only reliably detects a *graceful* close (TCP FIN arrives
+// promptly) - a hard crash, force-quit, or lost network can leave the connection half-open with
+// no error ever surfacing, silently leaving any active torrent/debrid stream running forever
+// (previously: until the next stream started, or a 2h idle-session timeout). A var (not const)
+// so tests can shrink it instead of waiting out the real duration.
+var wsReadDeadline = 60 * time.Second
 
 var (
 	upgrader = websocket.Upgrader{
@@ -104,17 +115,24 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 		"platform": platform,
 	}, true)
 
+	_ = ws.SetReadDeadline(time.Now().Add(wsReadDeadline))
+
 	for {
 		_, msg, err := ws.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 				h.App.Logger.Debug().Str("id", id).Msg("ws: Client disconnected")
+			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				h.App.Logger.Debug().Str("id", id).Msg("ws: Client connection timed out (no messages received)")
 			} else {
 				h.App.Logger.Debug().Str("id", id).Msg("ws: Client disconnection")
 			}
 			h.App.WSEventManager.RemoveConn(id)
+			h.terminateClientNativePlayerStream(id)
 			break
 		}
+
+		_ = ws.SetReadDeadline(time.Now().Add(wsReadDeadline))
 
 		event, err := UnmarshalWebsocketClientEvent(msg)
 		if err != nil {
@@ -161,6 +179,36 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 	}
 
 	return nil
+}
+
+// terminateClientNativePlayerStream synthesizes a "video-terminated" client event for a
+// disconnected websocket connection, reusing the exact same handling path a real
+// dispatchTerminatedEvent() call from the frontend would take (see video-core-events.ts) - so an
+// abruptly closed tab (browser crash, network loss, force-quit) stops any active native-player
+// torrent/debrid/local stream the same way an in-app close does, instead of leaving it running
+// until the next stream starts or a multi-hour idle timeout.
+//
+// The nested payload's id/playerType/playbackType are left empty on purpose: videocore.go fills
+// them in from its own tracked playback state for this client when a real value isn't provided,
+// exactly like it already does for a genuine (possibly partial) client-sent event.
+func (h *Handler) terminateClientNativePlayerStream(clientId string) {
+	if h.App.WSEventManager == nil {
+		return
+	}
+	h.HandleClientEvents(&events.WebsocketClientEvent{
+		ClientID: clientId,
+		Type:     events.VideoCoreEventType,
+		Payload: map[string]interface{}{
+			"clientId": clientId,
+			"type":     "video-terminated",
+			"payload": map[string]interface{}{
+				"id":           "",
+				"clientId":     clientId,
+				"playerType":   "",
+				"playbackType": "",
+			},
+		},
+	})
 }
 
 func UnmarshalWebsocketClientEvent(msg []byte) (*events.WebsocketClientEvent, error) {
