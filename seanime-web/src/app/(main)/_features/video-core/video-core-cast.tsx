@@ -1,4 +1,5 @@
 import { getServerBaseUrl } from "@/api/client/server-url"
+import { buildDirectstreamAttachmentUrl } from "@/app/(main)/_features/video-core/_lib/directstream-attachment-url"
 import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets"
 import { Button, IconButton } from "@/components/ui/button"
 import { cn } from "@/components/ui/core/styling"
@@ -179,7 +180,12 @@ export async function castCurrentMedia(playbackInfo: any) {
     if (playbackInfo.mkvMetadata?.attachments) {
         const fontUrls = playbackInfo.mkvMetadata.attachments
             .filter((a: any) => a.type === "font")
-            .map((a: any) => `${serverBaseUrl}/api/v1/directstream/att/${a.filename}`)
+            .map((a: any) => buildDirectstreamAttachmentUrl({
+                baseUrl: serverBaseUrl,
+                filename: a.filename,
+                streamUrl: playbackInfo.streamUrl,
+                tokenQuery: "",
+            }))
         if (fontUrls.length > 0) {
             await window.electron.cast.sendFonts(fontUrls, serverPort)
         }

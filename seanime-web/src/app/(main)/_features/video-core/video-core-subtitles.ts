@@ -1,5 +1,6 @@
 import { getServerBaseUrl } from "@/api/client/server-url"
 import { MKVParser_SubtitleEvent, MKVParser_TrackInfo } from "@/api/generated/types"
+import { buildDirectstreamAttachmentUrl } from "@/app/(main)/_features/video-core/_lib/directstream-attachment-url"
 import { VideoCorePgsRenderer } from "@/app/(main)/_features/video-core/video-core-pgs-renderer"
 import { vc_getSubtitleStyle } from "@/app/(main)/_features/video-core/video-core-settings-menu"
 import { ThrottledDispatcher } from "@/app/(main)/_features/video-core/video-core-throttled-dispatcher"
@@ -478,7 +479,12 @@ Style: Default, Roboto Medium,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0
 
 
                     this.fonts = this.playbackInfo.mkvMetadata?.attachments?.filter(a => a.type === "font")
-                        ?.map(a => `${getServerBaseUrl()}/api/v1/directstream/att/${a.filename}${this.hmacToken}`) || []
+                        ?.map(a => buildDirectstreamAttachmentUrl({
+                            baseUrl: getServerBaseUrl(),
+                            filename: a.filename,
+                            streamUrl: this.playbackInfo.streamUrl,
+                            tokenQuery: this.hmacToken,
+                        })) || []
 
                     if (!this.playbackInfo.libassFonts) {
                         this.fonts = [...new Set([...this.fonts, defaultFontUrl])]
