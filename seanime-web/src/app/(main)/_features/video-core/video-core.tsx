@@ -53,6 +53,7 @@ import {
     VideoCoreTimestamp,
     VideoCoreVolumeButton,
 } from "@/app/(main)/_features/video-core/video-core-control-bar"
+import { attemptAutoplay } from "@/app/(main)/_features/video-core/video-core-autoplay"
 import { VideoCoreDrawer } from "@/app/(main)/_features/video-core/video-core-drawer"
 import { useVideoCoreSetupEvents } from "@/app/(main)/_features/video-core/video-core-events"
 import { vc_fullscreenManager, VideoCoreFullscreenManager } from "@/app/(main)/_features/video-core/video-core-fullscreen"
@@ -1512,7 +1513,10 @@ export function VideoCore(props: VideoCoreProps) {
                     restoreSeekTime(state.playbackInfo.initialState.currentTime, false, state.playbackInfo.initialState.paused)
                 }
             } else if (autoPlay) {
-                videoRef.current.play().catch()
+                // hasSoughtRef above already guarantees this branch runs at most once per stream
+                // load, so a fresh throwaway ref is fine here - attemptAutoplay's own idempotency
+                // guard isn't needed on top of that.
+                attemptAutoplay(videoRef.current, { current: false }, (msg, err) => log.error(msg, err))
             }
         }
     }

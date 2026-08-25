@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { attemptHlsAutoplay } from "./video-core-autoplay"
+import { attemptAutoplay } from "./video-core-autoplay"
 
 function makeVideoElement(playImpl: () => Promise<void>) {
     return {
@@ -8,12 +8,12 @@ function makeVideoElement(playImpl: () => Promise<void>) {
     }
 }
 
-describe("attemptHlsAutoplay", () => {
+describe("attemptAutoplay", () => {
     it("plays the video and marks the ref as triggered", async () => {
         const video = makeVideoElement(() => Promise.resolve())
         const triggeredRef = { current: false }
 
-        attemptHlsAutoplay(video, triggeredRef)
+        attemptAutoplay(video, triggeredRef)
         await Promise.resolve()
 
         expect(video.play).toHaveBeenCalledTimes(1)
@@ -24,7 +24,7 @@ describe("attemptHlsAutoplay", () => {
         const video = makeVideoElement(() => Promise.resolve())
         const triggeredRef = { current: true }
 
-        attemptHlsAutoplay(video, triggeredRef)
+        attemptAutoplay(video, triggeredRef)
         await Promise.resolve()
 
         expect(video.play).not.toHaveBeenCalled()
@@ -38,7 +38,7 @@ describe("attemptHlsAutoplay", () => {
         })
         const triggeredRef = { current: false }
 
-        attemptHlsAutoplay(video, triggeredRef)
+        attemptAutoplay(video, triggeredRef)
         await Promise.resolve()
         await Promise.resolve()
         await Promise.resolve()
@@ -52,7 +52,7 @@ describe("attemptHlsAutoplay", () => {
         const triggeredRef = { current: false }
         const onError = vi.fn()
 
-        expect(() => attemptHlsAutoplay(video, triggeredRef, onError)).not.toThrow()
+        expect(() => attemptAutoplay(video, triggeredRef, onError)).not.toThrow()
         await Promise.resolve()
         await Promise.resolve()
         await Promise.resolve()

@@ -1,6 +1,6 @@
 import { vc_audioManager } from "@/app/(main)/_features/video-core/video-core"
 import { getPreferredHlsQualityLevel } from "@/app/(main)/_features/video-core/_lib/hls-quality"
-import { attemptHlsAutoplay } from "@/app/(main)/_features/video-core/video-core-autoplay"
+import { attemptAutoplay } from "@/app/(main)/_features/video-core/video-core-autoplay"
 import { RollingFailureTracker } from "@/app/(main)/_features/video-core/video-core-rolling-failure-tracker"
 import { vc_autoPlayVideoAtom } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { logger } from "@/lib/helpers/debug"
@@ -291,9 +291,9 @@ export function useVideoCoreHls({
             // manifest parses) can be significantly delayed or never fire for a torrent stream
             // whose pieces aren't downloaded yet. `canplay` is the browser's own "enough data
             // to start" signal and fires independently, so it races FRAG_BUFFERED and whichever
-            // comes first wins (attemptHlsAutoplay is idempotent via hlsAutoPlayTriggered).
+            // comes first wins (attemptAutoplay is idempotent via hlsAutoPlayTriggered).
             const onCanPlay = () => {
-                if (autoPlayRef.current) attemptHlsAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
+                if (autoPlayRef.current) attemptAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
             }
             videoElement.addEventListener("canplay", onCanPlay)
 
@@ -371,7 +371,7 @@ export function useVideoCoreHls({
                 // registered above - whichever fires first wins).
                 if (autoPlayRef.current && !hlsAutoPlayTriggered.current) {
                     hls.once(Events.FRAG_BUFFERED, () => {
-                        attemptHlsAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
+                        attemptAutoplay(videoElement, hlsAutoPlayTriggered, (msg, err) => hlsLog.error(msg, err))
                     })
                 }
             })
