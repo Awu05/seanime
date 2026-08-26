@@ -1,6 +1,7 @@
 package videocore
 
 import (
+	"bytes"
 	"encoding/json"
 	"seanime/internal/events"
 	"seanime/internal/library/anime"
@@ -8,8 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 )
+
+// newCapturingLogger returns a logger writing to buf, for tests that need to assert on log
+// output rather than just PlaybackState/observable side effects.
+func newCapturingLogger(buf *bytes.Buffer) *zerolog.Logger {
+	logger := zerolog.New(buf).With().Timestamp().Logger()
+	return &logger
+}
 
 type recordedWSEvent struct {
 	clientId  string
@@ -549,4 +558,55 @@ func TestNonLoadEventCannotClaimDisconnectedPlayback(t *testing.T) {
 	state, ok := vc.GetPlaybackState()
 	require.True(t, ok)
 	require.Equal(t, "owner-client", state.ClientId)
+}
+
+// TestPushEventLogsWarningWhenNoPlaybackState guards a real production incident: a reported
+// "watched count never updates" bug where the frontend-confirmed-correct video-completed event
+// was silently dropped somewhere in the server pipeline, with nothing in the logs to say why.
+// PushEvent silently returns whenever GetPlaybackState() reports no state (or an incomplete one -
+// e.g. PlaybackInfo.Episode not yet set), which can happen for reasons other than the client
+// simply never having loaded a stream (a race during episode transition, a takeover mid-flight,
+// etc). Without a log line, that silence is indistinguishable from "the client just never sent
+// the event" and next time this happens there is nothing to grep for. This test doesn't identify
+// the exact cause of the incident - it verifies the diagnostic instrumentation needed to find it.
+func TestPushEventLogsWarningWhenNoPlaybackState(t *testing.T) {
+	var buf bytes.Buffer
+	ws := newRecordingWSEventManager()
+	vc := New(NewVideoCoreOptions{WsEventManager: ws, Logger: newCapturingLogger(&buf)})
+	t.Cleanup(vc.Shutdown)
+
+	vc.PushEvent(&VideoCompletedEvent{CurrentTime: 100, Duration: 120})
+
+	require.Contains(t, buf.String(), "no playback state")
+}
+
+// TestOwnershipMismatchDropLogsWarning is the diagnostic counterpart to
+// TestNonLoadEventCannotClaimDisconnectedPlayback: dropping a non-owner's event is correct
+// behavior (see that test), but it happened completely silently, which is indistinguishable in
+// production logs from the event never having been sent by the client at all.
+func TestOwnershipMismatchDropLogsWarning(t *testing.T) {
+	var buf bytes.Buffer
+	ws := newRecordingWSEventManager()
+	ws.clientIds = []string{"owner-client", "new-client"}
+	vc := New(NewVideoCoreOptions{WsEventManager: ws, Logger: newCapturingLogger(&buf)})
+	t.Cleanup(vc.Shutdown)
+
+	ownerState := newPlaybackState("owner-playback")
+	ownerState.ClientId = "owner-client"
+	vc.setPlaybackState(ownerState)
+
+	ws.MockSendVideoCoreEvent(ClientEvent{
+		ClientId: "new-client",
+		Type:     PlayerEventVideoCompleted,
+		Payload: mustMarshalRaw(t, clientVideoStatusPayload{
+			CurrentTime: 100,
+			Duration:    120,
+		}),
+	})
+
+	require.Eventually(t, func() bool {
+		return buf.String() != ""
+	}, time.Second, 10*time.Millisecond)
+	require.Contains(t, buf.String(), "owner-client")
+	require.Contains(t, buf.String(), "new-client")
 }

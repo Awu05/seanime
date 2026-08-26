@@ -153,6 +153,7 @@ func (vc *VideoCore) PushEvent(event VideoEvent) {
 	// Before pushing the event, identify it with the playback state.
 	state, ok := vc.GetPlaybackState()
 	if !ok {
+		vc.logger.Warn().Msgf("videocore: Dropping event %T, no playback state (nil, or PlaybackInfo/Episode not set)", event)
 		return
 	}
 	event.identify(state.PlaybackInfo.Id, state.ClientId, state.PlayerType, state.PlaybackInfo.PlaybackType)
@@ -887,6 +888,8 @@ func (vc *VideoCore) listenToClientEvents() {
 						}
 					}
 					if ownerConnected || playerEvent.Type != PlayerEventVideoLoaded {
+						vc.logger.Warn().Msgf("videocore: Dropping %s event from client %s, current playback owner is %s (ownerConnected=%v)",
+							playerEvent.Type, eventClientID, currentState.ClientId, ownerConnected)
 						continue
 					}
 					takeover = true
