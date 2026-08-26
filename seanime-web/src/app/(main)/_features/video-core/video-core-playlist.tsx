@@ -118,7 +118,7 @@ export function useVideoCorePlaylistSetup(providedState: VideoCoreLifecycleState
     }, [animeEntry, playbackInfo?.id, currentEpisode, previousEpisode, nextEpisode, onPlayEpisode])
 }
 
-export function useVideoCorePlaylist() {
+export function useVideoCorePlaylist(onNoNextEpisode?: () => void) {
     const playlistState = useAtomValue(vc_playlistState)
     const playbackType = playlistState?.type
     const animeEntry = playlistState?.animeEntry
@@ -279,6 +279,9 @@ export function useVideoCorePlaylist() {
                 case "next":
                     if (globalPlaylistNextEpisode) {
                         playGlobalPlaylistEpisode("next", true)
+                    } else {
+                        log.info("No next episode in global playlist, terminating stream")
+                        onNoNextEpisode?.()
                     }
                     break
             }
@@ -304,6 +307,9 @@ export function useVideoCorePlaylist() {
 
         if (!episode) {
             log.info("Episode not found for", which)
+            if (which === "next") {
+                onNoNextEpisode?.()
+            }
             return
         }
 

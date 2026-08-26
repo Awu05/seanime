@@ -448,7 +448,12 @@ func (m *Manager) playNextEpisode() {
 	}
 
 	if episode == nil {
-		m.logger.Error().Msg("playlist: Cannot play next episode, no episodes in playlist")
+		m.logger.Debug().Msg("playlist: No more episodes in playlist, stopping playback")
+		// Terminate the player - this round-trips through the client (which calls its own
+		// terminate cleanup and reports back), which is what actually stops the underlying
+		// torrent/debrid/local file stream. See nativeplayer.NativePlayer.Stop.
+		m.nativePlayer.Stop()
+		m.StopPlaylist("Playlist finished")
 		return
 	}
 

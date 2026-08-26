@@ -1276,11 +1276,19 @@ export function VideoCore(props: VideoCoreProps) {
     // alone isn't reliable after a large seek (e.g. scrubbing straight to the end) on some
     // browsers - notably Android WebView-based ones (TV Bro on Nvidia Shield reported) - so this
     // is also run on seeked and ended to catch a completion that a skip landed on directly.
-    const checkVideoCompleted = () => {
-        if (!videoRef.current) return
+    // `source` is only used for diagnostic logging on the low-frequency seeked/ended calls -
+    // logging on every timeupdate (several times a second) would be spam.
+    const checkVideoCompleted = (source?: "seeked" | "ended") => {
+        if (!videoRef.current) {
+            if (source) log.warn(`checkVideoCompleted(${source}): videoRef.current is null`)
+            return
+        }
         const v = videoRef.current
 
         const percent = v.currentTime / v.duration
+        if (source) {
+            log.info(`checkVideoCompleted(${source}): currentTime=${v.currentTime} duration=${v.duration} percent=${percent} alreadyCompleted=${videoCompletedRef.current}`)
+        }
         if (!!v.duration && !videoCompletedRef.current && percent >= 0.8) {
             videoCompletedRef.current = true
             onCompleted?.()
@@ -1294,13 +1302,13 @@ export function VideoCore(props: VideoCoreProps) {
     }
 
     const handleSeeked = () => {
-        checkVideoCompleted()
+        checkVideoCompleted("seeked")
     }
 
-    const { playEpisode, isGlobalPlaylistActive } = useVideoCorePlaylist()
+    const { playEpisode, isGlobalPlaylistActive } = useVideoCorePlaylist(onTerminateStream)
     const handleEnded = (e: React.SyntheticEvent<HTMLVideoElement>) => {
         log.info("Video ended")
-        checkVideoCompleted()
+        checkVideoCompleted("ended")
         subtitleManager?.pgsRenderer?.stop()
         onEnded?.()
         if (autoNext && !isWatchPartyParticipant) {

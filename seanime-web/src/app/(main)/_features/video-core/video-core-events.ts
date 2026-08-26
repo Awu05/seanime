@@ -355,8 +355,11 @@ export function useVideoCoreSetupEvents(id: string,
     }
 
     function dispatchVideoCompletedEvent() {
-        if (!videoElement) return
-        log.trace("Video completed")
+        if (!videoElement) {
+            log.warn("Dropping video-completed dispatch: videoElement is null")
+            return
+        }
+        log.info("Video completed")
         sendEvent("video-completed", {
             currentTime: videoElement.currentTime,
             duration: videoElement.duration,
