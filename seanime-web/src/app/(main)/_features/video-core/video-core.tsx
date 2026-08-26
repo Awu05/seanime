@@ -765,50 +765,15 @@ export function VideoCore(props: VideoCoreProps) {
     const isFirstError = React.useRef(true)
     const shouldDispatchTerminatedOnUnmount = React.useRef(false)
     const [activePlayer, setActivePlayer] = useAtom(vc_activePlayerId)
-    const pendingMiniPlayerTransitionRef = React.useRef(false)
     const {
         isOpen: isTerminateConfirmOpen,
         open: openTerminateConfirm,
         close: closeTerminateConfirm,
     } = useDisclosure(false)
 
-    const startMiniPlayerTransition = React.useCallback(() => {
-        startVideoCoreMiniPlayerTransition(() => {
-            setIsMiniPlayer(true)
-        })
-    }, [setIsMiniPlayer])
-
-    const enterMiniPlayer = React.useCallback(() => {
-        if (isMiniPlayer) return
-
-        if (fullscreen) {
-            if (!fullscreenManager) {
-                startMiniPlayerTransition()
-                return
-            }
-
-            pendingMiniPlayerTransitionRef.current = true
-            fullscreenManager.exitFullscreen()
-            return
-        }
-
-        startMiniPlayerTransition()
-    }, [fullscreen, fullscreenManager, isMiniPlayer, startMiniPlayerTransition])
-
     React.useEffect(() => {
         setIsMiniPlayer(false)
     }, [])
-
-    React.useLayoutEffect(() => {
-        if (!pendingMiniPlayerTransitionRef.current || fullscreen) return
-
-        pendingMiniPlayerTransitionRef.current = false
-        const frame = window.requestAnimationFrame(startMiniPlayerTransition)
-
-        return () => {
-            window.cancelAnimationFrame(frame)
-        }
-    }, [fullscreen, startMiniPlayerTransition])
 
     React.useEffect(() => {
         setPluginSkipDataOverride(undefined)
@@ -1791,11 +1756,7 @@ export function VideoCore(props: VideoCoreProps) {
                     open={state.active}
                     onOpenChange={(v) => {
                         if (!v) {
-                            if (!isMiniPlayer) {
-                                enterMiniPlayer()
-                            } else {
-                                onTerminateStream()
-                            }
+                            onTerminateStream()
                         } else {
                             React.startTransition(() => {
                                 videoRef?.current?.focus?.()
@@ -1833,7 +1794,7 @@ export function VideoCore(props: VideoCoreProps) {
                             return
                         }
 
-                        enterMiniPlayer()
+                        onTerminateStream()
                     }}
                 >
                     <PlayerContent
