@@ -295,6 +295,7 @@ interface PlayerContentProps {
     handleClick: (e: React.MouseEvent<HTMLDivElement>) => void
     handleLoadedMetadata: (e: React.SyntheticEvent<HTMLVideoElement>) => void
     handleTimeUpdate: (e: React.SyntheticEvent<HTMLVideoElement>) => void
+    handleSeeked: () => void
     handleEnded: (e: React.SyntheticEvent<HTMLVideoElement>) => void
     handlePlay: (e: React.SyntheticEvent<HTMLVideoElement>) => void
     handlePause: (e: React.SyntheticEvent<HTMLVideoElement>) => void
@@ -327,6 +328,7 @@ const PlayerContent = React.memo<PlayerContentProps>(({
     handleClick,
     handleLoadedMetadata,
     handleTimeUpdate,
+    handleSeeked,
     handleEnded,
     handlePlay,
     handlePause,
@@ -446,6 +448,7 @@ const PlayerContent = React.memo<PlayerContentProps>(({
                                 tabIndex={0}
                                 onLoadedMetadata={handleLoadedMetadata}
                                 onTimeUpdate={handleTimeUpdate}
+                                onSeeked={handleSeeked}
                                 onEnded={handleEnded}
                                 onPlay={handlePlay}
                                 onPause={handlePause}
@@ -1303,12 +1306,15 @@ export function VideoCore(props: VideoCoreProps) {
         }
     }, [streamType, currentPlaybackRef.current])
 
-    const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-        onTimeUpdate?.(e)
+    // Checks whether playback has crossed the 80% completion threshold and dispatches the
+    // completed event exactly once. Driven by timeupdate for normal playback, but timeupdate
+    // alone isn't reliable after a large seek (e.g. scrubbing straight to the end) on some
+    // browsers - notably Android WebView-based ones (TV Bro on Nvidia Shield reported) - so this
+    // is also run on seeked and ended to catch a completion that a skip landed on directly.
+    const checkVideoCompleted = () => {
         if (!videoRef.current) return
         const v = videoRef.current
 
-        // Video completed event
         const percent = v.currentTime / v.duration
         if (!!v.duration && !videoCompletedRef.current && percent >= 0.8) {
             videoCompletedRef.current = true
@@ -1317,9 +1323,19 @@ export function VideoCore(props: VideoCoreProps) {
         }
     }
 
+    const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        onTimeUpdate?.(e)
+        checkVideoCompleted()
+    }
+
+    const handleSeeked = () => {
+        checkVideoCompleted()
+    }
+
     const { playEpisode, isGlobalPlaylistActive } = useVideoCorePlaylist()
     const handleEnded = (e: React.SyntheticEvent<HTMLVideoElement>) => {
         log.info("Video ended")
+        checkVideoCompleted()
         subtitleManager?.pgsRenderer?.stop()
         onEnded?.()
         if (autoNext && !isWatchPartyParticipant) {
@@ -1738,6 +1754,7 @@ export function VideoCore(props: VideoCoreProps) {
                         handleClick={handleClick}
                         handleLoadedMetadata={handleLoadedMetadata}
                         handleTimeUpdate={handleTimeUpdate}
+                        handleSeeked={handleSeeked}
                         handleEnded={handleEnded}
                         handlePlay={handlePlay}
                         handlePause={handlePause}
@@ -1834,6 +1851,7 @@ export function VideoCore(props: VideoCoreProps) {
                         handleClick={handleClick}
                         handleLoadedMetadata={handleLoadedMetadata}
                         handleTimeUpdate={handleTimeUpdate}
+                        handleSeeked={handleSeeked}
                         handleEnded={handleEnded}
                         handlePlay={handlePlay}
                         handlePause={handlePause}
