@@ -10,7 +10,7 @@ import { useAtomValue } from "jotai"
 import { useAtom } from "jotai/react"
 import React from "react"
 import { startVideoCoreMiniPlayerTransition } from "./video-core"
-import { vc_fullscreenManager } from "./video-core-fullscreen"
+import { exitFullscreenSafely, vc_fullscreenManager } from "./video-core-fullscreen"
 import { MediaCoreTopSectionView, MediaCoreTopPlaybackInfoView } from "@/app/(main)/_features/media-core/media-core-playback-info"
 
 export function VideoCoreTopSection(props: { children?: React.ReactNode, inline?: boolean }) {
@@ -57,7 +57,7 @@ export function VideoCoreTopPlaybackInfo(props: { state: VideoCoreLifecycleState
     const onAnimeTitleClick = React.useCallback(() => {
         if (state.playbackInfo?.episode?.baseAnime?.id) {
             router.push(`/entry?id=${state.playbackInfo?.episode?.baseAnime?.id}`)
-            fullscreenManager?.exitFullscreen()?.then(() => {
+            exitFullscreenSafely(fullscreenManager).then(() => {
                 startVideoCoreMiniPlayerTransition(() => {
                     setMiniPlayer(true)
                 })

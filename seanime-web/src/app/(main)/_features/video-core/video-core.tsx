@@ -56,7 +56,7 @@ import {
 import { attemptAutoplay } from "@/app/(main)/_features/video-core/video-core-autoplay"
 import { VideoCoreDrawer } from "@/app/(main)/_features/video-core/video-core-drawer"
 import { useVideoCoreSetupEvents } from "@/app/(main)/_features/video-core/video-core-events"
-import { vc_fullscreenManager, VideoCoreFullscreenManager } from "@/app/(main)/_features/video-core/video-core-fullscreen"
+import { exitFullscreenSafely, vc_fullscreenManager, VideoCoreFullscreenManager } from "@/app/(main)/_features/video-core/video-core-fullscreen"
 import {
     useVideoCoreHls,
     vc_hlsAudioTracks,
@@ -1802,6 +1802,19 @@ export function VideoCore(props: VideoCoreProps) {
                             return
                         }
 
+                        // Esc while fullscreen exits fullscreen into mini player first, mirroring
+                        // the native "Esc backs out of fullscreen" expectation, instead of
+                        // terminating outright. A second Esc (now in mini player, handled by the
+                        // branch above) opens the terminate confirmation as usual.
+                        if (fullscreenManager?.isFullscreen) {
+                            exitFullscreenSafely(fullscreenManager).then(() => {
+                                startVideoCoreMiniPlayerTransition(() => {
+                                    setIsMiniPlayer(true)
+                                })
+                            })
+                            return
+                        }
+
                         onTerminateStream()
                     }}
                 >
@@ -1875,72 +1888,64 @@ function FloatingButtons(props: { part: "video" | "loading", onTerminateStream: 
     const [isMiniPlayer, setIsMiniPlayer] = useAtom(vc_miniPlayer)
     const fullscreenManager = useAtomValue(vc_fullscreenManager)
 
-    if (fullscreen && part === "video") return null
+    // Once in mini player, always show its controls - even if `fullscreen` is stuck true because
+    // the browser's Fullscreen API didn't fire a fullscreenchange event on exit (seen on
+    // Android WebView-based browsers like TV Bro). Being in mini player should always win
+    // visually over a possibly-stale fullscreen flag.
+    if (fullscreen && !isMiniPlayer && part === "video") return null
     const Content = () => (
         <>
-            {fullscreen ? (
+            {isMiniPlayer ? (
                 <>
                     <IconButton
-                        data-vc-element="floating-button-exit-fullscreen"
+                        data-vc-element="floating-button-expand"
                         data-vc-for={part}
-                        icon={<FiMinimize2 className="text-2xl" />}
-                        intent="gray-basic"
-                        className="rounded-full absolute top-0 flex-none right-4 z-[999]"
+                        type="button"
+                        intent="gray"
+                        size="sm"
+                        className="rounded-full text-2xl flex-none absolute z-[999] right-4 top-4 pointer-events-auto bg-black/30 hover:bg-black/40 text-xl"
+                        icon={<BiExpand />}
                         onClick={() => {
-                            fullscreenManager?.exitFullscreen()
+                            setIsMiniPlayer(false)
+                        }}
+                    />
+                    <IconButton
+                        data-vc-element="floating-button-terminate"
+                        data-vc-for={part}
+                        type="button"
+                        intent="alert-subtle"
+                        size="sm"
+                        className="rounded-full text-2xl flex-none absolute z-[999] left-4 top-4 pointer-events-auto text-xl"
+                        icon={<BiX />}
+                        onClick={() => {
+                            onTerminateStream()
                         }}
                     />
                 </>
+            ) : fullscreen ? (
+                <IconButton
+                    data-vc-element="floating-button-exit-fullscreen"
+                    data-vc-for={part}
+                    icon={<FiMinimize2 className="text-2xl" />}
+                    intent="gray-basic"
+                    className="rounded-full absolute top-0 flex-none right-4 z-[999]"
+                    onClick={() => {
+                        fullscreenManager?.exitFullscreen()
+                    }}
+                />
             ) : (
-                <>
-                    {!isMiniPlayer && <>
-                        <IconButton
-                            data-vc-element="floating-button-miniplayer"
-                            data-vc-for={part}
-                            icon={<FiMinimize2 className="text-2xl" />}
-                            intent="gray-basic"
-                            className="rounded-full absolute top-0 flex-none right-4 z-[999]"
-                            onClick={() => {
-                                startVideoCoreMiniPlayerTransition(() => {
-                                    setIsMiniPlayer(true)
-                                })
-                            }}
-                        />
-                    </>}
-
-                    {isMiniPlayer && <>
-                        <IconButton
-                            data-vc-element="floating-button-expand"
-                            data-vc-for={part}
-                            type="button"
-                            intent="gray"
-                            size="sm"
-                            className={cn(
-                                "rounded-full text-2xl flex-none absolute z-[999] right-4 top-4 pointer-events-auto bg-black/30 hover:bg-black/40",
-                                isMiniPlayer && "text-xl",
-                            )}
-                            icon={<BiExpand />}
-                            onClick={() => {
-                                setIsMiniPlayer(false)
-                            }}
-                        />
-                        <IconButton
-                            data-vc-element="floating-button-terminate"
-                            data-vc-for={part}
-                            type="button"
-                            intent="alert-subtle"
-                            size="sm"
-                            className={cn(
-                                "rounded-full text-2xl flex-none absolute z-[999] left-4 top-4 pointer-events-auto",
-                                isMiniPlayer && "text-xl",
-                            )}
-                            icon={<BiX />}
-                            onClick={() => {
-                                onTerminateStream()
-                            }}
-                        />
-                    </>}
-                </>
+                <IconButton
+                    data-vc-element="floating-button-miniplayer"
+                    data-vc-for={part}
+                    icon={<FiMinimize2 className="text-2xl" />}
+                    intent="gray-basic"
+                    className="rounded-full absolute top-0 flex-none right-4 z-[999]"
+                    onClick={() => {
+                        startVideoCoreMiniPlayerTransition(() => {
+                            setIsMiniPlayer(true)
+                        })
+                    }}
+                />
             )}
         </>
     )

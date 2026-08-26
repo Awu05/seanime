@@ -333,3 +333,16 @@ export class VideoCoreFullscreenManager extends EventTarget {
         this.onFullscreenChange(isFullscreen)
     }
 }
+
+// Some browsers (notably Android WebView-based ones like TV Bro) have an incomplete Fullscreen
+// API implementation - exitFullscreen() can resolve without actually exiting, or its promise can
+// simply never settle. Callers that chain a follow-up action (e.g. entering mini player) after
+// exiting fullscreen should use this instead of awaiting exitFullscreen() directly, so a
+// non-compliant browser can't make that follow-up action hang indefinitely.
+export function exitFullscreenSafely(manager: VideoCoreFullscreenManager | null, timeoutMs = 300): Promise<void> {
+    if (!manager) return Promise.resolve()
+    return Promise.race([
+        manager.exitFullscreen(),
+        new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
+    ])
+}
