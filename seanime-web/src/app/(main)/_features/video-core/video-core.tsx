@@ -1806,7 +1806,13 @@ export function VideoCore(props: VideoCoreProps) {
                         // the native "Esc backs out of fullscreen" expectation, instead of
                         // terminating outright. A second Esc (now in mini player, handled by the
                         // branch above) opens the terminate confirmation as usual.
-                        if (fullscreenManager?.isFullscreen) {
+                        //
+                        // Deliberately checks the `fullscreen` state (captured in this render's
+                        // closure) rather than fullscreenManager.isFullscreen (a live DOM query):
+                        // the browser exits fullscreen on Esc natively and un-preventably, often
+                        // before this handler even runs, so a live query here would almost always
+                        // already read false and this branch would never fire.
+                        if (fullscreen) {
                             exitFullscreenSafely(fullscreenManager).then(() => {
                                 startVideoCoreMiniPlayerTransition(() => {
                                     setIsMiniPlayer(true)
