@@ -57,7 +57,7 @@ export function VideoCoreTopPlaybackInfo(props: { state: VideoCoreLifecycleState
     const onAnimeTitleClick = React.useCallback(() => {
         if (state.playbackInfo?.episode?.baseAnime?.id) {
             router.push(`/entry?id=${state.playbackInfo?.episode?.baseAnime?.id}`)
-            exitFullscreenSafely(fullscreenManager, 300, { silent: true }).then(() => {
+            exitFullscreenSafely(fullscreenManager).then(() => {
                 startVideoCoreMiniPlayerTransition(() => {
                     setMiniPlayer(true)
                 })

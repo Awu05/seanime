@@ -4,7 +4,7 @@ import { atom } from "jotai"
 
 const log = logger("VIDEO CORE FULLSCREEN")
 
-export type FullscreenManagerChangedEvent = CustomEvent<{ isFullscreen: boolean, silent?: boolean }>
+export type FullscreenManagerChangedEvent = CustomEvent<{ isFullscreen: boolean }>
 export type FullscreenManagerDestroyedEvent = CustomEvent
 export type FullscreenManagerAttemptEvent = CustomEvent<{ method: "enter" | "exit" }>
 
@@ -21,16 +21,11 @@ export class VideoCoreFullscreenManager extends EventTarget {
     private containerElement: HTMLElement | null = null
     private videoElement: HTMLVideoElement | null = null
     private controller = new AbortController()
-    private onFullscreenChange: (isFullscreen: boolean, silent?: boolean) => void
+    private onFullscreenChange: (isFullscreen: boolean) => void
     private isElectronNativeFullscreen = false
     private attachVideoListeners?: () => void
-    // Set right before an intentional exitFullscreen({ silent: true }) call (the exit-fullscreen
-    // button, the fullscreen toggle, a remote "set-fullscreen: false" command). Consumed by the
-    // next fullscreenchange so callers reacting to an *unannounced* exit (Escape, browser chrome,
-    // OS-level fullscreen exit) can tell it apart from one they triggered themselves on purpose.
-    private silentNextExit = false
 
-    constructor(onFullscreenChange: (isFullscreen: boolean, silent?: boolean) => void) {
+    constructor(onFullscreenChange: (isFullscreen: boolean) => void) {
         super()
         this.onFullscreenChange = onFullscreenChange
         this.attachDocumentListeners()
@@ -112,16 +107,13 @@ export class VideoCoreFullscreenManager extends EventTarget {
 
     async toggleFullscreen() {
         if (this.isFullscreen) {
-            // A manual toggle-off should return to the normal windowed view, not the mini player.
-            await this.exitFullscreen({ silent: true })
+            await this.exitFullscreen()
         } else {
             await this.enterFullscreen()
         }
     }
 
-    async exitFullscreen(options?: { silent?: boolean }) {
-        if (options?.silent) this.silentNextExit = true
-
+    async exitFullscreen() {
         const attemptEvent: FullscreenManagerAttemptEvent = new CustomEvent("exitattempt", { detail: { method: "exit" } })
         this.dispatchEvent(attemptEvent)
 
@@ -333,14 +325,12 @@ export class VideoCoreFullscreenManager extends EventTarget {
 
     private handleFullscreenChange = () => {
         const isFullscreen = this.isFullscreen
-        const silent = !isFullscreen && this.silentNextExit
-        this.silentNextExit = false
         log.info("Fullscreen state changed:", isFullscreen)
 
-        const event: FullscreenManagerChangedEvent = new CustomEvent("fullscreenchanged", { detail: { isFullscreen, silent } })
+        const event: FullscreenManagerChangedEvent = new CustomEvent("fullscreenchanged", { detail: { isFullscreen } })
         this.dispatchEvent(event)
 
-        this.onFullscreenChange(isFullscreen, silent)
+        this.onFullscreenChange(isFullscreen)
     }
 }
 
@@ -349,10 +339,10 @@ export class VideoCoreFullscreenManager extends EventTarget {
 // simply never settle. Callers that chain a follow-up action (e.g. entering mini player) after
 // exiting fullscreen should use this instead of awaiting exitFullscreen() directly, so a
 // non-compliant browser can't make that follow-up action hang indefinitely.
-export function exitFullscreenSafely(manager: VideoCoreFullscreenManager | null, timeoutMs = 300, options?: { silent?: boolean }): Promise<void> {
+export function exitFullscreenSafely(manager: VideoCoreFullscreenManager | null, timeoutMs = 300): Promise<void> {
     if (!manager) return Promise.resolve()
     return Promise.race([
-        manager.exitFullscreen(options),
+        manager.exitFullscreen(),
         new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
     ])
 }
