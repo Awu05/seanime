@@ -1,11 +1,15 @@
 package scanner
 
 import (
+	"errors"
 	"seanime/internal/api/anilist"
+	"seanime/internal/api/metadata"
+	"seanime/internal/api/metadata_provider"
 	"seanime/internal/library/anime"
 	"seanime/internal/library/summary"
 	"seanime/internal/platforms/platform"
 	"seanime/internal/util"
+	"seanime/internal/util/result"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -164,6 +168,108 @@ func TestFileHydrator_HydrateMetadata(t *testing.T) {
 		})
 	}
 
+}
+
+// stubOffsetMetadataProvider is a minimal metadata_provider.Provider that returns a
+// caller-supplied AnimeMetadata for GetAnimeMetadata, so hydrateForcedAbsoluteEpisode can be
+// tested without an AniList fixture (this package's real-data tests need recorded AniList
+// fixtures that aren't available in every environment).
+type stubOffsetMetadataProvider struct {
+	metadata *metadata.AnimeMetadata
+	err      error
+}
+
+func (s *stubOffsetMetadataProvider) GetAnimeMetadata(metadata.Platform, int) (*metadata.AnimeMetadata, error) {
+	return s.metadata, s.err
+}
+func (s *stubOffsetMetadataProvider) GetAnimeMetadataWrapper(*anilist.BaseAnime, *metadata.AnimeMetadata) metadata_provider.AnimeMetadataWrapper {
+	return nil
+}
+func (s *stubOffsetMetadataProvider) GetCache() *result.BoundedCache[string, *metadata.AnimeMetadata] {
+	return nil
+}
+func (s *stubOffsetMetadataProvider) SetUseFallbackProvider(bool) {}
+func (s *stubOffsetMetadataProvider) ClearCache()                 {}
+func (s *stubOffsetMetadataProvider) Close()                      {}
+
+// TestFileHydrator_hydrateForcedAbsoluteEpisode is a regression test for a real production bug:
+// a full-season batch torrent numbered absolutely (e.g. spanning both Part 1 and Part 2 of a
+// split-cour season) auto-selected for a "Part 2" AniList entry would incorrectly match a
+// low-numbered file (e.g. "02", actually Part 1's episode 2) as if it were Part 2's own episode
+// 2 - because a parsed number within the target media's own episode count was assumed to
+// already be part-relative, even under a forced media ID (torrent autoselect), where the
+// filename numbering could just as easily be absolute. A file whose absolute number belongs to
+// a different part must be left unmatched instead of colliding with that part's real episode.
+func TestFileHydrator_hydrateForcedAbsoluteEpisode(t *testing.T) {
+	// Simulates a season split into Part 1 (episodes 1-12) and Part 2 (episodes 13-24), where
+	// Part 2's own "episode 1" is AniDB/season-relative episode 13, absolute episode 25 (an
+	// AbsoluteEpisodeNumber-EpisodeNumber gap of 12, matching the >1 threshold that flags this
+	// as a split-cour season rather than an independently-numbered one).
+	partTwoMetadata := &metadata.AnimeMetadata{
+		EpisodeCount: 12,
+		Episodes: map[string]*metadata.EpisodeMetadata{
+			"1": {EpisodeNumber: 13, AbsoluteEpisodeNumber: 25},
+		},
+	}
+
+	newHydrator := func(providerErr error) *FileHydrator {
+		return &FileHydrator{
+			MetadataProviderRef: util.NewRef[metadata_provider.Provider](&stubOffsetMetadataProvider{metadata: partTwoMetadata, err: providerErr}),
+			ScanSummaryLogger:   summary.NewScanSummaryLogger(),
+			ForceMediaId:        155211,
+		}
+	}
+
+	t.Run("file belonging to a different part is left unmatched", func(t *testing.T) {
+		fh := newHydrator(nil)
+		lf := &anime.LocalFile{Metadata: &anime.LocalFileMetadata{}}
+
+		// Raw parsed "02" - within Part 2's own episode count (12) but actually Part 1's
+		// episode 2 in this batch's absolute numbering.
+		handled := fh.hydrateForcedAbsoluteEpisode(lf, 155211, 2)
+
+		assert.True(t, handled, "a split-cour media with offset info must always be handled, matched or not")
+		assert.Equal(t, "", lf.Metadata.AniDBEpisode, "must not be stamped with a colliding AniDBEpisode")
+		assert.Equal(t, -1, lf.Metadata.Episode)
+	})
+
+	t.Run("file genuinely belonging to this part resolves to the correct relative episode", func(t *testing.T) {
+		fh := newHydrator(nil)
+		lf := &anime.LocalFile{Metadata: &anime.LocalFileMetadata{}}
+
+		// Raw parsed "13" - Part 2's real first episode in absolute numbering.
+		handled := fh.hydrateForcedAbsoluteEpisode(lf, 155211, 13)
+
+		assert.True(t, handled)
+		assert.Equal(t, "1", lf.Metadata.AniDBEpisode)
+		assert.Equal(t, 1, lf.Metadata.Episode)
+	})
+
+	t.Run("non-split media defers to the caller's default handling", func(t *testing.T) {
+		fh := newHydrator(nil)
+		lf := &anime.LocalFile{Metadata: &anime.LocalFileMetadata{}}
+		fh.MetadataProviderRef = util.NewRef[metadata_provider.Provider](&stubOffsetMetadataProvider{
+			metadata: &metadata.AnimeMetadata{
+				EpisodeCount: 12,
+				Episodes: map[string]*metadata.EpisodeMetadata{
+					"1": {EpisodeNumber: 1, AbsoluteEpisodeNumber: 1},
+				},
+			},
+		})
+
+		handled := fh.hydrateForcedAbsoluteEpisode(lf, 1, 2)
+
+		assert.False(t, handled, "an independently-numbered season must not be touched - the caller keeps the raw parsed number")
+	})
+
+	t.Run("metadata provider error defers to the caller's default handling", func(t *testing.T) {
+		fh := newHydrator(errors.New("network error"))
+		lf := &anime.LocalFile{Metadata: &anime.LocalFileMetadata{}}
+
+		handled := fh.hydrateForcedAbsoluteEpisode(lf, 155211, 2)
+
+		assert.False(t, handled)
+	})
 }
 
 func TestFileHydrator_applyHydrationRule(t *testing.T) {

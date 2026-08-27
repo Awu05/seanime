@@ -299,6 +299,18 @@ func (fh *FileHydrator) hydrateGroupMetadata(
 				return
 			}
 
+			// The parsed number falls within this part's own episode count, but when we have a
+			// forced media ID (torrent autoselect) that's not proof it's already part-relative:
+			// a full-season batch torrent numbered absolutely (e.g. 1-24) can contain a
+			// different part's episode with the same low number (e.g. "02" being Part 1's
+			// episode 2, while this media is Part 2 starting at absolute episode 13). Resolve
+			// via the season's absolute-episode offset before assuming the number is correct.
+			if fh.ForceMediaId != 0 {
+				if handled := fh.hydrateForcedAbsoluteEpisode(lf, mId, episode); handled {
+					return
+				}
+			}
+
 			lf.Metadata.Episode = episode
 			lf.Metadata.AniDBEpisode = strconv.Itoa(episode)
 
@@ -551,6 +563,77 @@ func (fh *FileHydrator) hydrateGroupMetadata(
 
 	})
 
+}
+
+// hydrateForcedAbsoluteEpisode handles a file whose parsed episode number falls within this
+// part/media's own episode count, but where a forced media ID (torrent autoselect) means we
+// can't assume the number is already part-relative - it may be an absolute number from a batch
+// spanning multiple parts of the same season, coincidentally landing within this part's own
+// count (e.g. a full-season batch numbered 1-24 containing "02", which is actually Part 1's
+// episode 2, while this media is Part 2 starting at absolute episode 13).
+//
+// Returns true if it fully handled hydration: either by resolving the correct relative episode,
+// or by determining the file does NOT belong to this part and marking it unmatched so it can
+// never collide with a real match for a different part's episode of the same number. Returns
+// false if no season-level absolute-numbering information is available (e.g. this media isn't
+// part of a multi-part season at all), in which case the caller should fall back to treating the
+// parsed number as already part-relative - preserving prior behavior for the common case.
+func (fh *FileHydrator) hydrateForcedAbsoluteEpisode(lf *anime.LocalFile, mId int, episode int) bool {
+	animeMetadata, err := fh.MetadataProviderRef.Get().GetAnimeMetadata(metadata.AnilistPlatform, fh.ForceMediaId)
+	if err != nil {
+		return false
+	}
+
+	firstEp, ok := animeMetadata.Episodes["1"]
+	if !ok {
+		return false
+	}
+
+	// ref: media_tree_analysis.go - same heuristic used for the >episode-count case below.
+	usePartEpisodeNumber := firstEp.EpisodeNumber > 1 && firstEp.AbsoluteEpisodeNumber-firstEp.EpisodeNumber > 1
+	if !usePartEpisodeNumber {
+		return false
+	}
+
+	minPartAbsoluteEpisodeNumber := firstEp.EpisodeNumber
+	maxPartAbsoluteEpisodeNumber := minPartAbsoluteEpisodeNumber + animeMetadata.GetMainEpisodeCount() - 1
+
+	if episode < minPartAbsoluteEpisodeNumber || episode > maxPartAbsoluteEpisodeNumber {
+		// This absolute episode number belongs to a different part of the same season - it is
+		// NOT this media's episode, even though the raw number happens to fall within this
+		// part's own episode count. Leave it unmatched rather than stamping a colliding episode.
+		lf.Metadata.Episode = -1
+		lf.Metadata.AniDBEpisode = ""
+		lf.MediaId = fh.ForceMediaId
+
+		if fh.ScanLogger != nil {
+			fh.logFileHydration(zerolog.DebugLevel, lf, mId, episode).
+				Dict("absoluteEpisodeNormalization", zerolog.Dict().
+					Bool("matched", false).
+					Int("minPartAbsoluteEpisode", minPartAbsoluteEpisodeNumber).
+					Int("maxPartAbsoluteEpisode", maxPartAbsoluteEpisodeNumber),
+				).
+				Msg("File excluded: absolute episode number belongs to a different part of the season")
+		}
+		fh.ScanSummaryLogger.LogMetadataEpisodeNormalizationFailed(lf, errors.New("absolute episode number belongs to a different part of the season"), lf.Metadata.Episode, lf.Metadata.AniDBEpisode)
+		return true
+	}
+
+	relativeEp := episode - (minPartAbsoluteEpisodeNumber - 1)
+	lf.Metadata.Episode = relativeEp
+	lf.Metadata.AniDBEpisode = strconv.Itoa(relativeEp)
+	lf.MediaId = fh.ForceMediaId
+
+	if fh.ScanLogger != nil {
+		fh.logFileHydration(zerolog.DebugLevel, lf, mId, relativeEp).
+			Dict("absoluteEpisodeNormalization", zerolog.Dict().
+				Bool("matched", true).
+				Int("forcedMediaId", fh.ForceMediaId),
+			).
+			Msg("File normalized via absolute-episode offset")
+	}
+	fh.ScanSummaryLogger.LogMetadataMain(lf, lf.Metadata.Episode, lf.Metadata.AniDBEpisode)
+	return true
 }
 
 func (fh *FileHydrator) logFileHydration(level zerolog.Level, lf *anime.LocalFile, mId int, episode int) *zerolog.Event {
