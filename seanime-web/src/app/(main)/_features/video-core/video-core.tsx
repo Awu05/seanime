@@ -1764,6 +1764,7 @@ export function VideoCore(props: VideoCoreProps) {
                     open={state.active}
                     onOpenChange={(v) => {
                         if (!v) {
+                            log.warn("[DIAG] VideoCoreDrawer onOpenChange(false) - calling onTerminateStream", { isMiniPlayer, fullscreen })
                             onTerminateStream()
                         } else {
                             React.startTransition(() => {
@@ -1794,6 +1795,7 @@ export function VideoCore(props: VideoCoreProps) {
                         togglePlay()
                     }}
                     onEscapeKeyDown={e => {
+                        log.warn("[DIAG] VideoCoreDrawer onEscapeKeyDown received", { isMiniPlayer, fullscreen, defaultPrevented: e.defaultPrevented })
                         e.preventDefault()
                         if (isMiniPlayer) {
                             if (!isTerminateConfirmOpen) {
@@ -1813,6 +1815,7 @@ export function VideoCore(props: VideoCoreProps) {
                         // before this handler even runs, so a live query here would almost always
                         // already read false and this branch would never fire.
                         if (fullscreen) {
+                            log.warn("[DIAG] VideoCoreDrawer onEscapeKeyDown: taking fullscreen -> mini player branch")
                             exitFullscreenSafely(fullscreenManager).then(() => {
                                 startVideoCoreMiniPlayerTransition(() => {
                                     setIsMiniPlayer(true)
@@ -1821,6 +1824,7 @@ export function VideoCore(props: VideoCoreProps) {
                             return
                         }
 
+                        log.warn("[DIAG] VideoCoreDrawer onEscapeKeyDown: falling through to onTerminateStream")
                         onTerminateStream()
                     }}
                 >
