@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import { useHandleCurrentMediaContinuity } from "@/api/hooks/continuity.hooks"
 import { useDirectstreamConvertSubs } from "@/api/hooks/directstream.hooks"
 import { useCancelDiscordActivity } from "@/api/hooks/discord.hooks"
+import { useTorrentstreamDropTorrent } from "@/api/hooks/torrentstream.hooks"
 import { MediaCoreBufferingOverlay, MediaCoreErrorOverlay, MediaCoreLoadingOverlay } from "@/app/(main)/_features/media-core/media-core-overlays"
 import { useNakamaWatchParty } from "@/app/(main)/_features/nakama/nakama-manager"
 import { nativePlayer_initialState, nativePlayer_stateAtom } from "@/app/(main)/_features/native-player/native-player.atoms"
@@ -365,11 +366,21 @@ const PlayerContent = React.memo<PlayerContentProps>(({
     // Relay subtitles to Chromecast when casting
     useCastSubtitleRelay()
 
+    const { mutate: dropTorrent } = useTorrentstreamDropTorrent()
+
     return (
         <>
 
 
-            <MediaCoreErrorOverlay playbackError={state.playbackError} isMiniPlayer={isMiniPlayer} onClose={onTerminateStream} />
+            <MediaCoreErrorOverlay
+                playbackError={state.playbackError}
+                isMiniPlayer={isMiniPlayer}
+                onClose={onTerminateStream}
+                showClearTorrentCacheAction={state.lastPlaybackType === "torrent"}
+                onClearTorrentCache={() => {
+                    dropTorrent(undefined, { onSuccess: () => onTerminateStream() })
+                }}
+            />
 
             <div
                 data-vc-element="container"

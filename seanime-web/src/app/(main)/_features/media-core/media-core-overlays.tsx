@@ -26,8 +26,10 @@ export function MediaCoreErrorOverlay(props: {
     playbackError: string | null
     isMiniPlayer: boolean
     onClose?: () => void
+    showClearTorrentCacheAction?: boolean
+    onClearTorrentCache?: () => void
 }) {
-    const { playbackError, isMiniPlayer, onClose } = props
+    const { playbackError, isMiniPlayer, onClose, showClearTorrentCacheAction, onClearTorrentCache } = props
     if (!playbackError) return null
 
     return (
@@ -49,11 +51,18 @@ export function MediaCoreErrorOverlay(props: {
                 >
                     {playbackError || "An error occurred while playing the stream. Please try again later."}
                 </p>
-                {onClose && (
-                    <div className="mt-6">
-                        <Button intent="warning-subtle" size={isMiniPlayer ? "sm" : "md"} onClick={onClose}>
-                            Close Player
-                        </Button>
+                {(onClose || (showClearTorrentCacheAction && onClearTorrentCache)) && (
+                    <div className="mt-6 flex items-center justify-center gap-2">
+                        {showClearTorrentCacheAction && onClearTorrentCache && (
+                            <Button intent="alert-subtle" size={isMiniPlayer ? "sm" : "md"} onClick={onClearTorrentCache}>
+                                Clear torrent cache
+                            </Button>
+                        )}
+                        {onClose && (
+                            <Button intent="warning-subtle" size={isMiniPlayer ? "sm" : "md"} onClick={onClose}>
+                                Close Player
+                            </Button>
+                        )}
                     </div>
                 )}
             </div>

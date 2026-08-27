@@ -65,6 +65,12 @@ export function NativePlayer() {
     // See native-player-lifecycle.ts: guards against a "watch"/"abort-open" server event that
     // was already in flight when the user closed the player from resurrecting it.
     const terminatedRef = React.useRef(false)
+    // Tracks the last real playbackInfo's stream type, surviving the error event nulling
+    // playbackInfo out - see VideoCoreLifecycleState.lastPlaybackType.
+    const lastPlaybackTypeRef = React.useRef<NativePlayer_PlaybackInfo["streamType"] | null>(null)
+    if (state.playbackInfo?.streamType) {
+        lastPlaybackTypeRef.current = state.playbackInfo.streamType
+    }
 
     const resetSubtitleBuffer = React.useCallback(() => {
         subtitleBufferRef.current = []
@@ -320,6 +326,7 @@ export function NativePlayer() {
         // stream after the user closed it. Re-armed by the next legitimate "open-and-await".
         terminatedRef.current = true
 
+        lastPlaybackTypeRef.current = null
         resetSubtitleState("")
 
         // Clean up player first
@@ -365,6 +372,7 @@ export function NativePlayer() {
             active: state.active,
             loadingState: state.loadingState,
             playbackError: state.playbackError,
+            lastPlaybackType: lastPlaybackTypeRef.current,
             playbackInfo: state.playbackInfo ? {
                 id: state.playbackInfo.id,
                 playbackType: state.playbackInfo.streamType,
