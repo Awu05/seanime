@@ -14,11 +14,19 @@ import (
 	"seanime/internal/util"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/rs/zerolog"
 	"github.com/samber/lo"
 )
+
+// DefaultParseTimeout bounds how long GetMetadata waits on its underlying reader before giving
+// up. The initial demuxer read is otherwise fully synchronous with no cancellation of its own -
+// on a torrent/debrid-backed reader, a starved or wedged read (a piece that never gets
+// downloaded, a stuck reader) would hang this indefinitely with no error ever surfacing,
+// wedging playback with nothing to recover it. A var (not const) so tests can shrink it.
+var DefaultParseTimeout = 45 * time.Second
 
 const (
 	defaultTimecodeScale   = 1_000_000 // 1ms
@@ -58,6 +66,11 @@ type MetadataParser struct {
 	parseErr     error
 	parseOnce    sync.Once
 	metadataOnce sync.Once
+	// Guards parseErr/demuxer against the background goroutine started by parseMetadataOnce
+	// writing to them after a ctx timeout/cancellation has already given up and moved on (the
+	// goroutine isn't killed, just abandoned - it exits on its own once the underlying reader is
+	// closed by the caller, but may still be running when that happens).
+	resultMu sync.Mutex
 
 	// Internal state for parsing
 	demuxer *matroska.Demuxer
@@ -127,25 +140,47 @@ func (mp *MetadataParser) parseMetadataOnce(ctx context.Context) {
 	mp.parseOnce.Do(func() {
 		mp.logger.Debug().Msg("mkvparser: Starting metadata parsing")
 
-		_, _ = mp.reader.Seek(0, io.SeekStart)
+		// matroska.NewDemuxer reads synchronously from mp.reader with no cancellation of its
+		// own, and that reader is often backed by a torrent/debrid stream - a stalled or
+		// starved read (a piece that never gets prioritized/downloaded, a wedged reader) hangs
+		// this call forever with nothing to recover it, wedging playback indefinitely with no
+		// error ever surfacing. Race it against ctx so a caller-supplied timeout can actually
+		// bound it. The goroutine below is not killed on timeout, only abandoned - see resultMu.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
 
-		// Create demuxer
-		demuxer, err := matroska.NewDemuxer(mp.reader,
-			matroska.IDSegmentInfo,
-			matroska.IDSegment,
-			matroska.IDTracks,
-			matroska.IDChapters,
-			matroska.IDAttachments,
-			matroska.IDCues,
-		)
-		if err != nil {
-			mp.logger.Error().Err(err).Msg("mkvparser: Failed to create demuxer")
-			mp.parseErr = fmt.Errorf("mkvparser: Failed to create demuxer: %w", err)
-			return
+			_, _ = mp.reader.Seek(0, io.SeekStart)
+
+			// Create demuxer
+			demuxer, err := matroska.NewDemuxer(mp.reader,
+				matroska.IDSegmentInfo,
+				matroska.IDSegment,
+				matroska.IDTracks,
+				matroska.IDChapters,
+				matroska.IDAttachments,
+				matroska.IDCues,
+			)
+
+			mp.resultMu.Lock()
+			defer mp.resultMu.Unlock()
+			if err != nil {
+				mp.logger.Error().Err(err).Msg("mkvparser: Failed to create demuxer")
+				mp.parseErr = fmt.Errorf("mkvparser: Failed to create demuxer: %w", err)
+				return
+			}
+			mp.demuxer = demuxer
+			mp.logger.Debug().Msg("mkvparser: Metadata parsing completed")
+		}()
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			mp.resultMu.Lock()
+			defer mp.resultMu.Unlock()
+			mp.logger.Error().Err(ctx.Err()).Msg("mkvparser: Metadata parsing timed out or was cancelled, giving up")
+			mp.parseErr = fmt.Errorf("mkvparser: metadata parsing timed out or was cancelled: %w", ctx.Err())
 		}
-
-		mp.demuxer = demuxer
-		mp.logger.Debug().Msg("mkvparser: Metadata parsing completed")
 	})
 }
 

@@ -309,7 +309,9 @@ func (s *BaseStream) OnSubtitleFileUploaded(filename string, content string) {
 		}
 	}
 
-	metadata := parser.GetMetadata(context.Background())
+	parseCtx, cancel := context.WithTimeout(context.Background(), mkvparser.DefaultParseTimeout)
+	defer cancel()
+	metadata := parser.GetMetadata(parseCtx)
 	num := int64(len(metadata.Tracks)) + 1
 	subtitleNum := int64(len(metadata.SubtitleTracks))
 
