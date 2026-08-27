@@ -10,8 +10,10 @@ export type VideoCoreLifecycleState = {
     loadingState: string | null
     // The playback type of the last playbackInfo that was actually set, kept around after an
     // error clears playbackInfo so the error UI can still tell what kind of stream just failed
-    // (e.g. to only offer "Clear torrent cache" for a torrent failure).
-    lastPlaybackType: VideoCore_PlaybackType | null
+    // (e.g. to only offer "Clear torrent cache" for a torrent failure). Optional: only
+    // native-player.tsx populates it: other constructors of this type (onlinestream,
+    // localfile playback) don't go through that failure path.
+    lastPlaybackType?: VideoCore_PlaybackType | null
 }
 
 export type {
