@@ -130,9 +130,18 @@ export function useOnlinestreamAutoProviderCycler(props: UseOnlinestreamAutoProv
         })
     })
 
-    const goToNextCandidate = useLatestFunction((reason: string) => {
+    const goToNextCandidate = useLatestFunction((reason: string, isStall?: boolean) => {
         const currentTrial = trialRef.current
         if (!currentTrial) {
+            if (isStall) {
+                // A non-fatal HLS stall (fatal: false - HLS.js's own classification) that's
+                // already used up its one allowed refresh attempt for this source. HLS.js has
+                // its own internal stall recovery (buffer-hole skipping, etc.) that's often
+                // enough on its own - don't block an otherwise still-playing video behind a
+                // full-screen error overlay just because the app's own retry budget ran out.
+                log.warning("Stall recovery exhausted, leaving playback to HLS.js's own recovery", reason)
+                return
+            }
             setDetectedFailure(reason)
             setPlaybackError(reason)
             return
@@ -186,16 +195,16 @@ export function useOnlinestreamAutoProviderCycler(props: UseOnlinestreamAutoProv
         setProvider(providers[providerIndex])
     })
 
-    const onPlaybackError = useLatestFunction((reason: string) => {
+    const onPlaybackError = useLatestFunction((reason: string, isStall?: boolean) => {
         if (!shouldRecoverStartup(playbackTimeRef.current) || refreshingRef.current) return
         if (!provider || currentEpisodeNumber === null) {
-            goToNextCandidate(reason)
+            goToNextCandidate(reason, isStall)
             return
         }
 
         const refreshKey = getRefreshKey(provider, server, currentEpisodeNumber)
         if (!markSourceRefreshed(refreshedSourcesRef.current, refreshKey)) {
-            goToNextCandidate(reason)
+            goToNextCandidate(reason, isStall)
             return
         }
 
@@ -214,14 +223,14 @@ export function useOnlinestreamAutoProviderCycler(props: UseOnlinestreamAutoProv
         }).then(source => {
             if (activeCandidateRef.current !== refreshKey) return
             if (!source?.videoSources?.length) {
-                goToNextCandidate(reason)
+                goToNextCandidate(reason, isStall)
                 return
             }
             setUrl(null)
             setPlaybackError(null)
         }).catch(() => {
             if (activeCandidateRef.current === refreshKey) {
-                goToNextCandidate(reason)
+                goToNextCandidate(reason, isStall)
             }
         }).finally(() => {
             refreshingRef.current = false
@@ -230,7 +239,7 @@ export function useOnlinestreamAutoProviderCycler(props: UseOnlinestreamAutoProv
     })
 
     const onPlaybackStalled = useLatestFunction((reason: string) => {
-        onPlaybackError(reason)
+        onPlaybackError(reason, true)
     })
 
     const onLoadedMetadata = useLatestFunction(() => {
