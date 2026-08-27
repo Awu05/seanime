@@ -55,6 +55,14 @@ export function useGetOnlineStreamEpisodeSource(id: Nullish<string | number>,
         enabled: enabled && !!provider,
         muteError: true,
         gcTime: 0,
+        // The stall-recovery path (useOnlinestreamAutoProviderCycler.onPlaybackError) refreshes
+        // this query via setQueryData and relies on the resulting reference change alone to
+        // retrigger the effect that re-attaches the video source - it never sets the URL itself.
+        // With structural sharing on, a refresh that happens to return value-identical data (the
+        // same server/URLs, just re-validated) gets collapsed back to the same object reference,
+        // so that effect never re-fires and playback is stuck on "Loading stream" until a full
+        // page reload. Disabling it guarantees every refresh is seen as a genuine change.
+        structuralSharing: false,
     })
 }
 
