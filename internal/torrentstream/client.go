@@ -76,6 +76,48 @@ var (
 	allClients   = make(map[*Client]struct{})
 )
 
+// A torrent is only registered as an active/claimed stream (see SetActiveStream) once
+// StartStream has fully selected it - which can be well after the torrent handle already
+// exists in the shared engine (addTorrentMagnet, for one, blocks on t.GotInfo() first). A
+// concurrent drop (e.g. a StopStream for an unrelated, already-finished stream) run during that
+// window sees the still-being-set-up torrent as unclaimed and drops it out from under the
+// in-flight StartStream call, which then plays on with a torrent whose storage was just closed -
+// surfacing much later as a stuck "Loading metadata..." that eventually fails with
+// "reading from closed torrent: file already closed". recentlyAdded grants every newly added
+// torrent a grace period against drops regardless of claim state, closing that window.
+var (
+	recentlyAddedMu sync.Mutex
+	recentlyAdded   = make(map[metainfo.Hash]time.Time)
+)
+
+// A var (not const) so tests can shrink it instead of waiting out the real grace period.
+var recentlyAddedGracePeriod = 2 * time.Minute
+
+// markRecentlyAdded should be called as soon as a torrent handle is obtained from the underlying
+// engine (AddMagnet/AddTorrentFromFile), before waiting on its info/metadata.
+func markRecentlyAdded(h metainfo.Hash) {
+	recentlyAddedMu.Lock()
+	defer recentlyAddedMu.Unlock()
+	recentlyAdded[h] = time.Now()
+
+	// Opportunistic cleanup so this map doesn't grow unbounded over a long-running server.
+	for hash, addedAt := range recentlyAdded {
+		if time.Since(addedAt) >= recentlyAddedGracePeriod {
+			delete(recentlyAdded, hash)
+		}
+	}
+}
+
+func isWithinAddGracePeriod(h metainfo.Hash) bool {
+	recentlyAddedMu.Lock()
+	defer recentlyAddedMu.Unlock()
+	addedAt, ok := recentlyAdded[h]
+	if !ok {
+		return false
+	}
+	return time.Since(addedAt) < recentlyAddedGracePeriod
+}
+
 func NewClient(repository *Repository) *Client {
 	ret := &Client{
 		repository:                  repository,
@@ -425,6 +467,7 @@ func (c *Client) addTorrentMagnet(magnet string) (*torrent.Torrent, error) {
 	if err != nil {
 		return nil, err
 	}
+	markRecentlyAdded(t.InfoHash())
 
 	c.repository.logger.Trace().Msgf("torrentstream: Waiting to retrieve torrent info")
 	select {
@@ -450,6 +493,7 @@ func (c *Client) addTorrentFromFile(fp string) (*torrent.Torrent, error) {
 	if err != nil {
 		return nil, err
 	}
+	markRecentlyAdded(t.InfoHash())
 	c.repository.logger.Trace().Msgf("torrentstream: Waiting to retrieve torrent info")
 	<-t.GotInfo()
 	c.repository.logger.Info().Msgf("torrentstream: Torrent added: %s", t.InfoHash().AsString())
@@ -500,6 +544,7 @@ func (c *Client) addTorrentFromDownloadURL(url string) (*torrent.Torrent, error)
 	if err != nil {
 		return nil, err
 	}
+	markRecentlyAdded(t.InfoHash())
 	c.repository.logger.Trace().Msgf("torrentstream: Waiting to retrieve torrent info")
 	select {
 	case <-t.GotInfo():
@@ -601,6 +646,11 @@ func (c *Client) dropUnclaimedTorrentsWithClaims(keepHashes map[metainfo.Hash]bo
 	for _, t := range c.torrentClient.MustGet().Torrents() {
 		infoHash := t.InfoHash()
 		if keepHashes[infoHash] {
+			continue
+		}
+		if isWithinAddGracePeriod(infoHash) {
+			// Still being set up by an in-flight StartStream call that hasn't reached
+			// SetActiveStream yet - see recentlyAdded's doc comment.
 			continue
 		}
 		name := t.Name()

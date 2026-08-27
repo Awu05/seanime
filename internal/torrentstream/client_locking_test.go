@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/samber/mo"
 	"github.com/stretchr/testify/require"
 )
@@ -119,4 +120,39 @@ func TestDropUnclaimedTorrentsLockedDoesNotDeadlockWhenCMuAlreadyHeld(t *testing
 		t.Fatal("dropUnclaimedTorrentsLocked deadlocked while c.mu was already held by the caller " +
 			"- this reproduces the production hang in initializeClient/StopStream/CleanupSession")
 	}
+}
+
+// TestRecentlyAddedGracePeriodProtectsUnclaimedButInFlightTorrent reproduces a real production
+// incident: a torrent is registered with the shared engine (addTorrentMagnet et al. call
+// markRecentlyAdded as soon as they have a handle) well before StartStream finishes selecting it
+// and calls SetActiveStream to register the real claim - addTorrentMagnet blocks on t.GotInfo()
+// in between, which can take anywhere from milliseconds to the better part of a minute waiting on
+// peers. A concurrent drop sweep (e.g. an unrelated StopStream for a different, already-finished
+// session) landing in that window sees the still-being-set-up torrent as unclaimed by every
+// session's activeStreams map and would otherwise drop it - closing the underlying storage out
+// from under the in-flight StartStream call. That call then plays on with a torrent whose files
+// were just closed, surfacing much later as a stream stuck on "Loading metadata..." that
+// eventually fails with "reading from closed torrent: file already closed".
+//
+// The grace period must protect a freshly-added, not-yet-claimed hash, and must stop protecting
+// it once the grace period elapses (or a genuinely orphaned torrent added at server startup would
+// never be cleaned up).
+func TestRecentlyAddedGracePeriodProtectsUnclaimedButInFlightTorrent(t *testing.T) {
+	originalGracePeriod := recentlyAddedGracePeriod
+	recentlyAddedGracePeriod = 50 * time.Millisecond
+	t.Cleanup(func() { recentlyAddedGracePeriod = originalGracePeriod })
+
+	var hash metainfo.Hash
+	hash[0] = 1 // arbitrary non-zero hash so it doesn't collide with the zero-value default
+
+	require.False(t, isWithinAddGracePeriod(hash), "a hash that was never added should never be protected")
+
+	markRecentlyAdded(hash)
+	require.True(t, isWithinAddGracePeriod(hash),
+		"a torrent just registered with the engine (but not yet claimed via SetActiveStream) must "+
+			"survive a concurrent drop sweep during selection")
+
+	time.Sleep(2 * recentlyAddedGracePeriod)
+	require.False(t, isWithinAddGracePeriod(hash),
+		"the grace period must expire so a genuinely orphaned torrent is still eventually cleaned up")
 }

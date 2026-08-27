@@ -38,6 +38,8 @@ export function VideoCoreInlineHelpers({
     const [hasUpdatedProgress, setHasUpdateProgress] = useAtom(vc_inlineHelper_hasUpdatedProgress)
     const [progressUpdateData, setProgressUpdateData] = useAtom(vc_inlineHelper_progressUpdateData)
 
+    const { mutate: autoUpdateProgress } = useUpdateAnimeEntryProgress(media?.id, currentEpisodeNumber ?? 0)
+
     // Reset state when media, episode, or update completes
     React.useEffect(() => {
         setProgressUpdateData(null)
@@ -53,7 +55,7 @@ export function VideoCoreInlineHelpers({
 
         const checkProgress = () => {
             const player = playerRef.current
-            if (!player || serverStatus?.settings?.library?.autoUpdateProgress) return
+            if (!player) return
 
             // Skip if already updated or currently updating
             if (hasUpdatedProgress) return
@@ -70,7 +72,23 @@ export function VideoCoreInlineHelpers({
             const watchedRatio = currentTime / duration
             if (watchedRatio < PROGRESS_THRESHOLD) return
 
-            // prompt user
+            if (serverStatus?.settings?.library?.autoUpdateProgress) {
+                // Set optimistically so the once-a-second interval doesn't fire the mutation
+                // again while this one is still in flight; roll back on failure so a transient
+                // error doesn't permanently block the update for this episode.
+                setHasUpdateProgress(true)
+                autoUpdateProgress({
+                    episodeNumber: currentEpisodeNumber,
+                    mediaId: media.id,
+                    totalEpisodes: media.episodes || 0,
+                    malId: media.idMal || undefined,
+                }, {
+                    onError: () => setHasUpdateProgress(false),
+                })
+                return
+            }
+
+            // Auto-update is off - prompt the user to confirm via VideoCoreInlineHelperUpdateProgressButton.
             setProgressUpdateData({
                 media,
                 currentProgress,
@@ -94,6 +112,7 @@ export function VideoCoreInlineHelpers({
         currentProgress,
         progressUpdateData,
         url,
+        autoUpdateProgress,
     ])
 
     return null
