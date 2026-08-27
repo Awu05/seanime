@@ -118,6 +118,19 @@ func isWithinAddGracePeriod(h metainfo.Hash) bool {
 	return time.Since(addedAt) < recentlyAddedGracePeriod
 }
 
+// clearRecentlyAdded should be called once a torrent's in-flight StartStream call has reached
+// SetActiveStream - the exact point the race recentlyAdded exists to cover (a drop landing
+// between the torrent handle existing and the claim being registered) closes. Without this, the
+// grace period is a flat time.Now()-based timer that keeps protecting the torrent from a
+// legitimate drop (e.g. the user terminating the stream seconds after starting it) for up to
+// recentlyAddedGracePeriod after it was added, even though the claim is already fully
+// established and normal claim-based protection (activeStreams/currentTorrent) has taken over.
+func clearRecentlyAdded(h metainfo.Hash) {
+	recentlyAddedMu.Lock()
+	defer recentlyAddedMu.Unlock()
+	delete(recentlyAdded, h)
+}
+
 func NewClient(repository *Repository) *Client {
 	ret := &Client{
 		repository:                  repository,
@@ -701,6 +714,12 @@ func (c *Client) dropUnclaimedTorrentsWithClaims(keepHashes map[metainfo.Hash]bo
 // Legacy fields (currentTorrent/currentFile) are maintained by StartStream/StopStream
 // under c.mu — this method only manages the per-session activeStreams map.
 func (c *Client) SetActiveStream(sessionID string, t *torrent.Torrent, f *torrent.File) {
+	// The claim is now tracked below, so the add-grace-period stopgap (which exists only to
+	// bridge the window before this point) is no longer needed for this torrent.
+	if t != nil {
+		clearRecentlyAdded(t.InfoHash())
+	}
+
 	c.streamsMu.Lock()
 	defer c.streamsMu.Unlock()
 	if c.activeStreams == nil {

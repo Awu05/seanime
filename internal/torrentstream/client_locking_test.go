@@ -156,3 +156,39 @@ func TestRecentlyAddedGracePeriodProtectsUnclaimedButInFlightTorrent(t *testing.
 	require.False(t, isWithinAddGracePeriod(hash),
 		"the grace period must expire so a genuinely orphaned torrent is still eventually cleaned up")
 }
+
+// TestSetActiveStreamClearsAddGracePeriod is a regression test for a related bug: once a
+// torrent's claim is genuinely established via SetActiveStream, the add-grace-period stopgap
+// must stop protecting it. Otherwise a torrent terminated seconds after being started keeps
+// seeding/downloading for up to the full grace period even though nothing claims it any more,
+// because dropUnclaimedTorrentsWithClaims's flat time.Now()-based check still treats it as
+// "still being set up" - reproduced in production as closing the player right after starting a
+// stream not actually stopping the torrent.
+func TestSetActiveStreamClearsAddGracePeriod(t *testing.T) {
+	originalGracePeriod := recentlyAddedGracePeriod
+	recentlyAddedGracePeriod = time.Minute // long enough that only the fix, not expiry, could explain a pass
+	t.Cleanup(func() { recentlyAddedGracePeriod = originalGracePeriod })
+
+	repo := &Repository{logger: util.NewLogger()}
+	c := NewClient(repo)
+	t.Cleanup(func() { unregisterClient(c) })
+
+	cfg := torrent.TestingConfig(t)
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	tc, err := torrent.NewClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { tc.Close() })
+	c.torrentClient = mo.Some(tc)
+
+	tor := addTestTorrent(t, tc, "grace-period-clear.mkv")
+	hash := tor.InfoHash()
+
+	markRecentlyAdded(hash)
+	require.True(t, isWithinAddGracePeriod(hash), "freshly added torrent should start protected")
+
+	c.SetActiveStream("session-a", tor, tor.Files()[0])
+
+	require.False(t, isWithinAddGracePeriod(hash),
+		"once the claim is registered via SetActiveStream, the add-grace-period stopgap must stop protecting the torrent")
+}
