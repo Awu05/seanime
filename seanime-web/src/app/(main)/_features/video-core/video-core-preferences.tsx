@@ -996,9 +996,6 @@ export function VideoCoreKeybindingController(props: {
     //
 
     const handleKeyboardShortcuts = useCallback(async (e: KeyboardEvent) => {
-            if (e.code === "Escape") {
-                logger("VideoCoreKeybindings").warn("[DIAG] handleKeyboardShortcuts: Escape keydown received", { defaultPrevented: e.defaultPrevented })
-            }
             // Don't handle player shortcuts while typing or while keybindings modal is open.
             if (
                 e.defaultPrevented ||
@@ -1063,7 +1060,6 @@ export function VideoCoreKeybindingController(props: {
 
             // Escape - Exit fullscreen
             if (e.code === "Escape" && fullscreen) {
-                log.warn("[DIAG] handleKeyboardShortcuts: Escape branch reached, calling exitFullscreen() directly", { defaultPrevented: e.defaultPrevented })
                 e.preventDefault()
                 fullscreenManager?.exitFullscreen()
                 return

@@ -592,7 +592,7 @@ export function useVideoCoreSetupEvents(id: string,
                         if (payload as boolean) {
                             fullscreenManager.enterFullscreen()
                         } else {
-                            fullscreenManager.exitFullscreen()
+                            fullscreenManager.exitFullscreen({ silent: true })
                         }
                     }
                     break

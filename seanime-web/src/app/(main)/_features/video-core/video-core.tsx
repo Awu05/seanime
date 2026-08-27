@@ -56,7 +56,7 @@ import {
 import { attemptAutoplay } from "@/app/(main)/_features/video-core/video-core-autoplay"
 import { VideoCoreDrawer } from "@/app/(main)/_features/video-core/video-core-drawer"
 import { useVideoCoreSetupEvents } from "@/app/(main)/_features/video-core/video-core-events"
-import { exitFullscreenSafely, vc_fullscreenManager, VideoCoreFullscreenManager } from "@/app/(main)/_features/video-core/video-core-fullscreen"
+import { vc_fullscreenManager, VideoCoreFullscreenManager } from "@/app/(main)/_features/video-core/video-core-fullscreen"
 import {
     useVideoCoreHls,
     vc_hlsAudioTracks,
@@ -771,6 +771,37 @@ export function VideoCore(props: VideoCoreProps) {
         close: closeTerminateConfirm,
     } = useDisclosure(false)
 
+    // Set right before an intentional, non-Escape fullscreen exit (exit-fullscreen button, the
+    // fullscreen toggle, a remote "set-fullscreen" command) via VideoCoreFullscreenManager's
+    // `silent` option - consumed by the fullscreen-exit effect below so those don't also drop
+    // into the mini player.
+    const suppressNextAutoMinimizeRef = React.useRef(false)
+    // Consumed once by onEscapeKeyDown so the same Escape press that just triggered the
+    // fullscreen -> mini player transition below doesn't also immediately pop the terminate
+    // confirmation (which normally reacts to a *second*, separate Escape while already mini).
+    const justAutoMinimizedFromFullscreenRef = React.useRef(false)
+    const prevFullscreenRef = React.useRef(fullscreen)
+    React.useEffect(() => {
+        const wasFullscreen = prevFullscreenRef.current
+        prevFullscreenRef.current = fullscreen
+        if (!wasFullscreen || fullscreen) return
+
+        if (suppressNextAutoMinimizeRef.current) {
+            suppressNextAutoMinimizeRef.current = false
+            return
+        }
+
+        // The browser exits fullscreen on Escape natively and un-preventably, and does so before
+        // any of our own keydown handlers run - so this transition, not the Escape keydown event
+        // itself, is the only reliable signal that "the user just backed out of fullscreen".
+        if (!isMiniPlayer && state.active) {
+            justAutoMinimizedFromFullscreenRef.current = true
+            startVideoCoreMiniPlayerTransition(() => {
+                setIsMiniPlayer(true)
+            })
+        }
+    }, [fullscreen])
+
     React.useEffect(() => {
         setIsMiniPlayer(false)
     }, [])
@@ -1213,7 +1244,10 @@ export function VideoCore(props: VideoCoreProps) {
         // Initialize fullscreen manager
         setFullscreenManager(p => {
             if (p) p.destroy()
-            return new VideoCoreFullscreenManager((isFullscreen: boolean) => {
+            return new VideoCoreFullscreenManager((isFullscreen: boolean, silent?: boolean) => {
+                if (!isFullscreen && silent) {
+                    suppressNextAutoMinimizeRef.current = true
+                }
                 setIsFullscreen(isFullscreen)
                 onFullscreenChange?.(isFullscreen)
             })
@@ -1764,7 +1798,6 @@ export function VideoCore(props: VideoCoreProps) {
                     open={state.active}
                     onOpenChange={(v) => {
                         if (!v) {
-                            log.warn("[DIAG] VideoCoreDrawer onOpenChange(false) - calling onTerminateStream", { isMiniPlayer, fullscreen })
                             onTerminateStream()
                         } else {
                             React.startTransition(() => {
@@ -1795,8 +1828,21 @@ export function VideoCore(props: VideoCoreProps) {
                         togglePlay()
                     }}
                     onEscapeKeyDown={e => {
-                        log.warn("[DIAG] VideoCoreDrawer onEscapeKeyDown received", { isMiniPlayer, fullscreen, defaultPrevented: e.defaultPrevented })
                         e.preventDefault()
+
+                        // Esc while fullscreen backs out to the mini player first instead of
+                        // terminating outright, mirroring the native "Esc backs out of fullscreen"
+                        // expectation. That transition is driven by the fullscreen-exit effect
+                        // above (which reacts to the actual state change), not decided here: the
+                        // browser exits fullscreen on Esc natively and un-preventably, and does so
+                        // before this handler runs, so by the time we get here `fullscreen` (live
+                        // query or React state alike) has already flipped to false and can't tell
+                        // us what just happened.
+                        if (justAutoMinimizedFromFullscreenRef.current) {
+                            justAutoMinimizedFromFullscreenRef.current = false
+                            return
+                        }
+
                         if (isMiniPlayer) {
                             if (!isTerminateConfirmOpen) {
                                 openTerminateConfirm()
@@ -1804,27 +1850,6 @@ export function VideoCore(props: VideoCoreProps) {
                             return
                         }
 
-                        // Esc while fullscreen exits fullscreen into mini player first, mirroring
-                        // the native "Esc backs out of fullscreen" expectation, instead of
-                        // terminating outright. A second Esc (now in mini player, handled by the
-                        // branch above) opens the terminate confirmation as usual.
-                        //
-                        // Deliberately checks the `fullscreen` state (captured in this render's
-                        // closure) rather than fullscreenManager.isFullscreen (a live DOM query):
-                        // the browser exits fullscreen on Esc natively and un-preventably, often
-                        // before this handler even runs, so a live query here would almost always
-                        // already read false and this branch would never fire.
-                        if (fullscreen) {
-                            log.warn("[DIAG] VideoCoreDrawer onEscapeKeyDown: taking fullscreen -> mini player branch")
-                            exitFullscreenSafely(fullscreenManager).then(() => {
-                                startVideoCoreMiniPlayerTransition(() => {
-                                    setIsMiniPlayer(true)
-                                })
-                            })
-                            return
-                        }
-
-                        log.warn("[DIAG] VideoCoreDrawer onEscapeKeyDown: falling through to onTerminateStream")
                         onTerminateStream()
                     }}
                 >
@@ -1940,7 +1965,7 @@ function FloatingButtons(props: { part: "video" | "loading", onTerminateStream: 
                     intent="gray-basic"
                     className="rounded-full absolute top-0 flex-none right-4 z-[999]"
                     onClick={() => {
-                        fullscreenManager?.exitFullscreen()
+                        fullscreenManager?.exitFullscreen({ silent: true })
                     }}
                 />
             ) : (
