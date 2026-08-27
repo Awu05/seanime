@@ -168,23 +168,47 @@ func claimedHashes(selfHeld *Client) map[metainfo.Hash]bool {
 	allClientsMu.RLock()
 	defer allClientsMu.RUnlock()
 	for cl := range allClients {
+		// Only used for diagnostic logging below - identifies which session's claim kept a
+		// torrent alive, so a torrent that unexpectedly survives a drop can be traced back to
+		// its source instead of guessing.
+		clientLabel := "unknown"
+		if cl.repository != nil {
+			cl.repository.currentClientIdMu.RLock()
+			clientLabel = cl.repository.currentClientId
+			cl.repository.currentClientIdMu.RUnlock()
+		}
+		logClaim := func(infoHash metainfo.Hash, reason string) {
+			if cl.repository == nil {
+				return
+			}
+			cl.repository.logger.Debug().
+				Str("infoHash", infoHash.String()).
+				Str("client", clientLabel).
+				Str("reason", reason).
+				Msg("torrentstream: torrent kept alive by claim")
+		}
+
 		cl.streamsMu.RLock()
-		for _, stream := range cl.activeStreams {
+		for sessionID, stream := range cl.activeStreams {
 			if stream.Torrent != nil {
 				keep[stream.Torrent.InfoHash()] = true
+				logClaim(stream.Torrent.InfoHash(), "activeStreams["+sessionID+"]")
 			}
 		}
 		cl.streamsMu.RUnlock()
 		if cl == selfHeld {
 			if t, ok := cl.currentTorrent.Get(); ok {
 				keep[t.InfoHash()] = true
+				logClaim(t.InfoHash(), "currentTorrent (self)")
 			}
 		} else if torrentOpt, _ := cl.currentTorrentAndFile(); torrentOpt.IsPresent() {
 			keep[torrentOpt.MustGet().InfoHash()] = true
+			logClaim(torrentOpt.MustGet().InfoHash(), "currentTorrent")
 		}
 		if cl.repository != nil {
 			if ps, ok := cl.repository.getPreloadedStream(); ok && ps.Torrent != nil {
 				keep[ps.Torrent.InfoHash()] = true
+				logClaim(ps.Torrent.InfoHash(), "preloadedStream")
 			}
 		}
 	}
@@ -651,6 +675,7 @@ func (c *Client) dropUnclaimedTorrentsWithClaims(keepHashes map[metainfo.Hash]bo
 		if isWithinAddGracePeriod(infoHash) {
 			// Still being set up by an in-flight StartStream call that hasn't reached
 			// SetActiveStream yet - see recentlyAdded's doc comment.
+			c.repository.logger.Debug().Str("infoHash", infoHash.String()).Msg("torrentstream: torrent kept alive by add grace period")
 			continue
 		}
 		name := t.Name()

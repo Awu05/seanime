@@ -1116,6 +1116,13 @@ func (vc *VideoCore) listenToClientEvents() {
 							playerType = NativePlayer
 						}
 						event.identify(payload.ID, eventClientID, playerType, payload.PlaybackType)
+					} else {
+						// Neither the current playback state nor the incoming payload carried a
+						// clientId - this event will be pushed unidentified (empty GetClientId())
+						// and silently dropped downstream (directstream's stream loop can't match
+						// it to a registered stream). Logged so a "closing the player didn't stop
+						// the stream" report can be traced to this instead of guessed at.
+						vc.logger.Warn().Msg("videocore: Video terminated event has no playback state and no clientId, will be dropped unidentified")
 					}
 					select {
 					case vc.eventBus <- event:

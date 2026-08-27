@@ -260,6 +260,14 @@ func (m *Manager) listenToPlayerEvents() {
 			// Look up the stream by the event's clientId
 			cs, ok := m.streams.Get(event.GetClientId())
 			if !ok {
+				// No registered stream for this clientId - the event (e.g. a terminate
+				// request) has nowhere to go and is silently discarded below. Logged so a
+				// "closing the player didn't stop anything" report can be traced back to a
+				// clientId mismatch instead of guessing.
+				m.Logger.Debug().
+					Str("clientId", event.GetClientId()).
+					Str("eventType", fmt.Sprintf("%T", event)).
+					Msg("directstream: Dropping event, no stream registered for this clientId")
 				continue
 			}
 
