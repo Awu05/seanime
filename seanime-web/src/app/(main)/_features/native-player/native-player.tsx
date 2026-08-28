@@ -287,6 +287,13 @@ export function NativePlayer() {
                     toast.error("An error occurred while playing the stream. " + ((payload as { error: string }).error))
                     setState(draft => {
                         draft.playbackError = (payload as { error: string }).error
+                        // A mid-load error (e.g. a metadata-parsing timeout) previously left
+                        // loadingState set to whatever "open-and-await" text was showing
+                        // ("Loading metadata...", etc). Since the loading overlay renders
+                        // whenever loadingState is truthy - regardless of playbackError - it kept
+                        // covering the error overlay, leaving the player looking permanently
+                        // stuck on the spinner even though the stream had already been torn down.
+                        draft.loadingState = null
                         return
                     })
                     break
