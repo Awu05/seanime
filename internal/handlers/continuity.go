@@ -2,10 +2,40 @@ package handlers
 
 import (
 	"seanime/internal/continuity"
+	"seanime/internal/core"
+	"seanime/internal/database/models"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
+
+// continuityEnabledForRequest reports whether watch-continuity is enabled for the requester.
+//
+// In multi-user mode each non-admin profile has its own fully independent settings row (see
+// Database.GetSettingsForProfile / UpsertSettingsForProfile), but InitOrRefreshModules ignores
+// the profileID it's given and always reloads the global/admin settings row - so
+// ContinuityManager's cached flag never reflects a non-admin profile's own "Enable Watch
+// Continuity" toggle. Read that profile's row directly here instead of trusting the cached flag.
+func (h *Handler) continuityEnabledForRequest(c echo.Context) bool {
+	profileID := core.GetProfileIDFromContext(c)
+
+	var profileSettings *models.Settings
+	if h.App.MultiUserEnabled && profileID != "" {
+		profileSettings, _ = h.App.Database.GetSettingsForProfile(profileID)
+	}
+
+	return continuityEnabled(h.App.MultiUserEnabled, profileID, profileSettings, h.App.ContinuityManager.GetSettings().WatchContinuityEnabled)
+}
+
+func continuityEnabled(multiUserEnabled bool, profileID string, profileSettings *models.Settings, globalFlagEnabled bool) bool {
+	if !multiUserEnabled || profileID == "" {
+		return globalFlagEnabled
+	}
+	if profileSettings == nil || profileSettings.Library == nil {
+		return false
+	}
+	return profileSettings.Library.EnableWatchContinuity
+}
 
 // HandleUpdateContinuityWatchHistoryItem
 //
@@ -22,6 +52,10 @@ func (h *Handler) HandleUpdateContinuityWatchHistoryItem(c echo.Context) error {
 	var b body
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	if !h.continuityEnabledForRequest(c) {
+		return h.RespondWithData(c, true)
 	}
 
 	err := h.App.ContinuityManager.UpdateWatchHistoryItem(&b.Options)
@@ -46,7 +80,7 @@ func (h *Handler) HandleGetContinuityWatchHistoryItem(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	if !h.App.ContinuityManager.GetSettings().WatchContinuityEnabled {
+	if !h.continuityEnabledForRequest(c) {
 		return h.RespondWithData(c, &continuity.WatchHistoryItemResponse{
 			Item:  nil,
 			Found: false,
@@ -64,7 +98,7 @@ func (h *Handler) HandleGetContinuityWatchHistoryItem(c echo.Context) error {
 //	@route /api/v1/continuity/history [GET]
 //	@returns continuity.WatchHistory
 func (h *Handler) HandleGetContinuityWatchHistory(c echo.Context) error {
-	if !h.App.ContinuityManager.GetSettings().WatchContinuityEnabled {
+	if !h.continuityEnabledForRequest(c) {
 		ret := make(map[int]*continuity.WatchHistoryItem)
 		return h.RespondWithData(c, ret)
 	}
