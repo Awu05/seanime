@@ -1,6 +1,6 @@
 import { getServerBaseUrl } from "@/api/client/server-url"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
-import { useHandleCurrentMediaContinuity } from "@/api/hooks/continuity.hooks"
+import { useHandleCurrentMediaContinuity, useUpdateContinuityWatchHistoryItem } from "@/api/hooks/continuity.hooks"
 import { useDirectstreamConvertSubs } from "@/api/hooks/directstream.hooks"
 import { useCancelDiscordActivity } from "@/api/hooks/discord.hooks"
 import { useTorrentstreamDropTorrent } from "@/api/hooks/torrentstream.hooks"
@@ -116,6 +116,7 @@ import {
     useVideoCoreBindings,
     vc_createChapterCues,
     vc_createChaptersFromAniSkip,
+    vc_getContinuitySavePayload,
     vc_logGeneralInfo,
 } from "@/app/(main)/_features/video-core/video-core.utils"
 import { useServerHMACAuth, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
@@ -953,6 +954,47 @@ export function VideoCore(props: VideoCoreProps) {
             log.info("Continuity watch history", watchHistory)
         }
     }, [watchHistory])
+
+    // Periodically persist the current playback position to watch-continuity. Nothing else in
+    // the app actually saves this for the browser/native player - the restore side above reads
+    // it, but without this it always finds nothing and playback starts from the beginning.
+    const { mutate: updateContinuityWatchHistory } = useUpdateContinuityWatchHistoryItem()
+    const enableWatchContinuity = !!serverStatus?.settings?.library?.enableWatchContinuity
+
+    React.useEffect(() => {
+        if (!enableWatchContinuity || !state.active || isWatchPartyParticipant) return
+
+        const interval = setInterval(() => {
+            const player = videoRef.current
+            if (!player) return
+
+            const payload = vc_getContinuitySavePayload({
+                enableWatchContinuity,
+                active: state.active,
+                isWatchPartyParticipant,
+                disableRestoreFromContinuity: state.playbackInfo?.disableRestoreFromContinuity,
+                mediaId: state.playbackInfo?.media?.id,
+                episodeNumber: state.playbackInfo?.episode?.progressNumber,
+                isOnlinestream: !!state.playbackInfo?.onlinestreamParams,
+                currentTime: player.currentTime,
+                duration: player.duration,
+            })
+            if (!payload) return
+
+            updateContinuityWatchHistory({ options: payload })
+        }, 10000)
+
+        return () => clearInterval(interval)
+    }, [
+        enableWatchContinuity,
+        state.active,
+        isWatchPartyParticipant,
+        state.playbackInfo?.disableRestoreFromContinuity,
+        state.playbackInfo?.media?.id,
+        state.playbackInfo?.episode?.progressNumber,
+        state.playbackInfo?.onlinestreamParams,
+        updateContinuityWatchHistory,
+    ])
 
     const hasSoughtRef = React.useRef(false)
 

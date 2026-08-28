@@ -397,6 +397,42 @@ export function vc_createChaptersFromAniSkip(
     return chapters.sort((a, b) => a.start - b.start)
 }
 
+export type VideoCoreContinuitySavePayload = {
+    mediaId: number
+    episodeNumber: number
+    currentTime: number
+    duration: number
+    kind: "onlinestream" | "mediastream"
+}
+
+// Decides whether the current playback position should be saved to watch-continuity, and what
+// to save. Kept as a pure function so the interval-driven effect that calls it (video-core.tsx)
+// stays thin - the only place this decision needs to be reasoned about is here.
+export function vc_getContinuitySavePayload(params: {
+    enableWatchContinuity: boolean
+    active: boolean
+    isWatchPartyParticipant: boolean
+    disableRestoreFromContinuity: boolean | null | undefined
+    mediaId: number | string | null | undefined
+    episodeNumber: number | null | undefined
+    isOnlinestream: boolean
+    currentTime: number
+    duration: number
+}): VideoCoreContinuitySavePayload | null {
+    if (!params.enableWatchContinuity || !params.active || params.isWatchPartyParticipant) return null
+    if (params.disableRestoreFromContinuity) return null
+    if (!params.mediaId || !params.episodeNumber) return null
+    if (!(params.currentTime > 1 && params.duration > 1 && Number.isFinite(params.duration))) return null
+
+    return {
+        mediaId: Number(params.mediaId),
+        episodeNumber: params.episodeNumber,
+        currentTime: params.currentTime,
+        duration: params.duration,
+        kind: params.isOnlinestream ? "onlinestream" : "mediastream",
+    }
+}
+
 export const vc_formatTime = (seconds: number) => {
     const sign = seconds < 0 ? "-" : ""
     const absSeconds = Math.abs(seconds)
