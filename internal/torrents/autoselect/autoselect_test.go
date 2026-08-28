@@ -251,6 +251,37 @@ func TestAutoSelect_Sort(t *testing.T) {
 	}
 }
 
+// TestAutoSelect_SortDeprioritizesUnsupportedVideoCodecs verifies that a release using a video
+// codec the requesting client can't play (e.g. HEVC in a browser without hardware/OS decode
+// support) is ranked below an otherwise-equivalent compatible release, even when it would
+// otherwise win on seeders - but is still returned (not filtered out) when it's the only option.
+func TestAutoSelect_SortDeprioritizesUnsupportedVideoCodecs(t *testing.T) {
+	s := newTestAutoSelect()
+
+	hevc := &hibiketorrent.AnimeTorrent{Name: "[Judas] Show - 01 [1080p][HEVC x265 10bit].mkv", Seeders: 160, Provider: "nyaa"}
+	h264 := &hibiketorrent.AnimeTorrent{Name: "[SubsPlease] Show - 01 [1080p].mkv", Seeders: 95, Provider: "nyaa"}
+
+	profile := &anime.AutoSelectProfile{Resolutions: []string{"1080p"}}
+
+	t.Run("HEVC loses to a compatible alternative despite higher seeders", func(t *testing.T) {
+		torrents := []*hibiketorrent.AnimeTorrent{hevc, h264}
+		s.sort(torrents, profile, "HEVC")
+		assert.Equal(t, []string{h264.Name, hevc.Name}, []string{torrents[0].Name, torrents[1].Name})
+	})
+
+	t.Run("HEVC still wins when it's the only option", func(t *testing.T) {
+		torrents := []*hibiketorrent.AnimeTorrent{hevc}
+		s.sort(torrents, profile, "HEVC")
+		assert.Equal(t, hevc.Name, torrents[0].Name)
+	})
+
+	t.Run("no penalty when the codec isn't flagged as unsupported", func(t *testing.T) {
+		torrents := []*hibiketorrent.AnimeTorrent{hevc, h264}
+		s.sort(torrents, profile)
+		assert.Equal(t, []string{hevc.Name, h264.Name}, []string{torrents[0].Name, torrents[1].Name})
+	})
+}
+
 func TestAutoSelect_Filter_SourceTokenDoesNotMatchInsideWord(t *testing.T) {
 	s := newTestAutoSelect()
 

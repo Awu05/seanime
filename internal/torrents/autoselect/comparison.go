@@ -29,6 +29,10 @@ const (
 	scoreMultiSubs         = 10
 	scoreBatch             = 20
 	scoreBestRelease       = 20
+	// scoreUnsupportedCodecPenalty is large enough to lose to virtually any compatible
+	// alternative, but isn't an outright filter - a release using an unsupported codec is still
+	// returned (just ranked last) when it's the only candidate available.
+	scoreUnsupportedCodecPenalty = 200
 )
 
 type candidate struct {
@@ -51,6 +55,7 @@ func (s *AutoSelect) filterAndSort(
 	torrents []*hibiketorrent.AnimeTorrent,
 	profile *anime.AutoSelectProfile,
 	postSearchSort func([]*hibiketorrent.AnimeTorrent) []*TorrentWithCacheStatus,
+	unsupportedVideoCodecs ...string,
 ) []*hibiketorrent.AnimeTorrent {
 	s.log("Filtering and sorting torrents")
 	s.logger.Debug().Int("count", len(torrents)).Msg("autoselect: Filtering and sorting torrents")
@@ -73,7 +78,7 @@ func (s *AutoSelect) filterAndSort(
 	candidates = s.filterCandidates(candidates, profile)
 
 	// Sort by profile scores first
-	s.sortCandidates(candidates, profile)
+	s.sortCandidates(candidates, profile, unsupportedVideoCodecs...)
 
 	var filteredTorrents []*hibiketorrent.AnimeTorrent
 
@@ -136,7 +141,7 @@ func (s *AutoSelect) filter(torrents []*hibiketorrent.AnimeTorrent, profile *ani
 }
 
 // sort is a shim for testing or legacy usage.
-func (s *AutoSelect) sort(torrents []*hibiketorrent.AnimeTorrent, profile *anime.AutoSelectProfile) {
+func (s *AutoSelect) sort(torrents []*hibiketorrent.AnimeTorrent, profile *anime.AutoSelectProfile, unsupportedVideoCodecs ...string) {
 	candidates := make([]*candidate, len(torrents))
 	for i, t := range torrents {
 		candidates[i] = &candidate{
@@ -145,7 +150,7 @@ func (s *AutoSelect) sort(torrents []*hibiketorrent.AnimeTorrent, profile *anime
 			lowerName: strings.ToLower(t.Name),
 		}
 	}
-	s.sortCandidates(candidates, profile)
+	s.sortCandidates(candidates, profile, unsupportedVideoCodecs...)
 	for i, c := range candidates {
 		torrents[i] = c.torrent
 	}
@@ -357,9 +362,9 @@ func (s *AutoSelect) filterCandidates(candidates []*candidate, profile *anime.Au
 	return filtered
 }
 
-func (s *AutoSelect) sortCandidates(candidates []*candidate, profile *anime.AutoSelectProfile) {
+func (s *AutoSelect) sortCandidates(candidates []*candidate, profile *anime.AutoSelectProfile, unsupportedVideoCodecs ...string) {
 	for _, c := range candidates {
-		c.priority, c.bonus = s.calculateScoreBreakdown(c, profile)
+		c.priority, c.bonus = s.calculateScoreBreakdown(c, profile, unsupportedVideoCodecs...)
 		c.score = c.priority + c.bonus
 	}
 
@@ -456,17 +461,33 @@ func (s *AutoSelect) smartCachedPrioritization(
 	return result
 }
 
-func (s *AutoSelect) calculateScore(c *candidate, profile *anime.AutoSelectProfile) int {
-	priority, bonus := s.calculateScoreBreakdown(c, profile)
+func (s *AutoSelect) calculateScore(c *candidate, profile *anime.AutoSelectProfile, unsupportedVideoCodecs ...string) int {
+	priority, bonus := s.calculateScoreBreakdown(c, profile, unsupportedVideoCodecs...)
 	return priority + bonus
 }
 
-func (s *AutoSelect) calculateScoreBreakdown(c *candidate, profile *anime.AutoSelectProfile) (priority int, bonus int) {
+func (s *AutoSelect) calculateScoreBreakdown(c *candidate, profile *anime.AutoSelectProfile, unsupportedVideoCodecs ...string) (priority int, bonus int) {
 	parsed := c.parsed
 	t := c.torrent
 
+	// Deprioritize (but don't filter out) a release using a video codec the requesting client
+	// can't play - e.g. HEVC in a browser lacking hardware/OS decode support. Applied regardless
+	// of profile since this reflects a hard client capability, not a preference; still evaluated
+	// even with a nil profile so a plain resolution-only search doesn't skip it.
+	for _, codec := range unsupportedVideoCodecs {
+		if codec == "" {
+			continue
+		}
+		if slices.ContainsFunc(parsed.VideoTerm, func(vt string) bool {
+			return strings.EqualFold(vt, codec)
+		}) || containsBoundedTerm(c.lowerName, codec) {
+			bonus -= scoreUnsupportedCodecPenalty
+			break
+		}
+	}
+
 	if profile == nil {
-		return 0, 0
+		return 0, bonus
 	}
 
 	// Resolution

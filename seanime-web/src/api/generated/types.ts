@@ -5584,6 +5584,7 @@ export type Torrentstream_StartStreamOptions = {
     ClientId: string
     PlaybackType: Torrentstream_PlaybackType
     BatchEpisodeFiles?: HibikeTorrent_BatchEpisodeFiles
+    UnsupportedVideoCodecs?: Array<string>
 }
 
 /**

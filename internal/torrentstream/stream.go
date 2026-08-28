@@ -87,6 +87,11 @@ type StartStreamOptions struct {
 	ClientId          string
 	PlaybackType      PlaybackType
 	BatchEpisodeFiles *hibiketorrent.BatchEpisodeFiles
+	// UnsupportedVideoCodecs lists video codecs (e.g. "HEVC") the requesting client can't play,
+	// used to deprioritize auto-selected releases using them. Only meaningful for
+	// PlaybackTypeNativePlayer - other playback types don't go through the browser's video
+	// element, so codec compatibility isn't a constraint there.
+	UnsupportedVideoCodecs []string
 }
 
 // StartStream is called by the client to start streaming a torrent
@@ -158,7 +163,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//
 	if !usedPreparedStream {
 		if opts.AutoSelect {
-			torrentToStream, err = r.findBestTorrent(media, aniDbEpisode, episodeNumber)
+			torrentToStream, err = r.findBestTorrent(media, aniDbEpisode, episodeNumber, opts.UnsupportedVideoCodecs...)
 			if err != nil {
 				if opts.PlaybackType == PlaybackTypeNativePlayer {
 					r.directStreamManager.AbortOpen(opts.ClientId, err)
@@ -555,7 +560,7 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 	// Find best torrent
 	var torrentToStream *playbackTorrent
 	if opts.AutoSelect {
-		torrentToStream, err = r.findBestTorrent(media, opts.AniDBEpisode, opts.EpisodeNumber)
+		torrentToStream, err = r.findBestTorrent(media, opts.AniDBEpisode, opts.EpisodeNumber, opts.UnsupportedVideoCodecs...)
 		if err != nil {
 			r.logger.Error().Err(err).Msg("torrentstream: Failed to find torrent for preloading")
 			return err

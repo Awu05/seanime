@@ -1780,6 +1780,29 @@
     }
   },
   {
+    "name": "renewAuthCookieIfNeeded",
+    "trimmedName": "renewAuthCookieIfNeeded",
+    "comments": [
+      "renewAuthCookieIfNeeded reissues the seanime-auth cookie with a fresh authTokenLifetime if the",
+      "current token is within authTokenRenewalThreshold of expiring. Called after claims have already",
+      "been validated (and, where applicable, the profile confirmed to still exist) by the caller.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_middleware.go",
+    "filename": "auth_middleware.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "tryExtractProfile",
     "trimmedName": "tryExtractProfile",
     "comments": [
@@ -1790,6 +1813,32 @@
     ],
     "filepath": "internal/handlers/auth_middleware.go",
     "filename": "auth_middleware.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestRenewAuthCookieIfNeeded",
+    "trimmedName": "TestRenewAuthCookieIfNeeded",
+    "comments": [
+      "TestRenewAuthCookieIfNeeded guards the fix for a reported bug: the seanime-auth session JWT",
+      "was minted once at login with a hard 24h expiry and never renewed, so an actively-used session",
+      "(streaming, polling, websocket traffic) would hard-expire exactly 24h after login regardless of",
+      "activity. renewAuthCookieIfNeeded should reissue the cookie with a fresh authTokenLifetime once",
+      "less than authTokenRenewalThreshold remains, so the session stays alive as long as the browser",
+      "keeps making requests - only a truly idle session should ever need to re-login.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_middleware_test.go",
+    "filename": "auth_middleware_test.go",
     "api": {
       "summary": "",
       "descriptions": [],
@@ -2428,6 +2477,33 @@
     }
   },
   {
+    "name": "continuityEnabledForRequest",
+    "trimmedName": "continuityEnabledForRequest",
+    "comments": [
+      "continuityEnabledForRequest reports whether watch-continuity is enabled for the requester.",
+      "",
+      "In multi-user mode each non-admin profile has its own fully independent settings row (see",
+      "Database.GetSettingsForProfile / UpsertSettingsForProfile), but InitOrRefreshModules ignores",
+      "the profileID it's given and always reloads the global/admin settings row - so",
+      "ContinuityManager's cached flag never reflects a non-admin profile's own \"Enable Watch",
+      "Continuity\" toggle. Read that profile's row directly here instead of trusting the cached flag.",
+      ""
+    ],
+    "filepath": "internal/handlers/continuity.go",
+    "filename": "continuity.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleUpdateContinuityWatchHistoryItem",
     "trimmedName": "UpdateContinuityWatchHistoryItem",
     "comments": [
@@ -2540,6 +2616,31 @@
       "returns": "continuity.WatchHistory",
       "returnGoType": "continuity.WatchHistory",
       "returnTypescriptType": "Continuity_WatchHistory"
+    }
+  },
+  {
+    "name": "TestContinuityEnabled",
+    "trimmedName": "TestContinuityEnabled",
+    "comments": [
+      "TestContinuityEnabled documents why the watch-continuity gate can't simply trust",
+      "ContinuityManager's cached flag in multi-user mode: InitOrRefreshModules ignores the",
+      "profileID it's given and always reloads the global/admin settings row, so the cached flag",
+      "never reflects a non-admin profile's own \"Enable Watch Continuity\" toggle. The gate must",
+      "instead read that profile's independent settings row directly.",
+      ""
+    ],
+    "filepath": "internal/handlers/continuity_test.go",
+    "filename": "continuity_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {
@@ -5776,6 +5877,109 @@
     }
   },
   {
+    "name": "isAuthenticatedMultiUserSession",
+    "trimmedName": "isAuthenticatedMultiUserSession",
+    "comments": [
+      "isAuthenticatedMultiUserSession reports whether the request carries a valid profile or",
+      "admin session token. This is checked independently of MultiUserAuthMiddleware because",
+      "trustedLocalRequestMiddleware (and other request-boundary checks) run earlier in the",
+      "middleware chain, before that middleware has parsed the token into the request context.",
+      "A valid session here is treated as equivalent to a configured server password: it still",
+      "goes through the same strict-mode local-only gates as password auth, it just proves the",
+      "request isn't an anonymous/CSRF-style request on a multi-user instance.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isMultiUserBootstrapPath",
+    "trimmedName": "isMultiUserBootstrapPath",
+    "comments": [
+      "isMultiUserBootstrapPath reports whether path is one of the credential-checked, rate-limited",
+      "endpoints a multi-user client must be able to reach with no session at all yet (status check,",
+      "initial admin setup, login, access code). These already validate their own credentials and",
+      "don't need the trusted-host/origin boundary on top - requiring it would make it impossible to",
+      "ever log in to a multi-user instance hosted behind a reverse proxy or custom domain without a",
+      "server password.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isNakamaPeerPath",
+    "trimmedName": "isNakamaPeerPath",
+    "comments": [
+      "isNakamaPeerPath reports whether path is one a Nakama watch-party peer's own backend calls",
+      "directly on this host: the peer WebSocket connection and the host-served library/stream data.",
+      "A peer is a different person's Seanime instance entirely - it authenticates with its own",
+      "X-Seanime-Nakama-Token/host-password credential, never a profile JWT on this instance.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "isAuthenticatedNakamaPeer",
+    "trimmedName": "isAuthenticatedNakamaPeer",
+    "comments": [
+      "isAuthenticatedNakamaPeer reports whether the request carries a valid Nakama host-password",
+      "token. Checked independently of OptionalAuthMiddleware's existing nakama check because that",
+      "check only runs when Config.Server.Password is set, while MultiUserAuthMiddleware and",
+      "trustedLocalRequestMiddleware both run earlier in the chain and know nothing about it -",
+      "meaning peer connections to a multi-user instance with no server password configured (the",
+      "common case for this fork) were rejected before their token was ever checked.",
+      ""
+    ],
+    "filepath": "internal/handlers/local_security.go",
+    "filename": "local_security.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "isTrustedRequestHost",
     "trimmedName": "isTrustedRequestHost",
     "comments": [
@@ -5800,7 +6004,8 @@
     "name": "isRequestPermitted",
     "trimmedName": "isRequestPermitted",
     "comments": [
-      "isRequestPermitted determines if an HTTP request is permitted based on server password, access allowlist, and request origin metadata.",
+      "isRequestPermitted determines if an HTTP request is permitted based on server password, an authenticated",
+      "multi-user session, access allowlist, and request origin metadata.",
       ""
     ],
     "filepath": "internal/handlers/local_security.go",
@@ -5842,7 +6047,8 @@
     "name": "isTrustedRequest",
     "trimmedName": "isTrustedRequest",
     "comments": [
-      "isTrustedRequest determines whether the request is from a trusted source based on server password, security mode, or request origin.",
+      "isTrustedRequest determines whether the request is from a trusted source based on server password, an",
+      "authenticated multi-user session, security mode, or request origin.",
       ""
     ],
     "filepath": "internal/handlers/local_security.go",
@@ -5926,7 +6132,7 @@
     "name": "canMutatePrivilegedSettings",
     "trimmedName": "canMutatePrivilegedSettings",
     "comments": [
-      "canMutatePrivilegedSettings determines if privileged settings modifications can proceed based on request origin, server password, and settings changes.",
+      "canMutatePrivilegedSettings determines if privileged settings modifications can proceed based on request origin, server password, an authenticated multi-user session, and settings changes.",
       ""
     ],
     "filepath": "internal/handlers/local_security.go",
@@ -5968,7 +6174,7 @@
     "name": "canUsePrivilegedExtensionManagement",
     "trimmedName": "canUsePrivilegedExtensionManagement",
     "comments": [
-      "canUsePrivilegedExtensionManagement determines if the request can access privileged extension management based on security mode, origin, and server password.",
+      "canUsePrivilegedExtensionManagement determines if the request can access privileged extension management based on security mode, origin, server password, and an authenticated multi-user session.",
       ""
     ],
     "filepath": "internal/handlers/local_security.go",
@@ -6031,7 +6237,7 @@
     "name": "guardPrivilegedMediastream",
     "trimmedName": "guardPrivilegedMediastream",
     "comments": [
-      "guardPrivilegedMediastream ensures that privileged mediastream actions are restricted to trusted requests or server password authorization.",
+      "guardPrivilegedMediastream ensures that privileged mediastream actions are restricted to trusted requests, server password authorization, or an authenticated multi-user session.",
       ""
     ],
     "filepath": "internal/handlers/local_security.go",
@@ -12889,6 +13095,21 @@
             "",
             "Preload is true if the stream should only be prepared."
           ]
+        },
+        {
+          "name": "UnsupportedVideoCodecs",
+          "jsonName": "unsupportedVideoCodecs",
+          "goType": "[]string",
+          "usedStructType": "",
+          "typescriptType": "Array\u003cstring\u003e",
+          "required": false,
+          "descriptions": [
+            "UnsupportedVideoCodecs lists video codecs (e.g. \"HEVC\") the client's browser can't",
+            "play natively. Only meaningful when playbackType is \"nativeplayer\".",
+            "",
+            "UnsupportedVideoCodecs lists video codecs (e.g. \"HEVC\") the client's browser can't",
+            "play natively. Only meaningful when playbackType is \"nativeplayer\"."
+          ]
         }
       ],
       "returns": "bool",
@@ -13558,6 +13779,94 @@
     ],
     "filepath": "internal/handlers/websocket.go",
     "filename": "websocket.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "terminateClientNativePlayerStream",
+    "trimmedName": "terminateClientNativePlayerStream",
+    "comments": [
+      "terminateClientNativePlayerStream synthesizes a \"video-terminated\" client event for a",
+      "disconnected websocket connection, reusing the exact same handling path a real",
+      "dispatchTerminatedEvent() call from the frontend would take (see video-core-events.ts) - so an",
+      "abruptly closed tab (browser crash, network loss, force-quit) stops any active native-player",
+      "torrent/debrid/local stream the same way an in-app close does, instead of leaving it running",
+      "until the next stream starts or a multi-hour idle timeout.",
+      "",
+      "The nested payload's id/playerType/playbackType are left empty on purpose: videocore.go fills",
+      "them in from its own tracked playback state for this client when a real value isn't provided,",
+      "exactly like it already does for a genuine (possibly partial) client-sent event.",
+      ""
+    ],
+    "filepath": "internal/handlers/websocket.go",
+    "filename": "websocket.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestTerminateClientNativePlayerStreamDispatchesVideoTerminatedEvent",
+    "trimmedName": "TestTerminateClientNativePlayerStreamDispatchesVideoTerminatedEvent",
+    "comments": [
+      "TestTerminateClientNativePlayerStreamDispatchesVideoTerminatedEvent guards the fix for a",
+      "reported bug: closing the native (in-browser) player normally sends a \"video-terminated\"",
+      "event over the websocket, which stops any active torrent/debrid/local stream for that client.",
+      "But an abrupt disconnect (tab closed, browser crash, network loss) never sent that event at",
+      "all, leaving the stream running until the next one started or a multi-hour idle timeout.",
+      "",
+      "terminateClientNativePlayerStream synthesizes the same event a graceful close would send, so",
+      "the websocket disconnect handler (and the read-deadline liveness check) can route through the",
+      "exact same, already-proven cleanup path instead of needing new coupling to torrentstream/",
+      "directstream. This test only verifies the synthesized event reaches the right subscriber with",
+      "the right shape - the downstream handling of \"video-terminated\" itself is covered elsewhere.",
+      ""
+    ],
+    "filepath": "internal/handlers/websocket_liveness_test.go",
+    "filename": "websocket_liveness_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestWebSocketDeadConnectionTriggersNativePlayerTermination",
+    "trimmedName": "TestWebSocketDeadConnectionTriggersNativePlayerTermination",
+    "comments": [
+      "TestWebSocketDeadConnectionTriggersNativePlayerTermination is the end-to-end regression test",
+      "for the actual reported bug: a client that stops responding entirely (network loss, crash,",
+      "force-quit - anything short of a graceful close, which the browser doesn't always send) used",
+      "to leave the server with no way to ever notice, so any active native-player stream for that",
+      "client just kept running. It connects a real websocket client, sends nothing, and asserts the",
+      "server-side read deadline fires and dispatches the same video-terminated cleanup a graceful",
+      "close would.",
+      ""
+    ],
+    "filepath": "internal/handlers/websocket_liveness_test.go",
+    "filename": "websocket_liveness_test.go",
     "api": {
       "summary": "",
       "descriptions": [],

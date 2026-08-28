@@ -165,6 +165,7 @@ func (s *AutoSelect) FindBestTorrent(
 	postSearchSort func([]*hibiketorrent.AnimeTorrent) []*TorrentWithCacheStatus,
 	torrentClient TorrentClient,
 	debridClient debrid.Provider,
+	unsupportedVideoCodecs ...string,
 ) (res *Result, err error) {
 
 	resolutions := []string{"1080p"}
@@ -205,7 +206,7 @@ func (s *AutoSelect) FindBestTorrent(
 	// 2. Filter & sort
 	s.log("Filtering and sorting candidates")
 	s.updateStep(ctx, "ranking", "Filtering and sorting candidates...")
-	torrents = s.filterAndSort(ctx, torrents, profile, postSearchSort)
+	torrents = s.filterAndSort(ctx, torrents, profile, postSearchSort, unsupportedVideoCodecs...)
 
 	// 3. Select file (iterate top 3)
 	s.log("Selecting best file from top candidates")

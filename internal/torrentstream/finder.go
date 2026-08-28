@@ -34,7 +34,7 @@ func (r *Repository) setPriorityDownloadStrategy(t *torrent.Torrent, file *torre
 	torrentutil.PrioritizeDownloadPieces(t, file, r.logger)
 }
 
-func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode string, episodeNumber int) (ret *playbackTorrent, err error) {
+func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode string, episodeNumber int, unsupportedVideoCodecs ...string) (ret *playbackTorrent, err error) {
 	defer util.HandlePanicInModuleWithError("torrentstream/findBestTorrent", &err)
 
 	r.logger.Debug().Msgf("torrentstream: Finding best torrent for %s, Episode %d", media.GetTitleSafe(), episodeNumber)
@@ -66,6 +66,7 @@ func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode 
 		nil,
 		r.client,
 		nil,
+		unsupportedVideoCodecs...,
 	)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("torrentstream: Auto-select failed")

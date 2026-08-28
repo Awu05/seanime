@@ -1,5 +1,6 @@
 import { HibikeTorrent_AnimeTorrent, HibikeTorrent_BatchEpisodeFiles } from "@/api/generated/types"
 import { useTorrentstreamStartStream } from "@/api/hooks/torrentstream.hooks"
+import { getUnsupportedVideoCodecs } from "@/app/(main)/_features/video-core/_lib/codec-utils"
 import {
     ElectronPlaybackMethod,
     PlaybackTorrentStreaming,
@@ -46,6 +47,14 @@ type AutoSelectTorrentStreamProps = {
     preload?: boolean
 }
 
+// Codec compatibility only matters when playback stays in the browser ("nativeplayer") - an
+// external player link/app decodes the file itself, so the browser's codec support is irrelevant.
+function getRelevantUnsupportedVideoCodecs(playbackType: string): string[] | undefined {
+    if (playbackType !== "nativeplayer" || typeof document === "undefined") return undefined
+    const video = document.createElement("video")
+    return getUnsupportedVideoCodecs(codec => video.canPlayType(codec) as "probably" | "maybe" | "")
+}
+
 export function useHandleStartTorrentStream() {
 
     const { mutate, isPending } = useTorrentstreamStartStream()
@@ -81,7 +90,8 @@ export function useHandleStartTorrentStream() {
     const handleStreamSelection = (params: ManualTorrentStreamSelectionProps) => {
         const forcePlaybackMethod = getForcePlaybackMethod()
         resetForcePlaybackMethod()
-        logger("TORRENT STREAM SELECTION").info("Starting torrent stream", params, getPlaybackType(forcePlaybackMethod))
+        const playbackType = getPlaybackType(forcePlaybackMethod)
+        logger("TORRENT STREAM SELECTION").info("Starting torrent stream", params, playbackType)
         mutate({
             mediaId: params.mediaId,
             episodeNumber: params.episodeNumber,
@@ -89,10 +99,11 @@ export function useHandleStartTorrentStream() {
             aniDBEpisode: params.aniDBEpisode,
             autoSelect: false,
             fileIndex: params.chosenFileIndex ?? undefined,
-            playbackType: getPlaybackType(forcePlaybackMethod),
+            playbackType,
             clientId: clientId || "",
             batchEpisodeFiles: params.batchEpisodeFiles,
             preload: params.preload,
+            unsupportedVideoCodecs: getRelevantUnsupportedVideoCodecs(playbackType),
         }, {
             onSuccess: () => {
                 // setLoadingState(null)
@@ -107,16 +118,18 @@ export function useHandleStartTorrentStream() {
     const handleAutoSelectStream = (params: AutoSelectTorrentStreamProps) => {
         const forcePlaybackMethod = getForcePlaybackMethod()
         resetForcePlaybackMethod()
-        logger("TORRENT STREAM SELECTION").info("Starting torrent stream (auto select)", params, getPlaybackType(forcePlaybackMethod))
+        const playbackType = getPlaybackType(forcePlaybackMethod)
+        logger("TORRENT STREAM SELECTION").info("Starting torrent stream (auto select)", params, playbackType)
         mutate({
             mediaId: params.mediaId,
             episodeNumber: params.episodeNumber,
             aniDBEpisode: params.aniDBEpisode,
             autoSelect: true,
             torrent: undefined,
-            playbackType: getPlaybackType(forcePlaybackMethod),
+            playbackType,
             clientId: clientId || "",
             preload: params.preload,
+            unsupportedVideoCodecs: getRelevantUnsupportedVideoCodecs(playbackType),
         }, {
             onError: () => {
                 setLoadingState(null)

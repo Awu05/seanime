@@ -39340,6 +39340,17 @@
         "comments": []
       },
       {
+        "name": "serveContentCancelFuncMu",
+        "jsonName": "serveContentCancelFuncMu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
         "name": "serveContentCancelFunc",
         "jsonName": "serveContentCancelFunc",
         "goType": "context.CancelFunc",
@@ -71584,6 +71595,17 @@
         "comments": []
       },
       {
+        "name": "resultMu",
+        "jsonName": "resultMu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
         "name": "demuxer",
         "jsonName": "demuxer",
         "goType": "matroska.Demuxer",
@@ -79147,6 +79169,19 @@
         "required": false,
         "public": false,
         "comments": []
+      },
+      {
+        "name": "bucketTTLs",
+        "jsonName": "bucketTTLs",
+        "goType": "map[string]time.Duration",
+        "typescriptType": "Record\u003cstring, Duration\u003e",
+        "usedTypescriptType": "Duration",
+        "usedStructName": "time.Duration",
+        "required": false,
+        "public": false,
+        "comments": [
+          " How long a cached entry is served without hitting the network"
+        ]
       },
       {
         "name": "logger",
@@ -98399,6 +98434,17 @@
         "comments": []
       },
       {
+        "name": "preloadedStreamMu",
+        "jsonName": "preloadedStreamMu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
         "name": "shouldPreloadStream",
         "jsonName": "shouldPreloadStream",
         "goType": "atomic.Bool",
@@ -98432,6 +98478,17 @@
         "comments": [
           " Track the client ID of the current stream for session cleanup"
         ]
+      },
+      {
+        "name": "startStreamGeneration",
+        "jsonName": "startStreamGeneration",
+        "goType": "atomic.Int64",
+        "typescriptType": "Int64",
+        "usedTypescriptType": "Int64",
+        "usedStructName": "atomic.Int64",
+        "required": false,
+        "public": false,
+        "comments": []
       }
     ],
     "comments": []
@@ -98723,6 +98780,15 @@
         "typescriptType": "HibikeTorrent_BatchEpisodeFiles",
         "usedTypescriptType": "HibikeTorrent_BatchEpisodeFiles",
         "usedStructName": "hibiketorrent.BatchEpisodeFiles",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "UnsupportedVideoCodecs",
+        "jsonName": "UnsupportedVideoCodecs",
+        "goType": "[]string",
+        "typescriptType": "Array\u003cstring\u003e",
         "required": false,
         "public": true,
         "comments": []
@@ -100345,6 +100411,15 @@
         "usedTypescriptType": "Logger",
         "usedStructName": "zerolog.Logger",
         "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "dataAvailable",
+        "jsonName": "dataAvailable",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
         "public": false,
         "comments": []
       }

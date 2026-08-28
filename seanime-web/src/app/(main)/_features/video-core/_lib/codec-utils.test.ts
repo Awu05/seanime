@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { checkCodecSupport } from "./codec-utils"
+import { checkCodecSupport, getUnsupportedVideoCodecs } from "./codec-utils"
 
 describe("checkCodecSupport", () => {
     const defaultOptions = {
@@ -65,5 +65,19 @@ describe("checkCodecSupport", () => {
         const canPlayType = (codec: string) => codec.startsWith("video/webm") ? "probably" as const : "" as const
         const options = { ...defaultOptions, canUseMatroskaFallback: true, canPlayType }
         expect(checkCodecSupport("video/quicktime; codecs=\"avc1.640028\"", options)).toBe(false)
+    })
+})
+
+describe("getUnsupportedVideoCodecs", () => {
+    it("flags HEVC when the browser reports no support at all", () => {
+        expect(getUnsupportedVideoCodecs(() => "")).toEqual(["HEVC"])
+    })
+
+    it("does not flag HEVC when the browser probably supports it", () => {
+        expect(getUnsupportedVideoCodecs(() => "probably")).toEqual([])
+    })
+
+    it("does not flag HEVC when the browser maybe supports it (avoid false positives)", () => {
+        expect(getUnsupportedVideoCodecs(() => "maybe")).toEqual([])
     })
 })

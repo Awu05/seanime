@@ -152,6 +152,9 @@ func (h *Handler) HandleTorrentstreamStartStream(c echo.Context) error {
 		BatchEpisodeFiles *hibiketorrent.BatchEpisodeFiles `json:"batchEpisodeFiles,omitempty"`
 		// Preload is true if the stream should only be prepared.
 		Preload bool `json:"preload,omitempty"`
+		// UnsupportedVideoCodecs lists video codecs (e.g. "HEVC") the client's browser can't
+		// play natively. Only meaningful when playbackType is "nativeplayer".
+		UnsupportedVideoCodecs []string `json:"unsupportedVideoCodecs,omitempty"`
 	}
 
 	var b body
@@ -164,16 +167,17 @@ func (h *Handler) HandleTorrentstreamStartStream(c echo.Context) error {
 	userAgent := c.Request().Header.Get("User-Agent")
 
 	opts := &torrentstream.StartStreamOptions{
-		MediaId:           b.MediaId,
-		EpisodeNumber:     b.EpisodeNumber,
-		AniDBEpisode:      b.AniDBEpisode,
-		AutoSelect:        b.AutoSelect,
-		Torrent:           b.Torrent,
-		FileIndex:         b.FileIndex,
-		UserAgent:         userAgent,
-		ClientId:          b.ClientId,
-		PlaybackType:      b.PlaybackType,
-		BatchEpisodeFiles: b.BatchEpisodeFiles,
+		MediaId:                b.MediaId,
+		EpisodeNumber:          b.EpisodeNumber,
+		AniDBEpisode:           b.AniDBEpisode,
+		AutoSelect:             b.AutoSelect,
+		Torrent:                b.Torrent,
+		FileIndex:              b.FileIndex,
+		UserAgent:              userAgent,
+		ClientId:               b.ClientId,
+		PlaybackType:           b.PlaybackType,
+		BatchEpisodeFiles:      b.BatchEpisodeFiles,
+		UnsupportedVideoCodecs: b.UnsupportedVideoCodecs,
 	}
 
 	session := h.getStreamSession(c)
