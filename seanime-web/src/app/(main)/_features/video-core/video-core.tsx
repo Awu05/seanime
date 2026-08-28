@@ -1688,8 +1688,9 @@ export function VideoCore(props: VideoCoreProps) {
                 return cues
             }
 
-            // Otherwise, create chapters from skip data if available
-            if (!!resolvedSkipData?.op?.interval && duration > 0) {
+            // Otherwise, create chapters from skip data if available (op and ed are independent -
+            // AniSkip frequently only has one of the two, e.g. the premiere has no opening)
+            if ((!!resolvedSkipData?.op?.interval || !!resolvedSkipData?.ed?.interval) && duration > 0) {
                 log.info("Creating chapter cues from skip data", resolvedSkipData)
                 const chapters = vc_createChaptersFromAniSkip(resolvedSkipData, duration, state?.playbackInfo?.media?.format)
                 const cues = vc_createChapterCues(chapters, duration)

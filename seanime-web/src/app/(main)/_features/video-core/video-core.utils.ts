@@ -322,16 +322,24 @@ export function vc_createChaptersFromAniSkip(
 ): Array<MKVParser_ChapterInfo> {
     const { op, ed } = normalizeAniSkipData(aniSkipData)
 
-    if (!op?.interval || duration <= 0) {
+    // AniSkip frequently only has data for one of op/ed (e.g. the premiere has no opening, or
+    // the finale has no ending) - render whichever marker is available instead of discarding
+    // both just because one is missing.
+    if ((!op?.interval && !ed?.interval) || duration <= 0) {
         return []
     }
 
     const clampToDuration = (time: number) => Math.min(duration, Math.max(0, time))
-    const openingStart = op.interval.startTime > 5 ? clampToDuration(op.interval.startTime) : 0
-    const openingEnd = clampToDuration(op.interval.endTime)
 
-    if (openingEnd <= openingStart) {
-        return []
+    let openingStart: number | null = null
+    let openingEnd: number | null = null
+    if (op?.interval) {
+        const start = op.interval.startTime > 5 ? clampToDuration(op.interval.startTime) : 0
+        const end = clampToDuration(op.interval.endTime)
+        if (end > start) {
+            openingStart = start
+            openingEnd = end
+        }
     }
 
     const endingStart = ed?.interval ? clampToDuration(ed.interval.startTime) : null
@@ -339,27 +347,30 @@ export function vc_createChaptersFromAniSkip(
 
     const chapters: MKVParser_ChapterInfo[] = []
 
-    if (openingStart > 0) {
+    if (openingStart !== null && openingEnd !== null) {
+        if (openingStart > 0) {
+            chapters.push({
+                uid: 90,
+                start: 0,
+                end: openingStart,
+                text: "Prologue",
+            })
+        }
+
         chapters.push({
-            uid: 90,
-            start: 0,
-            end: openingStart,
-            text: "Prologue",
+            uid: 91,
+            start: openingStart,
+            end: openingEnd,
+            text: "Opening",
         })
     }
 
-    chapters.push({
-        uid: 91,
-        start: openingStart,
-        end: openingEnd,
-        text: "Opening",
-    })
-
+    const middleStart = openingEnd ?? 0
     const middleEnd = endingStart ?? duration
-    if (middleEnd > openingEnd) {
+    if (middleEnd > middleStart) {
         chapters.push({
             uid: 93,
-            start: openingEnd,
+            start: middleStart,
             end: middleEnd,
             text: mediaFormat !== "MOVIE" ? "Episode" : "Movie",
         })
