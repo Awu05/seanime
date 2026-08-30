@@ -77,6 +77,12 @@ type MetadataParser struct {
 
 	// Result
 	extractedMetadata *Metadata
+
+	// Lazy attachments state - see ensureAttachmentsParsed. Guarded by resultMu, same as
+	// parseErr/demuxer above.
+	attachmentsOnce sync.Once
+	attachmentsErr  error
+	attachments     []*AttachmentInfo
 }
 
 // NewMetadataParser creates a new MetadataParser.
@@ -152,13 +158,15 @@ func (mp *MetadataParser) parseMetadataOnce(ctx context.Context) {
 
 			_, _ = mp.reader.Seek(0, io.SeekStart)
 
-			// Create demuxer
+			// Create demuxer. IDAttachments is deliberately excluded here - it can hold large
+			// embedded font sets (e.g. multi-subtitle-group releases) that aren't needed to start
+			// playback. Fetching them would block this parse on downloading/reading that whole
+			// block. See ensureAttachmentsParsed for the separate, on-demand pass.
 			demuxer, err := matroska.NewDemuxer(mp.reader,
 				matroska.IDSegmentInfo,
 				matroska.IDSegment,
 				matroska.IDTracks,
 				matroska.IDChapters,
-				matroska.IDAttachments,
 				matroska.IDCues,
 			)
 
@@ -321,39 +329,7 @@ func (mp *MetadataParser) GetMetadata(ctx context.Context) *Metadata {
 			result.Chapters = append(result.Chapters, chapterInfo)
 		}
 
-		// Get attachments
-		attachments := mp.demuxer.GetAttachments()
-		for _, attachment := range attachments {
-			attachmentInfo := &AttachmentInfo{
-				UID:         attachment.UID,
-				Filename:    attachment.Name,
-				Mimetype:    attachment.MimeType,
-				Size:        int(attachment.Length),
-				Description: attachment.Description,
-				Data:        attachment.Data,
-			}
-
-			//// Extract attachment data from file
-			//data, err := mp.extractAttachmentData(attachment.Position, attachment.Length)
-			//if err != nil {
-			//	mp.logger.Error().Err(err).Str("filename", attachment.Name).Msg("mkvparser: Failed to extract attachment data")
-			//} else {
-			//	attachmentInfo.Data = data
-			//	attachmentInfo.Size = len(data)
-			//}
-
-			// Determine attachment type
-			fileExt := strings.ToLower(filepath.Ext(attachment.Name))
-			if _, ok := fontExtensions[fileExt]; ok {
-				attachmentInfo.Type = AttachmentTypeFont
-			} else if _, ok := subtitleExtensions[fileExt]; ok {
-				attachmentInfo.Type = AttachmentTypeSubtitle
-			} else {
-				attachmentInfo.Type = AttachmentTypeOther
-			}
-
-			result.Attachments = append(result.Attachments, attachmentInfo)
-		}
+		// Attachments are not parsed here - see ensureAttachmentsParsed/GetAttachmentByName.
 
 		// Get cues for accurate seeking
 		cues := mp.demuxer.GetCues()
@@ -382,6 +358,99 @@ func (mp *MetadataParser) GetMetadata(ctx context.Context) *Metadata {
 	})
 
 	return mp.extractedMetadata
+}
+
+// ensureAttachmentsParsed lazily parses the file's embedded Attachments block (fonts, images,
+// etc.) on a second, independent pass over the reader. This is deliberately not part of
+// parseMetadataOnce/GetMetadata: that block can be large (e.g. embedded font sets for
+// multi-subtitle-group releases) and isn't needed to start playback - only GetAttachmentByName
+// needs it, and only when a subtitle track actually requests a custom font.
+func (mp *MetadataParser) ensureAttachmentsParsed(ctx context.Context) {
+	mp.attachmentsOnce.Do(func() {
+		mp.resultMu.Lock()
+		parseErr := mp.parseErr
+		mp.resultMu.Unlock()
+		if parseErr != nil {
+			mp.resultMu.Lock()
+			mp.attachmentsErr = parseErr
+			mp.resultMu.Unlock()
+			return
+		}
+
+		// Same abandon-on-timeout approach as parseMetadataOnce: this read is otherwise fully
+		// synchronous with no cancellation of its own.
+		done := make(chan struct{})
+		var demuxer *matroska.Demuxer
+		var err error
+		go func() {
+			defer close(done)
+			_, _ = mp.reader.Seek(0, io.SeekStart)
+			demuxer, err = matroska.NewDemuxer(mp.reader, matroska.IDAttachments)
+		}()
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			mp.resultMu.Lock()
+			mp.attachmentsErr = ctx.Err()
+			mp.resultMu.Unlock()
+			return
+		}
+
+		mp.resultMu.Lock()
+		defer mp.resultMu.Unlock()
+		if err != nil {
+			mp.attachmentsErr = err
+			return
+		}
+		for _, attachment := range demuxer.GetAttachments() {
+			mp.attachments = append(mp.attachments, convertAttachment(attachment))
+		}
+	})
+}
+
+// GetAttachmentByName lazily parses the file's embedded attachments (see ensureAttachmentsParsed)
+// and looks one up by filename. Bounded by DefaultParseTimeout on top of ctx so a stalled read
+// (e.g. a rare/slow piece on a torrent-backed reader) can't hang the caller indefinitely.
+func (mp *MetadataParser) GetAttachmentByName(ctx context.Context, name string) (*AttachmentInfo, bool) {
+	mp.parseMetadataOnce(ctx)
+
+	attachCtx, cancel := context.WithTimeout(ctx, DefaultParseTimeout)
+	defer cancel()
+	mp.ensureAttachmentsParsed(attachCtx)
+
+	mp.resultMu.Lock()
+	defer mp.resultMu.Unlock()
+	for _, attachment := range mp.attachments {
+		if attachment.Filename == name {
+			return attachment, true
+		}
+	}
+	return nil, false
+}
+
+// convertAttachment converts a raw matroska attachment into the mkvparser AttachmentInfo shape,
+// classifying it by file extension.
+func convertAttachment(attachment *matroska.Attachment) *AttachmentInfo {
+	info := &AttachmentInfo{
+		UID:         attachment.UID,
+		Filename:    attachment.Name,
+		Mimetype:    attachment.MimeType,
+		Size:        int(attachment.Length),
+		Description: attachment.Description,
+		Data:        attachment.Data,
+	}
+
+	fileExt := strings.ToLower(filepath.Ext(attachment.Name))
+	if _, ok := fontExtensions[fileExt]; ok {
+		info.Type = AttachmentTypeFont
+	} else if _, ok := subtitleExtensions[fileExt]; ok {
+		info.Type = AttachmentTypeSubtitle
+	} else {
+		info.Type = AttachmentTypeOther
+	}
+
+	return info
 }
 
 // extractAttachmentData reads attachment data from the file at the given position

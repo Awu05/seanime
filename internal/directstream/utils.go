@@ -20,12 +20,7 @@ func getAttachmentByName(ctx context.Context, stream Stream, filename string) (*
 		return nil, false
 	}
 
-	attachment, ok := parser.GetMetadata(ctx).GetAttachmentByName(filename)
-	if !ok {
-		return nil, false
-	}
-
-	return attachment, true
+	return parser.GetAttachmentByName(ctx, filename)
 }
 
 func isEbmlExtension(filename string) bool {
