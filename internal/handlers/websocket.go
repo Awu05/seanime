@@ -6,6 +6,7 @@ import (
 	"seanime/internal/core"
 	"seanime/internal/events"
 	"seanime/internal/security"
+	"sync"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -21,6 +22,21 @@ import (
 // (previously: until the next stream started, or a 2h idle-session timeout). A var (not const)
 // so tests can shrink it instead of waiting out the real duration.
 var wsReadDeadline = 60 * time.Second
+
+// wsDisconnectGracePeriod bounds how long a disconnected client has to reconnect (with the same
+// clientId) before terminateClientNativePlayerStream actually tears down its stream. A disconnect
+// is not always a dead connection - the client's own heartbeat (see websocket-provider.tsx)
+// closes and reopens the socket itself whenever it misses pongs for too long, which is a
+// self-healing blip that normally resolves in 1-3s, not client abandonment. Killing the stream
+// the instant that first socket closed - before the reconnect had a chance to land - punished
+// that normal case: the client came back to a stream the server had already dropped. A var (not
+// const) so tests can shrink it.
+var wsDisconnectGracePeriod = 15 * time.Second
+
+var (
+	pendingStreamTerminationsMu sync.Mutex
+	pendingStreamTerminations   = make(map[string]*time.Timer)
+)
 
 var (
 	upgrader = websocket.Upgrader{
@@ -108,6 +124,7 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 
 	// Add connection to manager
 	h.App.WSEventManager.AddConn(id, profileID, ws, platform)
+	cancelScheduledStreamTermination(id)
 	h.App.Logger.Debug().Str("id", id).Str("profileID", profileID).Str("platform", platform).Msg("ws: Client connected")
 	h.App.WSEventManager.SendEventTo(id, events.ClientIdentity, map[string]string{
 		"clientId": id,
@@ -128,7 +145,7 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 				h.App.Logger.Debug().Str("id", id).Msg("ws: Client disconnection")
 			}
 			h.App.WSEventManager.RemoveConn(id)
-			h.terminateClientNativePlayerStream(id)
+			h.scheduleStreamTermination(id)
 			break
 		}
 
@@ -179,6 +196,39 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 	}
 
 	return nil
+}
+
+// scheduleStreamTermination arms terminateClientNativePlayerStream to run after
+// wsDisconnectGracePeriod, unless cancelScheduledStreamTermination(clientId) is called first (a
+// reconnect within the grace period). A no-op if a termination is already pending for this
+// clientId.
+func (h *Handler) scheduleStreamTermination(clientId string) {
+	pendingStreamTerminationsMu.Lock()
+	defer pendingStreamTerminationsMu.Unlock()
+
+	if _, exists := pendingStreamTerminations[clientId]; exists {
+		return
+	}
+
+	pendingStreamTerminations[clientId] = time.AfterFunc(wsDisconnectGracePeriod, func() {
+		pendingStreamTerminationsMu.Lock()
+		delete(pendingStreamTerminations, clientId)
+		pendingStreamTerminationsMu.Unlock()
+		h.terminateClientNativePlayerStream(clientId)
+	})
+}
+
+// cancelScheduledStreamTermination cancels a pending scheduleStreamTermination for clientId, if
+// any. Called when a client (re)connects, so a reconnect within the grace period leaves its
+// stream untouched.
+func cancelScheduledStreamTermination(clientId string) {
+	pendingStreamTerminationsMu.Lock()
+	defer pendingStreamTerminationsMu.Unlock()
+
+	if timer, exists := pendingStreamTerminations[clientId]; exists {
+		timer.Stop()
+		delete(pendingStreamTerminations, clientId)
+	}
 }
 
 // terminateClientNativePlayerStream synthesizes a "video-terminated" client event for a

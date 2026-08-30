@@ -68,6 +68,10 @@ func TestWebSocketDeadConnectionTriggersNativePlayerTermination(t *testing.T) {
 	wsReadDeadline = 150 * time.Millisecond
 	t.Cleanup(func() { wsReadDeadline = previousDeadline })
 
+	previousGrace := wsDisconnectGracePeriod
+	wsDisconnectGracePeriod = 150 * time.Millisecond
+	t.Cleanup(func() { wsDisconnectGracePeriod = previousGrace })
+
 	logger := util.NewLogger()
 	wsEventManager := events.NewWSEventManager(logger)
 	subscriber := wsEventManager.SubscribeToClientVideoCoreEvents("videocore")
