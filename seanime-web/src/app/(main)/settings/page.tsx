@@ -1248,7 +1248,7 @@ function QbittorrentTestConnectionButton() {
         password: string
         path: string
     }>({
-        endpoint: "/settings/qbittorrent/test-connection",
+        endpoint: "/api/v1/settings/qbittorrent/test-connection",
         method: "POST",
         mutationKey: ["test-qbittorrent-connection"],
         onSuccess: () => {
