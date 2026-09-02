@@ -194,6 +194,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/start", h.HandleGettingStarted)
 	v1.PATCH("/settings/auto-downloader", h.HandleSaveAutoDownloaderSettings)
 	v1.PATCH("/settings/media-player", h.HandleSaveMediaPlayerSettings)
+	v1.POST("/settings/qbittorrent/test-connection", h.HandleTestQbittorrentConnection)
 
 	// Auto Downloader
 	v1.POST("/auto-downloader/run", h.HandleRunAutoDownloader)

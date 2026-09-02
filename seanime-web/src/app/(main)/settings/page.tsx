@@ -46,7 +46,7 @@ import { useSetAtom } from "jotai"
 import { useAtom, useAtomValue } from "jotai/react"
 import capitalize from "lodash/capitalize"
 import React from "react"
-import { UseFormReturn } from "react-hook-form"
+import { UseFormReturn, useFormContext } from "react-hook-form"
 import { BiDonateHeart } from "react-icons/bi"
 import { CgMediaPodcast } from "react-icons/cg"
 import { FaDiscord } from "react-icons/fa"
@@ -69,7 +69,7 @@ import { LuRefreshCw } from "react-icons/lu"
 import { MdOutlineConnectWithoutContact, MdOutlineDownloading, MdOutlinePalette } from "react-icons/md"
 import { RiFolderDownloadFill } from "react-icons/ri"
 import { SiBittorrent, SiQbittorrent, SiTransmission } from "react-icons/si"
-import { TbDatabaseExclamation } from "react-icons/tb"
+import { TbDatabaseExclamation, TbPlugConnected } from "react-icons/tb"
 import { VscDebugAlt } from "react-icons/vsc"
 import { toast } from "sonner"
 import { SettingsCard, SettingsNavCard, SettingsPageHeader } from "./_components/settings-card"
@@ -989,6 +989,9 @@ export default function Page() {
                                                             }}
                                                         />
                                                     </div>
+                                                    <div>
+                                                        <QbittorrentTestConnectionButton />
+                                                    </div>
                                                     <Field.Text
                                                         name="qbittorrentPath"
                                                         label="Executable"
@@ -1233,6 +1236,47 @@ export default function Page() {
         </>
     )
 
+}
+
+function QbittorrentTestConnectionButton() {
+    const { getValues } = useFormContext()
+
+    const { mutate: testConnection, isPending } = useServerMutation<boolean, {
+        host: string
+        port: number
+        username: string
+        password: string
+        path: string
+    }>({
+        endpoint: "/settings/qbittorrent/test-connection",
+        method: "POST",
+        mutationKey: ["test-qbittorrent-connection"],
+        onSuccess: () => {
+            toast.success("Successfully connected to qBittorrent")
+        },
+    })
+
+    return (
+        <Button
+            type="button"
+            size="sm"
+            intent="gray-outline"
+            loading={isPending}
+            leftIcon={<TbPlugConnected />}
+            onClick={() => {
+                const values = getValues()
+                testConnection({
+                    host: values.qbittorrentHost,
+                    port: values.qbittorrentPort,
+                    username: values.qbittorrentUsername,
+                    password: values.qbittorrentPassword,
+                    path: values.qbittorrentPath,
+                })
+            }}
+        >
+            Test Connection
+        </Button>
+    )
 }
 
 function AnilistTokenInput({ onSubmit, isPending }: { onSubmit: (token: string) => void, isPending: boolean }) {

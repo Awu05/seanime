@@ -45,6 +45,22 @@ func TestShouldTestQbittorrentConnection(t *testing.T) {
 	})
 }
 
+func TestQbittorrentTestConnectionBody_ToTorrentSettings(t *testing.T) {
+	b := qbittorrentTestConnectionBody{
+		Host:     "192.168.68.65",
+		Port:     8084,
+		Username: "admin",
+		Password: "secret",
+		Path:     "/downloads",
+	}
+	got := b.toTorrentSettings()
+	assert.Equal(t, "192.168.68.65", got.QBittorrentHost)
+	assert.Equal(t, 8084, got.QBittorrentPort)
+	assert.Equal(t, "admin", got.QBittorrentUsername)
+	assert.Equal(t, "secret", got.QBittorrentPassword)
+	assert.Equal(t, "/downloads", got.QBittorrentPath)
+}
+
 func TestTestQbittorrentConnection(t *testing.T) {
 	t.Run("returns the login error unchanged", func(t *testing.T) {
 		wantErr := errors.New("invalid status 403 Forbidden")

@@ -33,6 +33,7 @@ import (
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/torrentstream"
 	"seanime/internal/user"
+	"seanime/internal/util"
 	"seanime/internal/videocore"
 	"time"
 
@@ -724,6 +725,29 @@ func (a *App) InitOrRefreshMediastreamSettings() {
 	a.SecondarySettings.Mediastream = settings
 }
 
+// torrentstreamInitMaxAttempts and torrentstreamInitRetryDelay bound the background retry
+// after a failed torrent client initialization. Vars (not consts) so tests can shrink them.
+var (
+	torrentstreamInitMaxAttempts = 6
+	torrentstreamInitRetryDelay  = 5 * time.Second
+)
+
+// retryUntilSuccess calls fn up to maxAttempts times, sleeping delay between attempts (not
+// before the first), stopping as soon as fn succeeds. Returns the last error if every attempt
+// failed. sleep is injected so tests can run this without waiting in real time.
+func retryUntilSuccess(maxAttempts int, delay time.Duration, sleep func(time.Duration), fn func() error) error {
+	var err error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			sleep(delay)
+		}
+		if err = fn(); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
 // InitOrRefreshTorrentstreamSettings will initialize or refresh the mediastream settings.
 // It is called after the App instance is created and after settings are updated.
 func (a *App) InitOrRefreshTorrentstreamSettings() {
@@ -768,6 +792,30 @@ func (a *App) InitOrRefreshTorrentstreamSettings() {
 		//	},
 		//	Enabled: false,
 		//})
+
+		// Initialization can fail on a transient startup race (e.g. the listen port not yet
+		// released after a container restart). Without a retry, this leaves the module - and
+		// every session sharing its engine - permanently uninitialized until the next settings
+		// save, failing every torrent stream with "torrent client is not initialized" in the
+		// meantime. Retry a few times in the background instead of failing closed forever.
+		go func() {
+			defer util.HandlePanicThen(func() {})
+			retryErr := retryUntilSuccess(torrentstreamInitMaxAttempts, torrentstreamInitRetryDelay, time.Sleep, func() error {
+				return a.TorrentstreamRepository.InitModules(settings, a.Config.Server.Host, a.Config.Server.Port)
+			})
+			if retryErr != nil {
+				a.Logger.Error().Err(retryErr).Msg("app: Torrent streaming module still failed to initialize after retries")
+				return
+			}
+			a.Logger.Info().Msg("app: Torrent streaming module initialized after retry")
+			a.StreamSessionManager.WithSessionsLocked(func(sessions []*ProfileStreamSession) {
+				for _, session := range sessions {
+					if session.TorrentStream != nil {
+						session.TorrentStream.SyncSharedTorrentClient(a.TorrentstreamRepository)
+					}
+				}
+			})
+		}()
 	}
 
 	a.Cleanups = append(a.Cleanups, func() {

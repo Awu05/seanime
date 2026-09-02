@@ -492,6 +492,46 @@ func (h *Handler) HandleSaveAutoDownloaderSettings(c echo.Context) error {
 	return h.RespondWithData(c, true)
 }
 
+// qbittorrentTestConnectionBody carries the (not necessarily saved) qBittorrent connection
+// fields to test, so the form's current values can be tested before they're persisted.
+type qbittorrentTestConnectionBody struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Path     string `json:"path"`
+}
+
+func (b qbittorrentTestConnectionBody) toTorrentSettings() *models.TorrentSettings {
+	return &models.TorrentSettings{
+		QBittorrentHost:     b.Host,
+		QBittorrentPort:     b.Port,
+		QBittorrentUsername: b.Username,
+		QBittorrentPassword: b.Password,
+		QBittorrentPath:     b.Path,
+	}
+}
+
+// HandleTestQbittorrentConnection
+//
+//	@summary tests connectivity to qBittorrent with the given (not necessarily saved) settings.
+//	@desc Lets the client verify a qBittorrent host/port/credentials combination before saving it.
+//	@route /api/v1/settings/qbittorrent/test-connection [POST]
+//	@returns bool
+func (h *Handler) HandleTestQbittorrentConnection(c echo.Context) error {
+	var b qbittorrentTestConnectionBody
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	loginFn := qbittorrentLoginFor(b.toTorrentSettings(), h.App.Logger)
+	if err := testQbittorrentConnection(loginFn); err != nil {
+		return h.RespondWithError(c, fmt.Errorf("could not connect to qBittorrent: %w", err))
+	}
+
+	return h.RespondWithData(c, true)
+}
+
 // HandleSaveMediaPlayerSettings
 //
 //	@summary updates the media player settings.
