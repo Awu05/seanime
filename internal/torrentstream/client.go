@@ -35,7 +35,7 @@ type (
 		cancelFunc           context.CancelFunc
 
 		activeStreams map[string]*ActiveStream // keyed by session/profile ID
-		streamsMu    sync.RWMutex
+		streamsMu     sync.RWMutex
 
 		mu                          sync.Mutex
 		stopCh                      chan struct{}                    // Closed when the media player stops
@@ -137,7 +137,7 @@ func NewClient(repository *Repository) *Client {
 		torrentClient:               mo.None[*torrent.Client](),
 		currentFile:                 mo.None[*torrent.File](),
 		currentTorrent:              mo.None[*torrent.Torrent](),
-		activeStreams:                make(map[string]*ActiveStream),
+		activeStreams:               make(map[string]*ActiveStream),
 		stopCh:                      make(chan struct{}),
 		mediaPlayerPlaybackStatusCh: make(chan *mediaplayer.PlaybackStatus, 1),
 	}
@@ -231,6 +231,31 @@ func claimedHashes(selfHeld *Client) map[metainfo.Hash]bool {
 // GetTorrentClient returns the underlying anacrolix torrent client (if initialized).
 func (c *Client) GetTorrentClient() mo.Option[*torrent.Client] {
 	return c.torrentClient
+}
+
+// SyncSharedTorrentClient re-syncs this repository's torrent client wrapper to reference the same
+// underlying anacrolix engine as source, if source has one and this repository isn't already
+// pointing at that same instance. Safe to call repeatedly (e.g. on every settings broadcast):
+// it's a no-op once in sync, so it doesn't needlessly restart the per-session monitor goroutine.
+//
+// This exists because UseSharedTorrentClient (see below) is otherwise only wired up once, at
+// per-profile session creation (session_factory.go) - if that ran before the app singleton's own
+// engine had finished initializing, or the singleton's engine was later torn down and recreated
+// (e.g. a settings change), the session's reference went stale or stayed permanently absent, with
+// no retry: every torrent-stream action for that profile then failed with "torrent client is not
+// initialized" indefinitely, even though nothing else in the app was affected.
+func (r *Repository) SyncSharedTorrentClient(source *Repository) {
+	if source == nil || source.client == nil || r.client == nil {
+		return
+	}
+	tc, ok := source.client.torrentClient.Get()
+	if !ok {
+		return
+	}
+	if current, currentOk := r.client.torrentClient.Get(); currentOk && current == tc {
+		return
+	}
+	r.client.UseSharedTorrentClient(tc)
 }
 
 // UseSharedTorrentClient sets this client wrapper to use an existing anacrolix torrent client
@@ -782,4 +807,3 @@ func (c *Client) readyToStream() bool {
 	// before a stall.
 	return torrentutil.ImmediatePiecesComplete(torrentOpt.MustGet(), fileOpt.MustGet())
 }
-

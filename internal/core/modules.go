@@ -3,7 +3,6 @@ package core
 import (
 	"os"
 	"seanime/internal/api/anilist"
-	"time"
 	"seanime/internal/continuity"
 	"seanime/internal/database/models"
 	debrid_client "seanime/internal/debrid/client"
@@ -35,6 +34,7 @@ import (
 	"seanime/internal/torrentstream"
 	"seanime/internal/user"
 	"seanime/internal/videocore"
+	"time"
 
 	"github.com/cli/browser"
 	"github.com/google/uuid"
@@ -783,6 +783,9 @@ func (a *App) InitOrRefreshTorrentstreamSettings() {
 		for _, session := range sessions {
 			if session.TorrentStream != nil {
 				session.TorrentStream.SetSettings(settings, a.Config.Server.Host, a.Config.Server.Port)
+				// Repair a per-session client reference that went stale or never got set (see
+				// SyncSharedTorrentClient's doc comment) - cheap no-op once already in sync.
+				session.TorrentStream.SyncSharedTorrentClient(a.TorrentstreamRepository)
 			}
 		}
 	})

@@ -153,15 +153,11 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	})
 
 	// Share the anacrolix engine from the App's singleton instead of creating a new one.
-	// This avoids port conflicts while giving each session its own state tracking.
-	if a.TorrentstreamRepository != nil {
-		appClient := a.TorrentstreamRepository.GetClient()
-		if appClient != nil {
-			if tc := appClient.GetTorrentClient(); tc.IsPresent() {
-				tsr.GetClient().UseSharedTorrentClient(tc.MustGet())
-			}
-		}
-	}
+	// This avoids port conflicts while giving each session its own state tracking. If the
+	// singleton's own engine hasn't finished initializing yet, this is a no-op for now -
+	// InitOrRefreshTorrentstreamSettings re-attempts it on every settings broadcast so the
+	// reference self-heals instead of staying stale/absent forever.
+	tsr.SyncSharedTorrentClient(a.TorrentstreamRepository)
 
 	// Copy settings from App singleton
 	if a.SecondarySettings.Torrentstream != nil {
