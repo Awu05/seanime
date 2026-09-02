@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,12 +10,14 @@ import (
 	"seanime/internal/core"
 	"seanime/internal/database/db"
 	"seanime/internal/database/models"
+	"seanime/internal/torrent_clients/qbittorrent"
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/util"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
 	"github.com/samber/lo"
 )
 
@@ -240,6 +243,21 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 
 	b.Torrent.QBittorrentPath = strings.TrimSpace(strings.Trim(b.Torrent.QBittorrentPath, "\""))
 	b.Torrent.TransmissionPath = strings.TrimSpace(strings.Trim(b.Torrent.TransmissionPath, "\""))
+
+	// Block the save if qBittorrent is the active torrent client and its connection details
+	// changed but don't actually work - previously a bad host/port/credential typo would save
+	// silently, with the only feedback being a background log line nobody sees.
+	var prevTorrent *models.TorrentSettings
+	if prevSettings != nil {
+		prevTorrent = prevSettings.Torrent
+	}
+	if b.Torrent.Default == "qbittorrent" && b.Torrent.QBittorrentHost != "" &&
+		qbittorrentConnectionSettingsChanged(prevTorrent, &b.Torrent) {
+		loginFn := qbittorrentLoginFor(&b.Torrent, h.App.Logger)
+		if err := testQbittorrentConnection(loginFn); err != nil {
+			return h.RespondWithError(c, fmt.Errorf("could not connect to qBittorrent: %w", err))
+		}
+	}
 
 	if b.Library.LibraryPath != "" {
 		b.Library.LibraryPath = filepath.ToSlash(filepath.Clean(b.Library.LibraryPath))
@@ -526,4 +544,56 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 	h.App.InitOrRefreshModules(profileID)
 
 	return h.RespondWithData(c, true)
+}
+
+// qbittorrentConnectionTestTimeout bounds how long testQbittorrentConnection waits before failing
+// closed. qbittorrent.Client's underlying http.Client has no timeout of its own, so an
+// unreachable host could otherwise hang the settings save indefinitely. A var (not const) so
+// tests can shrink it.
+var qbittorrentConnectionTestTimeout = 8 * time.Second
+
+// qbittorrentConnectionSettingsChanged reports whether any field that affects how Seanime
+// connects to qBittorrent differs between the previous and new settings. Tags/category and other
+// non-connection fields are deliberately excluded - changing them shouldn't force a fresh
+// connectivity check (and shouldn't block the save if qBittorrent happens to be down at that
+// moment for a config that was already validated).
+func qbittorrentConnectionSettingsChanged(prev, next *models.TorrentSettings) bool {
+	if prev == nil {
+		return true
+	}
+	return prev.QBittorrentHost != next.QBittorrentHost ||
+		prev.QBittorrentPort != next.QBittorrentPort ||
+		prev.QBittorrentUsername != next.QBittorrentUsername ||
+		prev.QBittorrentPassword != next.QBittorrentPassword ||
+		prev.QBittorrentPath != next.QBittorrentPath
+}
+
+// qbittorrentLoginFor builds a login function for testQbittorrentConnection from the given
+// (not-yet-persisted) torrent settings.
+func qbittorrentLoginFor(t *models.TorrentSettings, logger *zerolog.Logger) func() error {
+	client := qbittorrent.NewClient(&qbittorrent.NewClientOptions{
+		Logger:   logger,
+		Username: t.QBittorrentUsername,
+		Password: t.QBittorrentPassword,
+		Port:     t.QBittorrentPort,
+		Host:     t.QBittorrentHost,
+		Path:     t.QBittorrentPath,
+	})
+	return client.Login
+}
+
+// testQbittorrentConnection runs loginFn with a hard timeout (qbittorrentConnectionTestTimeout),
+// since the underlying HTTP client has none of its own.
+func testQbittorrentConnection(loginFn func() error) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- loginFn()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(qbittorrentConnectionTestTimeout):
+		return errors.New("connection timed out")
+	}
 }
