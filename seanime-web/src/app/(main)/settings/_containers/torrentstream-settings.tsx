@@ -2,6 +2,7 @@ import { Models_TorrentstreamSettings } from "@/api/generated/types"
 import { useGetTorrentstreamSettings } from "@/api/hooks/torrentstream.hooks"
 import { useSaveTorrentstreamSettings, useTorrentstreamDropTorrent } from "@/api/hooks/torrentstream.hooks"
 import { useWebsocketMessageListener } from "@/app/(main)/_hooks/handle-websockets.ts"
+import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { AutoSelectProfileButton } from "@/app/(main)/settings/_components/autoselect-profile-form"
 import { SettingsCard } from "@/app/(main)/settings/_components/settings-card"
 import { SettingsIsDirty, SettingsSubmitButton } from "@/app/(main)/settings/_components/settings-submit-button"
@@ -33,6 +34,7 @@ export function TorrentstreamSettings(props: TorrentstreamSettingsProps) {
 
     const { mutate, isPending } = useSaveTorrentstreamSettings()
     const { refetch } = useGetTorrentstreamSettings()
+    const status = useServerStatus()
 
     const { mutate: dropTorrent, isPending: droppingTorrent } = useTorrentstreamDropTorrent()
 
@@ -164,9 +166,15 @@ export function TorrentstreamSettings(props: TorrentstreamSettingsProps) {
                         >
                             <AccordionItem value="more">
                                 <AccordionTrigger className="bg-gray-900 rounded-[--radius-md]">
-                                    Torrent Client
+                                    Built-in Engine
                                 </AccordionTrigger>
                                 <AccordionContent className="space-y-4">
+                                    <p className="text-sm text-[--muted]">
+                                        Network settings for Seanime's own built-in torrent engine used for streaming.
+                                        This is not qBittorrent or Transmission - those are configured separately
+                                        under the Torrent Client page and must use a different port than this one.
+                                    </p>
+
                                     <div className="flex items-center gap-3">
 
                                         <Field.Text
@@ -185,6 +193,12 @@ export function TorrentstreamSettings(props: TorrentstreamSettingsProps) {
                                         />
 
                                     </div>
+
+                                    <TorrentClientPortConflictWarning
+                                        port={f.watch("torrentClientPort")}
+                                        qbittorrentPort={status?.settings?.torrent?.qbittorrentPort}
+                                        transmissionPort={status?.settings?.torrent?.transmissionPort}
+                                    />
 
                                     <Field.Switch
                                         side="right"
@@ -259,5 +273,26 @@ export function TorrentstreamSettings(props: TorrentstreamSettingsProps) {
                 )}
             </Form>
         </>
+    )
+}
+
+function TorrentClientPortConflictWarning({ port, qbittorrentPort, transmissionPort }: {
+    port: number | undefined
+    qbittorrentPort: number | undefined
+    transmissionPort: number | undefined
+}) {
+    if (!port) return null
+
+    const conflictingClient = port === qbittorrentPort ? "qBittorrent"
+        : port === transmissionPort ? "Transmission"
+            : null
+
+    if (!conflictingClient) return null
+
+    return (
+        <Alert
+            intent="alert"
+            description={`Port ${port} is also used by ${conflictingClient} (Torrent Client settings). The built-in engine will fail to start unless one of them uses a different port.`}
+        />
     )
 }

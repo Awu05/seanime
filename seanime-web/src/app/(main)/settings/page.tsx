@@ -46,7 +46,7 @@ import { useSetAtom } from "jotai"
 import { useAtom, useAtomValue } from "jotai/react"
 import capitalize from "lodash/capitalize"
 import React from "react"
-import { UseFormReturn, useFormContext } from "react-hook-form"
+import { UseFormReturn, useFormContext, useWatch } from "react-hook-form"
 import { BiDonateHeart } from "react-icons/bi"
 import { CgMediaPodcast } from "react-icons/cg"
 import { FaDiscord } from "react-icons/fa"
@@ -933,7 +933,7 @@ export default function Page() {
 
                                         <SettingsPageHeader
                                             title="Torrent Client"
-                                            description="Configure the torrent client"
+                                            description="Configure an external torrent app (qBittorrent/Transmission) used to download torrents to your library. This is separate from Torrent Streaming's built-in engine."
                                             icon={MdOutlineDownloading}
                                         />
 
@@ -992,6 +992,7 @@ export default function Page() {
                                                     <div>
                                                         <QbittorrentTestConnectionButton />
                                                     </div>
+                                                    <QbittorrentPortConflictWarning streamingPort={torrentstreamSettings?.torrentClientPort} />
                                                     <Field.Text
                                                         name="qbittorrentPath"
                                                         label="Executable"
@@ -1143,7 +1144,7 @@ export default function Page() {
 
                             <SettingsPageHeader
                                 title="Torrent Streaming"
-                                description="Configure torrent streaming settings"
+                                description="Configure Seanime's built-in torrent engine, used to stream torrents on demand without an external client. Separate from the Torrent Client page."
                                 icon={SiBittorrent}
                             />
 
@@ -1276,6 +1277,19 @@ function QbittorrentTestConnectionButton() {
         >
             Test Connection
         </Button>
+    )
+}
+
+function QbittorrentPortConflictWarning({ streamingPort }: { streamingPort: number | undefined }) {
+    const port = useWatch({ name: "qbittorrentPort" })
+
+    if (!streamingPort || !port || Number(port) !== Number(streamingPort)) return null
+
+    return (
+        <Alert
+            intent="alert"
+            description={`Port ${port} is also used by Torrent Streaming's built-in engine (Torrent Streaming settings). qBittorrent will fail to start unless one of them uses a different port.`}
+        />
     )
 }
 
