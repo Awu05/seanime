@@ -9,32 +9,14 @@ import { ExperimentalBadge } from "@/components/shared/beta-badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { defineSchema, Field, Form } from "@/components/ui/form"
+import { Field, Form } from "@/components/ui/form"
 import { WSEvents } from "@/lib/server/ws-events.ts"
 import React from "react"
 import { UseFormReturn } from "react-hook-form"
 import { FcFolder } from "react-icons/fc"
 import { SiBittorrent } from "react-icons/si"
 import { toast } from "sonner"
-
-const torrentstreamSchema = defineSchema(({ z }) => z.object({
-    enabled: z.boolean(),
-    downloadDir: z.string(),
-    autoSelect: z.boolean(),
-    disableIPV6: z.boolean(),
-    addToLibrary: z.boolean(),
-    // streamingServerPort: z.number(),
-    // streamingServerHost: z.string(),
-    torrentClientHost: z.string().optional().default(""),
-    torrentClientPort: z.number(),
-    preferredResolution: z.string(),
-    includeInLibrary: z.boolean(),
-    streamUrlAddress: z.string().optional().default(""),
-    slowSeeding: z.boolean().optional().default(false),
-    preloadNextStream: z.boolean().optional().default(false),
-    disableAcceleratedStartup: z.boolean().optional().default(false),
-}))
-
+import { torrentstreamSchema } from "./torrentstream-settings.schema"
 
 type TorrentstreamSettingsProps = {
     children?: React.ReactNode
