@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"seanime/internal/api/anilist"
 	"seanime/internal/continuity"
@@ -732,6 +733,14 @@ var (
 	torrentstreamInitRetryDelay  = 5 * time.Second
 )
 
+// torrentstreamInitFailureToastMessage formats a user-facing warning for a torrent streaming
+// init failure. Previously this reason only ever reached the docker logs, so a misconfiguration
+// like reusing another service's port (e.g. qBittorrent's WebUI port) silently broke every
+// torrent stream with the unhelpful "torrent client is not initialized" and no clue why.
+func torrentstreamInitFailureToastMessage(err error) string {
+	return fmt.Sprintf("Torrent streaming failed to start: %s", err.Error())
+}
+
 // retryUntilSuccess calls fn up to maxAttempts times, sleeping delay between attempts (not
 // before the first), stopping as soon as fn succeeds. Returns the last error if every attempt
 // failed. sleep is injected so tests can run this without waiting in real time.
@@ -805,6 +814,7 @@ func (a *App) InitOrRefreshTorrentstreamSettings() {
 			})
 			if retryErr != nil {
 				a.Logger.Error().Err(retryErr).Msg("app: Torrent streaming module still failed to initialize after retries")
+				a.WSEventManager.SendEvent(events.WarningToast, torrentstreamInitFailureToastMessage(retryErr))
 				return
 			}
 			a.Logger.Info().Msg("app: Torrent streaming module initialized after retry")
