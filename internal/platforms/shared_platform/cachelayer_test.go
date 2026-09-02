@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gqlgo/gqlgenc/clientv2"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +25,8 @@ type cacheLayerTestClient struct {
 	updateEntryCalls    []cacheLayerUpdateEntryCall
 	updateProgressCalls []cacheLayerUpdateProgressCall
 	baseAnimeCalls      int32
+	baseAnimeErr        error
+	customQueryErr      error
 }
 
 type cacheLayerUpdateEntryCall struct {
@@ -51,11 +54,21 @@ func (c *cacheLayerTestClient) GetCacheDir() string {
 
 func (c *cacheLayerTestClient) BaseAnimeByID(_ context.Context, id *int, _ ...clientv2.RequestInterceptor) (*anilist.BaseAnimeByID, error) {
 	atomic.AddInt32(&c.baseAnimeCalls, 1)
+	if c.baseAnimeErr != nil {
+		return nil, c.baseAnimeErr
+	}
 	mediaID := 0
 	if id != nil {
 		mediaID = *id
 	}
 	return &anilist.BaseAnimeByID{Media: &anilist.BaseAnime{ID: mediaID}}, nil
+}
+
+func (c *cacheLayerTestClient) CustomQuery(_ []byte, _ *zerolog.Logger, _ ...string) (interface{}, error) {
+	if c.customQueryErr != nil {
+		return nil, c.customQueryErr
+	}
+	return map[string]interface{}{"ok": true}, nil
 }
 
 func (c *cacheLayerTestClient) AnimeCollection(_ context.Context, _ *string, _ ...clientv2.RequestInterceptor) (*anilist.AnimeCollection, error) {
@@ -270,6 +283,39 @@ func TestCacheLayerServesFreshDataWithoutHittingNetwork(t *testing.T) {
 	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, atomic.LoadInt32(&client.baseAnimeCalls), "expected the stale entry to trigger a fresh network call")
+}
+
+// TestCacheLayerSurfacesNetworkErrorWhenNoCacheFallback guards a reported bug: when AniList
+// requests fail and there's no cached fallback (e.g. an anime never fetched before, or a fresh
+// cache), the real failure reason (e.g. "The AniList API has been temporarily disabled due to
+// severe stability issues.") was being discarded and replaced with a generic "no cached data
+// available" error, leaving the frontend with no way to show the user what actually went wrong.
+func TestCacheLayerSurfacesNetworkErrorWhenNoCacheFallback(t *testing.T) {
+	client := &cacheLayerTestClient{
+		cacheDir:     t.TempDir(),
+		baseAnimeErr: errors.New("The AniList API has been temporarily disabled due to severe stability issues."),
+	}
+	cacheLayer := newTestCacheLayer(t, client)
+
+	id := 1
+	_, err := cacheLayer.BaseAnimeByID(context.Background(), &id)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "The AniList API has been temporarily disabled due to severe stability issues.")
+}
+
+// TestCacheLayerCustomQuerySurfacesNetworkErrorWhenNoCacheFallback is the CustomQuery-specific
+// counterpart to TestCacheLayerSurfacesNetworkErrorWhenNoCacheFallback - CustomQuery has its own
+// hand-written cache-fallback logic rather than going through networkFirstGet.
+func TestCacheLayerCustomQuerySurfacesNetworkErrorWhenNoCacheFallback(t *testing.T) {
+	client := &cacheLayerTestClient{
+		cacheDir:       t.TempDir(),
+		customQueryErr: errors.New("The AniList API has been temporarily disabled due to severe stability issues."),
+	}
+	cacheLayer := newTestCacheLayer(t, client)
+
+	_, err := cacheLayer.CustomQuery([]byte(`{"query":"{ Viewer { id } }"}`), util.NewLogger())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "The AniList API has been temporarily disabled due to severe stability issues.")
 }
 
 func newTestCacheLayer(t *testing.T, client *cacheLayerTestClient) *CacheLayer {

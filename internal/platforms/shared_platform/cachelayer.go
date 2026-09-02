@@ -313,6 +313,8 @@ func (c *CacheLayer) CustomQuery(body []byte, logger *zerolog.Logger, token ...s
 		}
 	}
 
+	var networkErr error
+
 	// Try network first if API is working
 	if IsWorking.Load() {
 		res, err := c.anilistClientRef.Get().CustomQuery(body, logger, token...)
@@ -334,6 +336,7 @@ func (c *CacheLayer) CustomQuery(body []byte, logger *zerolog.Logger, token ...s
 			}()
 			return res, nil
 		}
+		networkErr = err
 	} else {
 		// If API is not working, try it in the background to check if it's back
 		go func() {
@@ -360,7 +363,7 @@ func (c *CacheLayer) CustomQuery(body []byte, logger *zerolog.Logger, token ...s
 		return nil, fmt.Errorf("cache lookup failed: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("no cached data available")
+		return nil, noCachedDataError(networkErr)
 	}
 
 	c.logger.Debug().Str("bucket", CustomQueryBucket).Str("key", cacheKey).Msg("anilist cache: Serving custom query from cache")
@@ -426,6 +429,23 @@ func (c *CacheLayer) checkAndUpdateWorkingState(err error) {
 		}
 		clearFailureTracking()
 	}
+}
+
+// noCachedDataError builds the error returned when a request fails and there's no cached
+// fallback. When a network attempt actually ran (networkErr set), it is returned unwrapped so
+// the real reason (e.g. "The AniList API has been temporarily disabled due to severe stability
+// issues.") reaches the caller - and ultimately the frontend - instead of a generic message.
+// This must NOT contain the phrase "no cached data" itself: the frontend (sea-error.ts)
+// deliberately hides any error containing that phrase as non-actionable noise, which is exactly
+// the muting this function exists to bypass when a real reason is available.
+// networkErr is nil when the API was already marked down (IsWorking false): that request only
+// triggers a background retry, so there's no fresh error for this call - the real reason was
+// already surfaced when the circuit breaker tripped, so the generic (muted) message is correct.
+func noCachedDataError(networkErr error) error {
+	if networkErr != nil {
+		return networkErr
+	}
+	return fmt.Errorf("no cached data available")
 }
 
 func isAnilistAuthError(err error) bool {
@@ -568,6 +588,8 @@ func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, n
 
 	bucket := c.buckets[bucketName]
 
+	var networkErr error
+
 	// Try network first if API is working
 	if IsWorking.Load() {
 		res, err := networkFn()
@@ -580,6 +602,7 @@ func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, n
 			}
 			return res, nil
 		}
+		networkErr = err
 	} else {
 		// If API is not working, try it in the background to check if it's back
 		go func() {
@@ -601,7 +624,7 @@ func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, n
 		return nil, fmt.Errorf("cache lookup failed: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("no cached data available")
+		return nil, noCachedDataError(networkErr)
 	}
 
 	c.logger.Debug().Str("bucket", bucketName).Str("key", cacheKey).Msg("anilist cache: Serving from cache")
@@ -836,6 +859,8 @@ func networkFirstGetWithBoundedCache[T any](c *CacheLayer, bucketName string, ca
 
 	bucket := c.buckets[bucketName]
 
+	var networkErr error
+
 	// Try network first if API is working
 	if IsWorking.Load() {
 		res, err := networkFn()
@@ -856,6 +881,7 @@ func networkFirstGetWithBoundedCache[T any](c *CacheLayer, bucketName string, ca
 			}()
 			return res, nil
 		}
+		networkErr = err
 	} else {
 		// If API is not working, try it in the background to check if it's back
 		go func() {
@@ -882,7 +908,7 @@ func networkFirstGetWithBoundedCache[T any](c *CacheLayer, bucketName string, ca
 		return nil, fmt.Errorf("cache lookup failed: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("no cached data available")
+		return nil, noCachedDataError(networkErr)
 	}
 
 	c.logger.Debug().Str("bucket", bucketName).Str("key", cacheKey).Msg("anilist cache: Serving bounded result from cache")

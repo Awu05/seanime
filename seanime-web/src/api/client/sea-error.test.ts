@@ -50,4 +50,13 @@ describe("_handleSeaError", () => {
             response: { status: 404, data: { error: "no cached data available" } },
         })).toBe("")
     })
+
+    it("surfaces the real reason when AniList fails and there is no cache to fall back on", () => {
+        expect(_handleSeaError({
+            response: {
+                status: 404,
+                data: { error: "The AniList API has been temporarily disabled due to severe stability issues." },
+            },
+        })).toBe("Error: The AniList API has been temporarily disabled due to severe stability issues.")
+    })
 })
