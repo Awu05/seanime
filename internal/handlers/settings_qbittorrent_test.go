@@ -10,47 +10,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQbittorrentConnectionSettingsChanged(t *testing.T) {
-	base := &models.TorrentSettings{
-		QBittorrentHost:     "127.0.0.1",
-		QBittorrentPort:     8081,
-		QBittorrentUsername: "admin",
-		QBittorrentPassword: "secret",
-		QBittorrentPath:     "",
-	}
-
-	t.Run("no previous settings", func(t *testing.T) {
-		assert.True(t, qbittorrentConnectionSettingsChanged(nil, base))
+func TestShouldTestQbittorrentConnection(t *testing.T) {
+	t.Run("qbittorrent is default and host is set", func(t *testing.T) {
+		assert.True(t, shouldTestQbittorrentConnection(&models.TorrentSettings{
+			Default:         "qbittorrent",
+			QBittorrentHost: "127.0.0.1",
+		}))
 	})
 
-	t.Run("identical settings", func(t *testing.T) {
-		same := *base
-		assert.False(t, qbittorrentConnectionSettingsChanged(base, &same))
+	t.Run("re-saving unchanged settings still tests the connection", func(t *testing.T) {
+		// A host that was already saved (and worked before) but is unreachable right now
+		// must still block the save - otherwise a save while qBittorrent is down goes
+		// through silently with no feedback, which is the bug this guards against.
+		unchanged := &models.TorrentSettings{
+			Default:         "qbittorrent",
+			QBittorrentHost: "192.168.68.65",
+			QBittorrentPort: 8084,
+		}
+		assert.True(t, shouldTestQbittorrentConnection(unchanged))
 	})
 
-	t.Run("host changed", func(t *testing.T) {
-		next := *base
-		next.QBittorrentHost = "192.168.1.5"
-		assert.True(t, qbittorrentConnectionSettingsChanged(base, &next))
+	t.Run("transmission is default", func(t *testing.T) {
+		assert.False(t, shouldTestQbittorrentConnection(&models.TorrentSettings{
+			Default:         "transmission",
+			QBittorrentHost: "127.0.0.1",
+		}))
 	})
 
-	t.Run("port changed", func(t *testing.T) {
-		next := *base
-		next.QBittorrentPort = 9999
-		assert.True(t, qbittorrentConnectionSettingsChanged(base, &next))
-	})
-
-	t.Run("credentials changed", func(t *testing.T) {
-		next := *base
-		next.QBittorrentPassword = "different"
-		assert.True(t, qbittorrentConnectionSettingsChanged(base, &next))
-	})
-
-	t.Run("unrelated field changed", func(t *testing.T) {
-		next := *base
-		next.QBittorrentTags = "seanime"
-		assert.False(t, qbittorrentConnectionSettingsChanged(base, &next),
-			"tags/category don't affect connectivity and shouldn't trigger a retest")
+	t.Run("host is empty", func(t *testing.T) {
+		assert.False(t, shouldTestQbittorrentConnection(&models.TorrentSettings{
+			Default:         "qbittorrent",
+			QBittorrentHost: "",
+		}))
 	})
 }
 

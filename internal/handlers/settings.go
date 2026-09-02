@@ -244,15 +244,12 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	b.Torrent.QBittorrentPath = strings.TrimSpace(strings.Trim(b.Torrent.QBittorrentPath, "\""))
 	b.Torrent.TransmissionPath = strings.TrimSpace(strings.Trim(b.Torrent.TransmissionPath, "\""))
 
-	// Block the save if qBittorrent is the active torrent client and its connection details
-	// changed but don't actually work - previously a bad host/port/credential typo would save
-	// silently, with the only feedback being a background log line nobody sees.
-	var prevTorrent *models.TorrentSettings
-	if prevSettings != nil {
-		prevTorrent = prevSettings.Torrent
-	}
-	if b.Torrent.Default == "qbittorrent" && b.Torrent.QBittorrentHost != "" &&
-		qbittorrentConnectionSettingsChanged(prevTorrent, &b.Torrent) {
+	// Block the save if qBittorrent is the active torrent client but can't actually be reached -
+	// previously a bad host/port/credential typo (or qBittorrent simply being down) would save
+	// silently, with the only feedback being a background log line nobody sees. This runs on
+	// every save (not just when the fields changed) so a save while qBittorrent happens to be
+	// down is never silently accepted either.
+	if shouldTestQbittorrentConnection(&b.Torrent) {
 		loginFn := qbittorrentLoginFor(&b.Torrent, h.App.Logger)
 		if err := testQbittorrentConnection(loginFn); err != nil {
 			return h.RespondWithError(c, fmt.Errorf("could not connect to qBittorrent: %w", err))
@@ -552,20 +549,11 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 // tests can shrink it.
 var qbittorrentConnectionTestTimeout = 8 * time.Second
 
-// qbittorrentConnectionSettingsChanged reports whether any field that affects how Seanime
-// connects to qBittorrent differs between the previous and new settings. Tags/category and other
-// non-connection fields are deliberately excluded - changing them shouldn't force a fresh
-// connectivity check (and shouldn't block the save if qBittorrent happens to be down at that
-// moment for a config that was already validated).
-func qbittorrentConnectionSettingsChanged(prev, next *models.TorrentSettings) bool {
-	if prev == nil {
-		return true
-	}
-	return prev.QBittorrentHost != next.QBittorrentHost ||
-		prev.QBittorrentPort != next.QBittorrentPort ||
-		prev.QBittorrentUsername != next.QBittorrentUsername ||
-		prev.QBittorrentPassword != next.QBittorrentPassword ||
-		prev.QBittorrentPath != next.QBittorrentPath
+// shouldTestQbittorrentConnection reports whether a settings save should verify qBittorrent
+// connectivity before persisting: only relevant when qBittorrent is the active torrent client
+// and a host is actually configured.
+func shouldTestQbittorrentConnection(t *models.TorrentSettings) bool {
+	return t.Default == "qbittorrent" && t.QBittorrentHost != ""
 }
 
 // qbittorrentLoginFor builds a login function for testQbittorrentConnection from the given
