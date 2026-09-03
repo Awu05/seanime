@@ -3,6 +3,7 @@ package core
 import (
 	"seanime/internal/api/simkl"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/platforms/shared_platform"
 	syncpkg "seanime/internal/sync"
 	"seanime/internal/util"
 )
@@ -37,18 +38,24 @@ func (a *App) simklEnabledFor(profileID string) func() bool {
 	}
 }
 
-// wrapAnilistPlatform wraps raw with MirroringPlatform for the given profile. This is the
-// ONLY place that should ever construct a MirroringPlatform - every code path that installs
-// or hands out an AniList platform for a profile must go through this, or SIMKL mirroring
-// and AniList-retry-queueing silently stop working for that platform.
+// wrapAnilistPlatform wraps raw with MirroringPlatform, then FallbackPlatform, for the given
+// profile. This is the ONLY place that should ever construct either wrapper - every code path
+// that installs or hands out an AniList platform for a profile must go through this, or SIMKL
+// mirroring, AniList-retry-queueing, and the AniList-outage fallback all silently stop working
+// for that platform.
+//
+// FallbackPlatform wraps OUTSIDE MirroringPlatform: if AniList is down, there is no point
+// letting MirroringPlatform attempt (and fail, and queue) a doomed AniList call before
+// FallbackPlatform gets a turn to redirect to SIMKL instead. Both wrappers share the same
+// simklClient instance and the same simklEnabledFor(profileID) closure, so their view of
+// "is SIMKL connected/enabled for this profile" can never drift between the two layers.
 func (a *App) wrapAnilistPlatform(raw platform.Platform, profileID string) platform.Platform {
-	return syncpkg.NewMirroringPlatform(
-		raw,
-		syncpkg.NewResolvingSimklClient(simkl.DefaultHTTPClient, profileID, a.simklTokenLookup),
-		a.Database,
-		profileID,
-		a.simklEnabledFor(profileID),
-	)
+	simklClient := syncpkg.NewResolvingSimklClient(simkl.DefaultHTTPClient, profileID, a.simklTokenLookup)
+	simklEnabled := a.simklEnabledFor(profileID)
+	mirrored := syncpkg.NewMirroringPlatform(raw, simklClient, a.Database, profileID, simklEnabled)
+	return syncpkg.NewFallbackPlatform(mirrored, simklClient, a.Database, profileID, simklEnabled, func() bool {
+		return shared_platform.IsWorking.Load()
+	})
 }
 
 // setDefaultAnilistPlatform is the ONLY place that should call a.AnilistPlatformRef.Set(...)
