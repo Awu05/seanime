@@ -44,3 +44,34 @@ func TestMapAnilistScoreToSimklRating(t *testing.T) {
 		assert.Equal(t, 10, rating)
 	})
 }
+
+func TestMapSimklStatusToAnilist(t *testing.T) {
+	cases := map[string]anilist.MediaListStatus{
+		"watching":    anilist.MediaListStatusCurrent,
+		"plantowatch": anilist.MediaListStatusPlanning,
+		"completed":   anilist.MediaListStatusCompleted,
+		"dropped":     anilist.MediaListStatusDropped,
+		"hold":        anilist.MediaListStatusPaused,
+		"unknown":     anilist.MediaListStatusCurrent, // unrecognized falls back to "current"
+	}
+	for status, want := range cases {
+		assert.Equal(t, want, MapSimklStatusToAnilist(status), "status %s", status)
+	}
+}
+
+func TestMapSimklRatingToAnilistScore(t *testing.T) {
+	t.Run("nil rating means unscored", func(t *testing.T) {
+		assert.Equal(t, 0, MapSimklRatingToAnilistScore(nil))
+	})
+
+	t.Run("converts SIMKL's 1-10 scale to AniList's 0-100 scale", func(t *testing.T) {
+		rating := 8
+		assert.Equal(t, 80, MapSimklRatingToAnilistScore(&rating))
+	})
+
+	t.Run("clamps to the 0-100 range", func(t *testing.T) {
+		low, high := 0, 15
+		assert.Equal(t, 0, MapSimklRatingToAnilistScore(&low))
+		assert.Equal(t, 100, MapSimklRatingToAnilistScore(&high))
+	})
+}

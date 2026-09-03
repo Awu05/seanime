@@ -42,3 +42,41 @@ func MapAnilistScoreToSimklRating(scoreRaw int) (rating int, shouldRemove bool) 
 	}
 	return rating, false
 }
+
+// MapSimklStatusToAnilist converts a SIMKL watchlist status back to AniList's list status.
+// SIMKL has no "repeating" status, so its "watching" always maps back to Current - a genuine
+// rewatch-in-progress on SIMKL cannot be distinguished from a first watch, matching the same
+// information loss MapAnilistStatusToSimkl already accepts in the other direction.
+func MapSimklStatusToAnilist(status string) anilist.MediaListStatus {
+	switch status {
+	case "watching":
+		return anilist.MediaListStatusCurrent
+	case "plantowatch":
+		return anilist.MediaListStatusPlanning
+	case "completed":
+		return anilist.MediaListStatusCompleted
+	case "dropped":
+		return anilist.MediaListStatusDropped
+	case "hold":
+		return anilist.MediaListStatusPaused
+	default:
+		return anilist.MediaListStatusCurrent
+	}
+}
+
+// MapSimklRatingToAnilistScore converts SIMKL's 1-10 rating scale to AniList's 0-100 raw score
+// scale. A nil rating (never rated on SIMKL) maps to 0, matching AniList's own "unscored"
+// convention used throughout this codebase.
+func MapSimklRatingToAnilistScore(rating *int) int {
+	if rating == nil {
+		return 0
+	}
+	score := *rating * 10
+	if score < 0 {
+		return 0
+	}
+	if score > 100 {
+		return 100
+	}
+	return score
+}
