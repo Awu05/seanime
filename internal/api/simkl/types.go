@@ -27,21 +27,18 @@ type ShowEntry struct {
 	Rating   int       `json:"rating,omitempty"`
 }
 
-type animeEnvelope struct {
-	Anime []ShowEntry `json:"anime"`
-}
-
-// animeEnvelopeWithTo is the /sync/add-to-list body shape - the concrete "to" status is
-// nested per-item (confirmed against SIMKL's own add_anime_completed/dropped/hold/
+// animeEnvelope is the body shape for every anime sync endpoint. Which per-item fields are
+// set is what varies by operation - for /sync/add-to-list the concrete status is nested
+// per-item in ShowEntry.To (confirmed against SIMKL's own add_anime_completed/dropped/hold/
 // plantowatch examples), not a single top-level field.
-type animeEnvelopeWithTo struct {
+type animeEnvelope struct {
 	Anime []ShowEntry `json:"anime"`
 }
 
 // PinResponse is the response from GET /oauth/pin (step 1 of SIMKL's PIN/device flow).
 type PinResponse struct {
-	UserCode        string
-	VerificationURI string
-	ExpiresIn       int
-	Interval        int
+	UserCode        string `json:"userCode"`
+	VerificationURI string `json:"verificationUri"`
+	ExpiresIn       int    `json:"expiresIn"`
+	Interval        int    `json:"interval"`
 }

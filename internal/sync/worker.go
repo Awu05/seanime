@@ -19,11 +19,16 @@ type PendingSyncStore interface {
 
 const pendingSyncBatchSize = 20
 
+// initialRetryDelay is how long a freshly-enqueued row waits before its first delivery
+// attempt. Shared with MirroringPlatform.enqueue so a row's first wait and backoffFor(0)
+// can't drift apart.
+const initialRetryDelay = time.Minute
+
 // backoffFor returns the delay before the next retry, capped at 30 minutes.
 func backoffFor(attempts int) time.Duration {
 	switch {
 	case attempts <= 0:
-		return time.Minute
+		return initialRetryDelay
 	case attempts == 1:
 		return 5 * time.Minute
 	case attempts == 2:

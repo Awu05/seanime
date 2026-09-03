@@ -20,7 +20,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*APIClient, *httptes
 }
 
 func TestAPIClient_AddToList(t *testing.T) {
-	var captured animeEnvelopeWithTo
+	var captured animeEnvelope
 	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/sync/add-to-list", r.URL.Path)
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))

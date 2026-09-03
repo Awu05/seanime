@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -87,10 +86,15 @@ type (
 		Watcher *scanner.Watcher
 
 		// API clients and providers
-		AnilistClientRef    *util.Ref[anilist.AnilistClient]
-		AnilistPlatformRef  *util.Ref[platform.Platform]
-		OfflinePlatformRef  *util.Ref[platform.Platform]
-		MetadataProviderRef *util.Ref[metadata_provider.Provider]
+		AnilistClientRef   *util.Ref[anilist.AnilistClient]
+		AnilistPlatformRef *util.Ref[platform.Platform]
+		// rawAnilistPlatformRef holds the CURRENT unwrapped default-profile AniList platform.
+		// Kept in sync by every code path that changes AnilistPlatformRef (see setDefaultAnilistPlatform).
+		// The background SIMKL sync worker reads this live (never a one-time-captured snapshot) so it
+		// never retries against a stale/closed platform after login, platform-switch, or offline-mode toggle.
+		rawAnilistPlatformRef *util.Ref[platform.Platform]
+		OfflinePlatformRef    *util.Ref[platform.Platform]
+		MetadataProviderRef   *util.Ref[metadata_provider.Provider]
 
 		// Library
 		FillerManager       *fillermanager.FillerManager
@@ -544,56 +548,36 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	}
 
 	// SIMKL backup-sync: wrap the active AniList platform so every list mutation is durably
-	// retried and mirrored to SIMKL. rawAnilistPlatform is captured BEFORE wrapping so the
-	// background worker below can retry through it directly for the default profile —
-	// retrying through the wrapped version would re-run interception logic on every retry
-	// and re-enqueue the same row onto itself forever.
-	rawAnilistPlatform := app.AnilistPlatformRef.Get()
-	simklTokenLookup := func(profileID string) (string, bool) {
-		account, err := app.Database.GetSimklAccount(profileID)
-		if err != nil {
-			return "", false
-		}
-		return account.AccessToken, true
-	}
-	simklEnabledFor := func(profileID string) func() bool {
-		return func() bool {
-			settings, err := app.Database.GetSimklSettings(profileID)
-			if err != nil {
-				return false
-			}
-			_, connectErr := app.Database.GetSimklAccount(profileID)
-			return connectErr == nil && settings.Enabled
-		}
-	}
-	app.AnilistPlatformRef.Set(syncpkg.NewMirroringPlatform(
-		rawAnilistPlatform,
-		syncpkg.NewResolvingSimklClient(http.DefaultClient, "_default", simklTokenLookup),
-		app.Database,
-		"_default",
-		simklEnabledFor("_default"),
-	))
+	// retried and mirrored to SIMKL. setDefaultAnilistPlatform is the single choke point for
+	// this — it installs the wrapper AND records the unwrapped platform in rawAnilistPlatformRef,
+	// which the worker below reads live. Retrying through the wrapped version instead would
+	// re-run interception logic on every retry and re-enqueue the same row onto itself forever.
+	app.setDefaultAnilistPlatform(app.AnilistPlatformRef.Get())
 
 	simklWorker := syncpkg.NewWorker(
 		app.Database,
 		func(profileID string) (simkl.Client, bool) {
 			if profileID == "" {
-				profileID = "_default"
+				profileID = DefaultSimklProfileID
 			}
-			token, ok := simklTokenLookup(profileID)
+			token, ok := app.simklTokenLookup(profileID)
 			if !ok {
 				return nil, false
 			}
-			return simkl.NewAPIClient(http.DefaultClient, token), true
+			return simkl.NewAPIClient(simkl.DefaultHTTPClient, token), true
 		},
 		func(profileID string) platform.Platform {
-			if profileID == "" || profileID == "_default" {
-				return rawAnilistPlatform
+			// Resolve the raw platform through the ref every time: a login, platform switch
+			// or offline-mode toggle replaces (and closes) the previous one.
+			if profileID == "" || profileID == DefaultSimklProfileID || app.AnilistPool == nil {
+				if app.rawAnilistPlatformRef == nil {
+					return nil
+				}
+				return app.rawAnilistPlatformRef.Get()
 			}
-			if app.AnilistPool == nil {
-				return rawAnilistPlatform
-			}
-			return app.AnilistPool.GetPlatformForProfile(profileID)
+			// The pool hands out pre-wrapped platforms; unwrap so a retry doesn't re-enter
+			// interception and enqueue a duplicate row for itself on every failed attempt.
+			return syncpkg.RawPlatform(app.AnilistPool.GetPlatformForProfile(profileID))
 		},
 		func() bool { return shared_platform.IsWorking.Load() },
 	)

@@ -163,6 +163,34 @@ func TestMirroringPlatform_UpdateEntryProgress_SimklDisabled_NeverCalled(t *test
 	assert.Empty(t, queue.enqueued)
 }
 
+func TestMirroringPlatform_UpdateEntryProgress_ZeroProgress_SkipsSimkl(t *testing.T) {
+	// MarkProgress(ctx, id, 0) builds an empty episode list, producing a request body
+	// byte-identical to RemoveEntry's - it would DELETE the SIMKL backup entry. A progress
+	// reset must be a no-op on the backup, so the mirror call is skipped entirely.
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	err := mp.UpdateEntryProgress(context.Background(), 101922, 0, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, inner.updateProgressCalls, "the AniList reset must still go through")
+	assert.Zero(t, simklClient.markProgressCalls, "progress 0 must never reach SIMKL")
+	assert.Zero(t, simklClient.removeEntryCalls, "and must not be turned into a deletion either")
+	assert.Empty(t, queue.enqueued)
+}
+
+func TestMirroringPlatform_RawPlatform_Unwraps(t *testing.T) {
+	// The retry worker delivers AniList rows through RawPlatform: replaying through the
+	// wrapper would re-enter interception and enqueue a duplicate row per failed attempt.
+	inner := &fakePlatform{}
+	mp := NewMirroringPlatform(inner, &fakeSimklClient{}, &fakeQueue{}, "_default", func() bool { return true })
+
+	assert.Same(t, inner, RawPlatform(mp), "RawPlatform must return the wrapped-in platform")
+	assert.Same(t, inner, RawPlatform(inner), "an unwrapped platform must pass through unchanged")
+}
+
 func TestMirroringPlatform_PassthroughReadMethod(t *testing.T) {
 	// GetAnime is not overridden by MirroringPlatform - embedding must delegate to inner.
 	inner := &fakePlatformWithGetAnime{}

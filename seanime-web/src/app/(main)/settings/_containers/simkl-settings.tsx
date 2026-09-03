@@ -8,13 +8,14 @@ import { toast } from "sonner"
 
 type SimklSettings = {
     enabled: boolean
+    connected: boolean
 }
 
 type PinResponse = {
-    UserCode: string
-    VerificationURI: string
-    ExpiresIn: number
-    Interval: number
+    userCode: string
+    verificationUri: string
+    expiresIn: number
+    interval: number
 }
 
 export function SimklSettingsContainer() {
@@ -39,7 +40,7 @@ export function SimklSettingsContainer() {
         },
     })
 
-    const { mutate: saveSettings } = useServerMutation<SimklSettings, SimklSettings>({
+    const { mutate: saveSettings } = useServerMutation<{ enabled: boolean }, { enabled: boolean }>({
         endpoint: "/api/v1/simkl/settings",
         method: "PATCH",
         mutationKey: ["simkl-save-settings"],
@@ -78,14 +79,14 @@ export function SimklSettingsContainer() {
         if (pollTimerRef.current) clearInterval(pollTimerRef.current)
         const startedAt = Date.now()
         pollTimerRef.current = setInterval(async () => {
-            if (Date.now() - startedAt > activePin.ExpiresIn * 1000) {
+            if (Date.now() - startedAt > activePin.expiresIn * 1000) {
                 if (pollTimerRef.current) clearInterval(pollTimerRef.current)
                 setPin(null)
                 toast.error("SIMKL PIN expired, try again")
                 return
             }
             try {
-                const done = await pollConnect({ userCode: activePin.UserCode })
+                const done = await pollConnect({ userCode: activePin.userCode })
                 if (done === true) {
                     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
                     setPin(null)
@@ -98,7 +99,7 @@ export function SimklSettingsContainer() {
                 // A "still pending" response is a 200 OK with data:false (not an error), so this
                 // catch only fires on real errors — swallow here and let the next tick retry.
             }
-        }, activePin.Interval * 1000)
+        }, activePin.interval * 1000)
     }
 
     React.useEffect(() => {
@@ -106,6 +107,8 @@ export function SimklSettingsContainer() {
             if (pollTimerRef.current) clearInterval(pollTimerRef.current)
         }
     }, [])
+
+    const isConnected = settings?.connected ?? false
 
     return (
         <div className="space-y-4">
@@ -124,26 +127,33 @@ export function SimklSettingsContainer() {
             </div>
 
             {!pin && (
-                <Button size="sm" intent="gray-outline" loading={isStarting} onClick={() => startConnect()}>
-                    Connect SIMKL account
-                </Button>
+                <div className="flex items-center gap-3">
+                    <p className="text-sm text-[--muted]">
+                        {isConnected ? "SIMKL account connected" : "No SIMKL account connected"}
+                    </p>
+                    <Button size="sm" intent="gray-outline" loading={isStarting} onClick={() => startConnect()}>
+                        {isConnected ? "Reconnect" : "Connect SIMKL account"}
+                    </Button>
+                </div>
             )}
 
             {pin && (
                 <Alert
                     intent="info"
-                    description={`Go to ${pin.VerificationURI} and enter code: ${pin.UserCode}`}
+                    description={`Go to ${pin.verificationUri} and enter code: ${pin.userCode}`}
                 />
             )}
 
-            <div className="flex gap-2">
-                <Button size="sm" intent="gray-outline" loading={isSyncing} onClick={() => syncNow()}>
-                    Sync now (seed full collection)
-                </Button>
-                <Button size="sm" intent="alert-subtle" onClick={() => disconnect()}>
-                    Disconnect
-                </Button>
-            </div>
+            {isConnected && (
+                <div className="flex gap-2">
+                    <Button size="sm" intent="gray-outline" loading={isSyncing} onClick={() => syncNow()}>
+                        Sync now (seed full collection)
+                    </Button>
+                    <Button size="sm" intent="alert-subtle" onClick={() => disconnect()}>
+                        Disconnect
+                    </Button>
+                </div>
+            )}
         </div>
     )
 }

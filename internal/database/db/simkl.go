@@ -8,6 +8,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// maxPendingSyncAttempts caps how many times a row is retried. Without it a permanently
+// undeliverable row (a deleted profile, a revoked token) is re-attempted every 30 minutes
+// for the lifetime of the install.
+const maxPendingSyncAttempts = 20
+
 func (db *Database) GetSimklAccount(profileID string) (*models.SimklAccount, error) {
 	var res models.SimklAccount
 	err := db.gormdb.Where("profile_id = ?", profileID).First(&res).Error
@@ -78,7 +83,7 @@ func (db *Database) EnqueuePendingSync(item *models.PendingSync) error {
 
 func (db *Database) GetDuePendingSyncs(target string, limit int) ([]*models.PendingSync, error) {
 	var res []*models.PendingSync
-	err := db.gormdb.Where("target = ? AND next_attempt_at <= ?", target, time.Now()).
+	err := db.gormdb.Where("target = ? AND next_attempt_at <= ? AND attempts < ?", target, time.Now(), maxPendingSyncAttempts).
 		Order("created_at asc").
 		Limit(limit).
 		Find(&res).Error

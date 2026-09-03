@@ -7,7 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 )
+
+// DefaultHTTPClient is the shared client every SIMKL call should use. http.DefaultClient has
+// no timeout, so a hung SIMKL connection would block a mirrored list mutation (and therefore
+// the HTTP request or playback progress update that triggered it) indefinitely.
+var DefaultHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // Client is the interface MirroringPlatform depends on, so tests can substitute a fake
 // instead of hitting the network.
@@ -61,7 +67,7 @@ func (c *APIClient) do(ctx context.Context, method, path string, body interface{
 }
 
 func (c *APIClient) AddToList(ctx context.Context, anilistID int, status string) error {
-	body := animeEnvelopeWithTo{Anime: []ShowEntry{{
+	body := animeEnvelope{Anime: []ShowEntry{{
 		Ids: Ids{Anilist: strconv.Itoa(anilistID)},
 		To:  status,
 	}}}

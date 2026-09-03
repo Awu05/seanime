@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 const defaultBaseURL = "https://api.simkl.com"
@@ -25,8 +26,8 @@ func RequestPin(ctx context.Context, httpClient *http.Client, clientID string) (
 }
 
 func requestPinAt(ctx context.Context, httpClient *http.Client, baseURL, clientID string) (*PinResponse, error) {
-	url := fmt.Sprintf("%s/oauth/pin?client_id=%s", baseURL, clientID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	endpoint := fmt.Sprintf("%s/oauth/pin?client_id=%s", baseURL, url.QueryEscape(clientID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +66,10 @@ func PollPin(ctx context.Context, httpClient *http.Client, clientID, userCode st
 }
 
 func pollPinAt(ctx context.Context, httpClient *http.Client, baseURL, clientID, userCode string) (accessToken string, done bool, err error) {
-	url := fmt.Sprintf("%s/oauth/pin/%s?client_id=%s", baseURL, userCode, clientID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// userCode reaches here straight from a request body, so it must be escaped: an
+	// unescaped "../" or "?" would otherwise rewrite the path SIMKL is asked for.
+	endpoint := fmt.Sprintf("%s/oauth/pin/%s?client_id=%s", baseURL, url.PathEscape(userCode), url.QueryEscape(clientID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", false, err
 	}

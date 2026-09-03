@@ -38,6 +38,17 @@ func NewMirroringPlatform(inner platform.Platform, simklClient simkl.Client, que
 	}
 }
 
+// RawPlatform returns the unwrapped platform underneath a MirroringPlatform, or p unchanged
+// if it isn't one. The retry Worker MUST deliver AniList rows through this: replaying a row
+// through the wrapper would re-run interception, enqueueing a fresh duplicate row on every
+// failed attempt (unbounded queue growth) and re-mirroring to SIMKL on every success.
+func RawPlatform(p platform.Platform) platform.Platform {
+	if m, ok := p.(*MirroringPlatform); ok {
+		return m.Platform
+	}
+	return p
+}
+
 type updateProgressPayload struct {
 	MediaID       int  `json:"mediaId"`
 	Progress      int  `json:"progress"`
@@ -50,7 +61,10 @@ func (m *MirroringPlatform) UpdateEntryProgress(ctx context.Context, mediaID int
 		m.enqueue("anilist", "update_progress", updateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
 	}
 
-	if m.simklEnabled() {
+	// progress <= 0 is skipped on the SIMKL side: MarkProgress(0) builds an empty episode list,
+	// which is byte-identical to RemoveEntry's request body and would DELETE the backup entry.
+	// A progress reset must be a no-op on the backup, never a deletion.
+	if progress > 0 && m.simklEnabled() {
 		if simklErr := m.simklClient.MarkProgress(ctx, mediaID, progress); simklErr != nil {
 			m.enqueue("simkl", "update_progress", updateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
 		}
@@ -175,6 +189,6 @@ func (m *MirroringPlatform) enqueue(target, operation string, payload interface{
 		Target:        target,
 		Operation:     operation,
 		Payload:       encoded,
-		NextAttemptAt: time.Now().Add(time.Minute),
+		NextAttemptAt: time.Now().Add(initialRetryDelay),
 	})
 }

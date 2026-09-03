@@ -2,13 +2,11 @@ package core
 
 import (
 	"context"
-	"net/http"
 	"seanime/internal/api/anilist"
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/nativeplayer"
 	"seanime/internal/platforms/platform"
-	syncpkg "seanime/internal/sync"
 	"seanime/internal/torrentstream"
 	"seanime/internal/util"
 	"seanime/internal/videocore"
@@ -67,30 +65,11 @@ func (a *App) SeedSessionCollection(profileID string, session *ProfileStreamSess
 // wrapper (with its own currentTorrent/currentFile tracking) but shares the single anacrolix
 // torrent engine from the App's singleton.
 func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
-	// Resolve the profile's own platform (pool-backed in multi-user mode).
+	// Resolve the profile's own platform (pool-backed in multi-user mode). Both sources are
+	// already SIMKL-mirroring-wrapped — AnilistPool.GetPlatformForProfile wraps before caching
+	// and AnilistPlatformRef is only ever set through setDefaultAnilistPlatform — so this must
+	// NOT wrap again, which would double-mirror every mutation.
 	plat, isProfilePlatform := a.sessionPlatform(profileID)
-	if isProfilePlatform {
-		plat = syncpkg.NewMirroringPlatform(
-			plat,
-			syncpkg.NewResolvingSimklClient(http.DefaultClient, profileID, func(pid string) (string, bool) {
-				account, err := a.Database.GetSimklAccount(pid)
-				if err != nil {
-					return "", false
-				}
-				return account.AccessToken, true
-			}),
-			a.Database,
-			profileID,
-			func() bool {
-				settings, err := a.Database.GetSimklSettings(profileID)
-				if err != nil {
-					return false
-				}
-				_, connectErr := a.Database.GetSimklAccount(profileID)
-				return connectErr == nil && settings.Enabled
-			},
-		)
-	}
 	platformRef := a.AnilistPlatformRef
 	refreshAnimeCollection := func() {
 		_, _ = a.RefreshAnimeCollection()

@@ -50,7 +50,7 @@ func (a *App) UpdatePlatform(platform platform.Platform) {
 	if a.AnilistPlatformRef.IsPresent() {
 		a.AnilistPlatformRef.Get().Close()
 	}
-	a.AnilistPlatformRef.Set(platform)
+	a.setDefaultAnilistPlatform(platform)
 	a.AddOnRefreshAnilistCollectionFunc("anilist-platform", func() {
 		a.AnilistPlatformRef.Get().ClearCache()
 	})
