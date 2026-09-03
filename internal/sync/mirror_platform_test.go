@@ -17,8 +17,16 @@ import (
 // countingAnimeCollectionClient in internal/platforms/anilist_platform.
 type fakePlatform struct {
 	platform.Platform
-	updateProgressErr   error
-	updateProgressCalls int
+	updateProgressErr    error
+	updateProgressCalls  int
+	updateEntryCalls     int
+	updateEntryErr       error
+	updateRepeatCalls    int
+	updateRepeatErr      error
+	deleteEntryCalls     int
+	deleteEntryErr       error
+	addToCollectionCalls int
+	addToCollectionErr   error
 }
 
 func (f *fakePlatform) UpdateEntryProgress(ctx context.Context, mediaID int, progress int, totalEpisodes *int) error {
@@ -26,15 +34,47 @@ func (f *fakePlatform) UpdateEntryProgress(ctx context.Context, mediaID int, pro
 	return f.updateProgressErr
 }
 
+func (f *fakePlatform) UpdateEntry(ctx context.Context, mediaID int, status *anilist.MediaListStatus, scoreRaw *int, progress *int, startedAt *anilist.FuzzyDateInput, completedAt *anilist.FuzzyDateInput) error {
+	f.updateEntryCalls++
+	return f.updateEntryErr
+}
+
+func (f *fakePlatform) UpdateEntryRepeat(ctx context.Context, mediaID int, repeat int) error {
+	f.updateRepeatCalls++
+	return f.updateRepeatErr
+}
+
+func (f *fakePlatform) DeleteEntry(ctx context.Context, mediaID int, entryID int) error {
+	f.deleteEntryCalls++
+	return f.deleteEntryErr
+}
+
+func (f *fakePlatform) AddMediaToCollection(ctx context.Context, mIds []int) error {
+	f.addToCollectionCalls++
+	return f.addToCollectionErr
+}
+
 type fakeSimklClient struct {
 	markProgressErr   error
 	markProgressCalls int
 	lastAnilistID     int
 	lastEpisode       int
+	addToListCalls    int
+	addToListErr      error
+	lastStatus        string
+	setRatingCalls    int
+	setRatingErr      error
+	lastRating        int
+	removeRatingCalls int
+	removeRatingErr   error
+	removeEntryCalls  int
+	removeEntryErr    error
 }
 
 func (f *fakeSimklClient) AddToList(ctx context.Context, anilistID int, status string) error {
-	return nil
+	f.addToListCalls++
+	f.lastStatus = status
+	return f.addToListErr
 }
 func (f *fakeSimklClient) MarkProgress(ctx context.Context, anilistID int, episode int) error {
 	f.markProgressCalls++
@@ -42,10 +82,20 @@ func (f *fakeSimklClient) MarkProgress(ctx context.Context, anilistID int, episo
 	f.lastEpisode = episode
 	return f.markProgressErr
 }
-func (f *fakeSimklClient) RemoveEntry(ctx context.Context, anilistID int) error           { return nil }
-func (f *fakeSimklClient) SetRating(ctx context.Context, anilistID int, rating int) error { return nil }
-func (f *fakeSimklClient) RemoveRating(ctx context.Context, anilistID int) error          { return nil }
-func (f *fakeSimklClient) TestConnection(ctx context.Context) error                       { return nil }
+func (f *fakeSimklClient) RemoveEntry(ctx context.Context, anilistID int) error {
+	f.removeEntryCalls++
+	return f.removeEntryErr
+}
+func (f *fakeSimklClient) SetRating(ctx context.Context, anilistID int, rating int) error {
+	f.setRatingCalls++
+	f.lastRating = rating
+	return f.setRatingErr
+}
+func (f *fakeSimklClient) RemoveRating(ctx context.Context, anilistID int) error {
+	f.removeRatingCalls++
+	return f.removeRatingErr
+}
+func (f *fakeSimklClient) TestConnection(ctx context.Context) error { return nil }
 
 type fakeQueue struct {
 	enqueued []*models.PendingSync
@@ -129,4 +179,75 @@ type fakePlatformWithGetAnime struct {
 
 func (f *fakePlatformWithGetAnime) GetAnime(ctx context.Context, mediaID int) (*anilist.BaseAnime, error) {
 	return &anilist.BaseAnime{ID: mediaID}, nil
+}
+
+func TestMirroringPlatform_UpdateEntry_MirrorsStatusAndScore(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	status := anilist.MediaListStatusCompleted
+	score := 85
+	err := mp.UpdateEntry(context.Background(), 101922, &status, &score, nil, nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, inner.updateEntryCalls)
+	assert.Equal(t, 1, simklClient.addToListCalls)
+	assert.Equal(t, "completed", simklClient.lastStatus)
+	assert.Equal(t, 1, simklClient.setRatingCalls)
+	assert.Equal(t, 9, simklClient.lastRating) // round(85/10)
+	assert.Zero(t, simklClient.removeRatingCalls)
+}
+
+func TestMirroringPlatform_UpdateEntry_ZeroScoreRemovesRating(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	status := anilist.MediaListStatusCurrent
+	score := 0
+	err := mp.UpdateEntry(context.Background(), 101922, &status, &score, nil, nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, simklClient.removeRatingCalls)
+	assert.Zero(t, simklClient.setRatingCalls)
+}
+
+func TestMirroringPlatform_UpdateEntryRepeat_AnilistFails_Queued(t *testing.T) {
+	wantErr := errors.New("anilist unreachable")
+	inner := &fakePlatform{updateRepeatErr: wantErr}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, &fakeSimklClient{}, queue, "_default", func() bool { return false })
+
+	err := mp.UpdateEntryRepeat(context.Background(), 101922, 2)
+	require.ErrorIs(t, err, wantErr)
+	require.Len(t, queue.enqueued, 1)
+	assert.Equal(t, "update_repeat", queue.enqueued[0].Operation)
+}
+
+func TestMirroringPlatform_DeleteEntry_MirrorsRemoval(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	err := mp.DeleteEntry(context.Background(), 101922, 555)
+	require.NoError(t, err)
+	assert.Equal(t, 1, inner.deleteEntryCalls)
+	assert.Equal(t, 1, simklClient.removeEntryCalls)
+	assert.Empty(t, queue.enqueued)
+}
+
+func TestMirroringPlatform_AddMediaToCollection_AnilistFails_Queued(t *testing.T) {
+	wantErr := errors.New("anilist unreachable")
+	inner := &fakePlatform{addToCollectionErr: wantErr}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, &fakeSimklClient{}, queue, "_default", func() bool { return false })
+
+	err := mp.AddMediaToCollection(context.Background(), []int{101922, 21})
+	require.ErrorIs(t, err, wantErr)
+	require.Len(t, queue.enqueued, 1)
+	assert.Equal(t, "add_to_collection", queue.enqueued[0].Operation)
 }
