@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"seanime/internal/api/anilist"
+	"seanime/internal/api/simkl"
 	"seanime/internal/database/models"
 	"seanime/internal/platforms/platform"
 	"testing"
@@ -96,6 +97,9 @@ func (f *fakeSimklClient) RemoveRating(ctx context.Context, anilistID int) error
 	return f.removeRatingErr
 }
 func (f *fakeSimklClient) TestConnection(ctx context.Context) error { return nil }
+func (f *fakeSimklClient) GetAllItems(ctx context.Context) ([]simkl.AllItemsEntry, error) {
+	return nil, nil
+}
 
 type fakeQueue struct {
 	enqueued []*models.PendingSync

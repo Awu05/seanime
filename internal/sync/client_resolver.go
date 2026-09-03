@@ -78,3 +78,11 @@ func (r *resolvingClient) TestConnection(ctx context.Context) error {
 	}
 	return c.TestConnection(ctx)
 }
+
+func (r *resolvingClient) GetAllItems(ctx context.Context) ([]simkl.AllItemsEntry, error) {
+	c, ok := r.client()
+	if !ok {
+		return nil, errors.New("simkl: not connected")
+	}
+	return c.GetAllItems(ctx)
+}
