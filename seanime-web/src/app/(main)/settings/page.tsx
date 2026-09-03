@@ -24,6 +24,7 @@ import { MangaSettings } from "@/app/(main)/settings/_containers/manga-settings"
 import { MediastreamSettings } from "@/app/(main)/settings/_containers/mediastream-settings"
 import { ServerSettings } from "@/app/(main)/settings/_containers/server-settings"
 import { TorrentstreamSettings } from "@/app/(main)/settings/_containers/torrentstream-settings"
+import { SimklSettingsContainer } from "@/app/(main)/settings/_containers/simkl-settings"
 import { UISettings } from "@/app/(main)/settings/_containers/ui-settings"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { SeaLink } from "@/components/shared/sea-link"
@@ -68,7 +69,7 @@ import {
 import { LuRefreshCw } from "react-icons/lu"
 import { MdOutlineConnectWithoutContact, MdOutlineDownloading, MdOutlinePalette } from "react-icons/md"
 import { RiFolderDownloadFill } from "react-icons/ri"
-import { SiBittorrent, SiQbittorrent, SiTransmission } from "react-icons/si"
+import { SiBittorrent, SiQbittorrent, SiSimkl, SiTransmission } from "react-icons/si"
 import { TbDatabaseExclamation, TbPlugConnected } from "react-icons/tb"
 import { VscDebugAlt } from "react-icons/vsc"
 import { toast } from "sonner"
@@ -328,6 +329,10 @@ export default function Page() {
                                         value="anime-tracker"
                                         className="group"
                                     ><LuCircleArrowOutUpRight className="text-xl mr-3 transition-transform duration-200" /> Anime Tracker</TabsTrigger>
+                                    <TabsTrigger
+                                        value="simkl"
+                                        className="group"
+                                    ><SiSimkl className="text-base mr-2 transition-transform duration-200" /> SIMKL</TabsTrigger>
                                     <TabsTrigger
                                         value="onlinestream"
                                         className="group"
@@ -1149,6 +1154,18 @@ export default function Page() {
                             />
 
                             <TorrentstreamSettings settings={torrentstreamSettings} />
+
+                        </TabsContent>
+
+                        <TabsContent value="simkl" className={tabContentClass}>
+
+                            <SettingsPageHeader
+                                title="SIMKL"
+                                description="Mirror your AniList list to SIMKL as a live backup, so you're never solely dependent on AniList."
+                                icon={SiSimkl}
+                            />
+
+                            <SimklSettingsContainer />
 
                         </TabsContent>
 
