@@ -1,11 +1,14 @@
 package core
 
 import (
+	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata_provider"
+	"seanime/internal/api/simkl"
 	"seanime/internal/constants"
 	"seanime/internal/continuity"
 	"seanime/internal/database/db"
@@ -42,10 +45,12 @@ import (
 	"seanime/internal/platforms/anilist_platform"
 	"seanime/internal/platforms/offline_platform"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/platforms/simulated_platform"
 	"seanime/internal/playlist"
 	"seanime/internal/plugin"
 	"seanime/internal/report"
+	syncpkg "seanime/internal/sync"
 	"seanime/internal/torrent_clients/torrent_client"
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/torrentstream"
@@ -57,6 +62,7 @@ import (
 	"seanime/internal/videocore"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -536,6 +542,64 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	if !app.IsOffline() {
 		go app.Updater.FetchAnnouncements()
 	}
+
+	// SIMKL backup-sync: wrap the active AniList platform so every list mutation is durably
+	// retried and mirrored to SIMKL. rawAnilistPlatform is captured BEFORE wrapping so the
+	// background worker below can retry through it directly for the default profile —
+	// retrying through the wrapped version would re-run interception logic on every retry
+	// and re-enqueue the same row onto itself forever.
+	rawAnilistPlatform := app.AnilistPlatformRef.Get()
+	simklTokenLookup := func(profileID string) (string, bool) {
+		account, err := app.Database.GetSimklAccount(profileID)
+		if err != nil {
+			return "", false
+		}
+		return account.AccessToken, true
+	}
+	simklEnabledFor := func(profileID string) func() bool {
+		return func() bool {
+			settings, err := app.Database.GetSimklSettings(profileID)
+			if err != nil {
+				return false
+			}
+			_, connectErr := app.Database.GetSimklAccount(profileID)
+			return connectErr == nil && settings.Enabled
+		}
+	}
+	app.AnilistPlatformRef.Set(syncpkg.NewMirroringPlatform(
+		rawAnilistPlatform,
+		syncpkg.NewResolvingSimklClient(http.DefaultClient, "_default", simklTokenLookup),
+		app.Database,
+		"_default",
+		simklEnabledFor("_default"),
+	))
+
+	simklWorker := syncpkg.NewWorker(
+		app.Database,
+		func(profileID string) (simkl.Client, bool) {
+			if profileID == "" {
+				profileID = "_default"
+			}
+			token, ok := simklTokenLookup(profileID)
+			if !ok {
+				return nil, false
+			}
+			return simkl.NewAPIClient(http.DefaultClient, token), true
+		},
+		func(profileID string) platform.Platform {
+			if profileID == "" || profileID == "_default" {
+				return rawAnilistPlatform
+			}
+			if app.AnilistPool == nil {
+				return rawAnilistPlatform
+			}
+			return app.AnilistPool.GetPlatformForProfile(profileID)
+		},
+		func() bool { return shared_platform.IsWorking.Load() },
+	)
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	go simklWorker.Run(workerCtx, 30*time.Second)
+	app.AddCleanupFunction(cancelWorker)
 
 	// Initialize all modules that depend on settings
 	app.InitOrRefreshModules("")

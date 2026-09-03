@@ -2,11 +2,13 @@ package core
 
 import (
 	"context"
+	"net/http"
 	"seanime/internal/api/anilist"
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/nativeplayer"
 	"seanime/internal/platforms/platform"
+	syncpkg "seanime/internal/sync"
 	"seanime/internal/torrentstream"
 	"seanime/internal/util"
 	"seanime/internal/videocore"
@@ -67,6 +69,28 @@ func (a *App) SeedSessionCollection(profileID string, session *ProfileStreamSess
 func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	// Resolve the profile's own platform (pool-backed in multi-user mode).
 	plat, isProfilePlatform := a.sessionPlatform(profileID)
+	if isProfilePlatform {
+		plat = syncpkg.NewMirroringPlatform(
+			plat,
+			syncpkg.NewResolvingSimklClient(http.DefaultClient, profileID, func(pid string) (string, bool) {
+				account, err := a.Database.GetSimklAccount(pid)
+				if err != nil {
+					return "", false
+				}
+				return account.AccessToken, true
+			}),
+			a.Database,
+			profileID,
+			func() bool {
+				settings, err := a.Database.GetSimklSettings(profileID)
+				if err != nil {
+					return false
+				}
+				_, connectErr := a.Database.GetSimklAccount(profileID)
+				return connectErr == nil && settings.Enabled
+			},
+		)
+	}
 	platformRef := a.AnilistPlatformRef
 	refreshAnimeCollection := func() {
 		_, _ = a.RefreshAnimeCollection()
