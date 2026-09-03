@@ -5,6 +5,7 @@ import (
 	"errors"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
+	"seanime/internal/customsource"
 	"seanime/internal/database/models"
 	"testing"
 
@@ -132,6 +133,29 @@ func TestFallbackPlatform_UpdateEntryProgress_MangaMedia_SkipsSimklFallsThrough(
 	ctx := WithMangaMedia(context.Background())
 	err := fp.UpdateEntryProgress(ctx, 101922, 5, nil)
 	require.ErrorIs(t, err, wantErr, "manga must never be redirected to SIMKL's anime-only endpoints")
+
+	assert.Zero(t, simklClient.markProgressCalls)
+	assert.Equal(t, 1, inner.updateProgressCalls)
+	assert.Empty(t, queue.enqueued)
+}
+
+func TestFallbackPlatform_UpdateEntryProgress_CustomSourceMedia_SkipsSimklFallsThrough(t *testing.T) {
+	// customsource.IsExtensionId media IDs are synthetic (not real AniList IDs) - shared_platform
+	// routes these to a local custom-source manager instead of AniList entirely, so they never
+	// had an AniList call to fall back from. Writing one to SIMKL would create a bogus entry
+	// under a fake ID while skipping the local custom-source update the entry actually needed.
+	wantErr := errors.New("anilist down")
+	inner := &fakePlatform{updateProgressErr: wantErr}
+	simklClient := &fakeAllItemsClient{}
+	queue := &fakeQueue{}
+	fp := NewFallbackPlatform(inner, simklClient, queue, "_default",
+		func() bool { return true }, func() bool { return false })
+
+	customSourceMediaID := customsource.GenerateMediaId(1, 12345)
+	require.True(t, customsource.IsExtensionId(customSourceMediaID), "sanity check: the generated ID must actually be recognized as a custom-source ID")
+
+	err := fp.UpdateEntryProgress(context.Background(), customSourceMediaID, 5, nil)
+	require.ErrorIs(t, err, wantErr, "custom-source media must never be redirected to SIMKL's anime-only endpoints")
 
 	assert.Zero(t, simklClient.markProgressCalls)
 	assert.Equal(t, 1, inner.updateProgressCalls)

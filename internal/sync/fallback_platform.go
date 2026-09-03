@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
+	"seanime/internal/customsource"
 	"seanime/internal/database/models"
 	"seanime/internal/platforms/platform"
 	"time"
@@ -94,8 +95,13 @@ func (f *FallbackPlatform) GetRawAnimeCollection(ctx context.Context, bypassCach
 // byte-identical to RemoveEntry's request body and would DELETE the SIMKL backup entry - a
 // progress reset must be a no-op on the backup, never a deletion (same guard MirroringPlatform
 // already applies for the same reason).
+//
+// customsource.IsExtensionId(mediaID) media is skipped too: those are synthetic IDs for
+// custom-source entries, not real AniList IDs - shared_platform routes them to a local
+// custom-source manager instead of AniList entirely (shared.go), so they never had an AniList
+// call to fall back from, and writing one to SIMKL would create a bogus entry under a fake ID.
 func (f *FallbackPlatform) UpdateEntryProgress(ctx context.Context, mediaID int, progress int, totalEpisodes *int) error {
-	if f.canFallback() && progress > 0 && !isMangaMedia(ctx) {
+	if f.canFallback() && progress > 0 && !isMangaMedia(ctx) && !customsource.IsExtensionId(mediaID) {
 		if simklErr := f.simklClient.MarkProgress(ctx, mediaID, progress); simklErr == nil {
 			if enqErr := f.enqueueAnilistCatchUp(OpUpdateProgress, UpdateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes}); enqErr == nil {
 				return nil
@@ -106,9 +112,10 @@ func (f *FallbackPlatform) UpdateEntryProgress(ctx context.Context, mediaID int,
 }
 
 // UpdateEntry - see UpdateEntryProgress's doc comment for why canFallback() and the SIMKL
-// attempt happen before f.Platform is ever called.
+// attempt happen before f.Platform is ever called, and for why manga and custom-source media
+// are excluded.
 func (f *FallbackPlatform) UpdateEntry(ctx context.Context, mediaID int, status *anilist.MediaListStatus, scoreRaw *int, progress *int, startedAt *anilist.FuzzyDateInput, completedAt *anilist.FuzzyDateInput) error {
-	if f.canFallback() && !isMangaMedia(ctx) {
+	if f.canFallback() && !isMangaMedia(ctx) && !customsource.IsExtensionId(mediaID) {
 		var simklFailed bool
 		if status != nil {
 			if err := f.simklClient.AddToList(ctx, mediaID, MapAnilistStatusToSimkl(*status)); err != nil {
@@ -137,9 +144,10 @@ func (f *FallbackPlatform) UpdateEntry(ctx context.Context, mediaID int, status 
 }
 
 // DeleteEntry - see UpdateEntryProgress's doc comment for why canFallback() and the SIMKL
-// attempt happen before f.Platform is ever called.
+// attempt happen before f.Platform is ever called, and for why manga and custom-source media
+// are excluded.
 func (f *FallbackPlatform) DeleteEntry(ctx context.Context, mediaID int, entryID int) error {
-	if f.canFallback() && !isMangaMedia(ctx) {
+	if f.canFallback() && !isMangaMedia(ctx) && !customsource.IsExtensionId(mediaID) {
 		if simklErr := f.simklClient.RemoveEntry(ctx, mediaID); simklErr == nil {
 			if enqErr := f.enqueueAnilistCatchUp(OpDeleteEntry, DeleteEntryPayload{MediaID: mediaID, EntryID: entryID}); enqErr == nil {
 				return nil
