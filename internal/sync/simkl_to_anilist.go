@@ -42,19 +42,21 @@ func mapSimklFormat(animeType string) *anilist.MediaFormat {
 }
 
 // buildSimklPosterURL turns SIMKL's poster field - a bare path fragment like
-// "74/74415673dcdc9cdd", not a usable URL on its own - into a full, directly-loadable image URL,
-// per SIMKL's documented image convention (https://api.simkl.org/conventions/images): images are
-// served from simkl.in/posters/{poster}_{size}.webp, proxied through wsrv.nl for resizing/caching
-// the way this codebase already does for other remote images. "_c" is the documented "compact
-// card" size (170x250px), the standard choice for list/card display - exactly the context
-// CoverImage.Large/Medium are used in throughout the app. An empty poster fragment returns nil
-// rather than a URL built from an empty path segment: a missing cover image (CoverImage is a
-// pointer field every consumer already handles) is preferable to a garbage one.
+// "74/74415673dcdc9cdd", not a usable URL on its own - into a full, directly-loadable image URL
+// on SIMKL's own CDN, per SIMKL's documented image-serving convention
+// (https://api.simkl.org/conventions/images): images are served from
+// simkl.in/{category}/{poster}_{size}.{ext}, here category "posters", size "_c" (the documented
+// "compact card" size, 170x250px - the standard choice for list/card display, exactly the context
+// CoverImage.Large/Medium are used in throughout the app) and extension ".webp". No image proxy is
+// used: the URL points straight at SIMKL, so there is no third-party hop to break precisely when
+// the user is already degraded (AniList down). An empty poster fragment returns nil rather than a
+// URL built from an empty path segment: a missing cover image (CoverImage is a pointer field every
+// consumer already handles) is preferable to a garbage one.
 func buildSimklPosterURL(poster string) *string {
 	if poster == "" {
 		return nil
 	}
-	url := fmt.Sprintf("https://wsrv.nl/?url=https://simkl.in/posters/%s_c.webp&q=90", poster)
+	url := fmt.Sprintf("https://simkl.in/posters/%s_c.webp", poster)
 	return &url
 }
 
@@ -100,8 +102,15 @@ func BuildAnimeCollectionFromSimkl(entries []simkl.AllItemsEntry) *anilist.Anime
 			SeasonYear: &year,
 		}
 
+		// ID here is the AniList LIST-ENTRY id, not the media id - SIMKL cannot supply one. It is
+		// deliberately left 0: consumers such as handlers.HandleDeleteAnilistListEntry read this
+		// field straight off whatever collection is currently served and pass it to a real
+		// DeleteEntry(mediaID, listEntryID) once AniList recovers. Media ids and early real
+		// list-entry ids occupy overlapping small-integer ranges, so putting mediaID here risked
+		// silently deleting an unrelated real entry from the user's AniList account. 0 is not a
+		// valid list-entry id, so it fails safely (not-found) instead.
 		byStatus[status] = append(byStatus[status], &anilist.AnimeCollection_MediaListCollection_Lists_Entries{
-			ID:       mediaID,
+			ID:       0,
 			Media:    media,
 			Progress: &progress,
 			Score:    scorePtr,

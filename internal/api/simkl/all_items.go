@@ -23,14 +23,18 @@ type AllItemsShow struct {
 // watchlist entry for a single anime, used to build a fallback collection when AniList is
 // unreachable. Field names match SIMKL's documented response schema (api.simkl.org).
 type AllItemsEntry struct {
-	Status               string       `json:"status"`
-	WatchedEpisodesCount int          `json:"watched_episodes_count"`
-	TotalEpisodesCount   int          `json:"total_episodes_count"`
-	AddedToWatchlistAt   *string      `json:"added_to_watchlist_at,omitempty"`
-	LastWatchedAt        *string      `json:"last_watched_at,omitempty"`
-	UserRatedAt          *string      `json:"user_rated_at,omitempty"`
-	UserRating           *int         `json:"user_rating,omitempty"`
-	Show                 AllItemsShow `json:"show"`
+	Status               string `json:"status"`
+	WatchedEpisodesCount int    `json:"watched_episodes_count"`
+	TotalEpisodesCount   int    `json:"total_episodes_count"`
+	// The three date fields below are decoded for wire-shape completeness and a future
+	// date-mapping pass (startedAt/completedAt/updatedAt); date mapping was explicitly out of
+	// scope here, so nothing currently reads them. This is intentional, not an oversight.
+	AddedToWatchlistAt *string `json:"added_to_watchlist_at,omitempty"`
+	LastWatchedAt      *string `json:"last_watched_at,omitempty"`
+	UserRatedAt        *string `json:"user_rated_at,omitempty"`
+
+	UserRating *int         `json:"user_rating,omitempty"`
+	Show       AllItemsShow `json:"show"`
 }
 
 // allItemsResponse is the raw wire shape: an object keyed by status bucket, not a flat array.
