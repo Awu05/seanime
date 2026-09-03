@@ -312,6 +312,11 @@ type SimklSettings struct {
 	BaseModel
 	ProfileID string `gorm:"column:profile_id;uniqueIndex" json:"profileId"`
 	Enabled   bool   `gorm:"column:enabled" json:"enabled"`
+	// ClientId is the user's own SIMKL app client ID (from https://simkl.com/settings/developer).
+	// SIMKL requires every request - both the PIN auth flow and ongoing sync calls - to identify
+	// the calling app this way, and there's no Seanime-wide app to share across installs, so each
+	// profile supplies its own.
+	ClientId string `gorm:"column:client_id" json:"clientId"`
 }
 
 // PendingSync is a durably-queued list mutation awaiting delivery to a target service

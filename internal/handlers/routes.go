@@ -276,6 +276,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.GET("/simkl/settings", h.HandleGetSimklSettings)
 	v1.PATCH("/simkl/settings", h.HandleSaveSimklSettings)
 	v1.POST("/simkl/sync-now", h.HandleSimklSyncNow)
+	v1.GET("/simkl/sync-status", h.HandleGetSimklSyncStatus)
 
 	//
 	// Library

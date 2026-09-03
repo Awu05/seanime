@@ -25,6 +25,15 @@ func (a *App) simklTokenLookup(profileID string) (string, bool) {
 	return account.AccessToken, true
 }
 
+// simklClientIdFor returns the SIMKL app client ID the profile has configured, or "" if none.
+func (a *App) simklClientIdFor(profileID string) string {
+	settings, err := a.Database.GetSimklSettings(profileID)
+	if err != nil {
+		return ""
+	}
+	return settings.ClientId
+}
+
 // simklEnabledFor returns whether SIMKL mirroring should be active for profileID: both an
 // active connection (access token present) and the user's enabled toggle.
 func (a *App) simklEnabledFor(profileID string) func() bool {
@@ -50,7 +59,7 @@ func (a *App) simklEnabledFor(profileID string) func() bool {
 // simklClient instance and the same simklEnabledFor(profileID) closure, so their view of
 // "is SIMKL connected/enabled for this profile" can never drift between the two layers.
 func (a *App) wrapAnilistPlatform(raw platform.Platform, profileID string) platform.Platform {
-	simklClient := syncpkg.NewResolvingSimklClient(simkl.DefaultHTTPClient, profileID, a.simklTokenLookup)
+	simklClient := syncpkg.NewResolvingSimklClient(simkl.DefaultHTTPClient, profileID, a.simklTokenLookup, a.simklClientIdFor)
 	simklEnabled := a.simklEnabledFor(profileID)
 	mirrored := syncpkg.NewMirroringPlatform(raw, simklClient, a.Database, profileID, simklEnabled)
 	return syncpkg.NewFallbackPlatform(mirrored, simklClient, a.Database, profileID, simklEnabled, func() bool {

@@ -15,6 +15,9 @@ func TestRequestPin(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/oauth/pin", r.URL.Path)
 		assert.Equal(t, "test-client-id", r.URL.Query().Get("client_id"))
+		assert.NotEmpty(t, r.URL.Query().Get("app-name"))
+		assert.NotEmpty(t, r.URL.Query().Get("app-version"))
+		assert.NotEmpty(t, r.Header.Get("User-Agent"))
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"result":           "OK",
 			"device_code":      "DEVICE_CODE",
@@ -37,6 +40,7 @@ func TestRequestPin(t *testing.T) {
 func TestPollPin_Pending(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/oauth/pin/5G6JAH", r.URL.Path)
+		assert.Equal(t, "test-client-id", r.URL.Query().Get("client_id"))
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"result":  "KO",
 			"message": "Authorization pending",

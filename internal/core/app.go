@@ -570,7 +570,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 			if !ok {
 				return nil, false
 			}
-			return simkl.NewAPIClient(simkl.DefaultHTTPClient, token), true
+			return simkl.NewAPIClient(simkl.DefaultHTTPClient, token, app.simklClientIdFor(profileID)), true
 		},
 		func(profileID string) platform.Platform {
 			// Resolve the raw platform through the ref every time: a login, platform switch

@@ -6,9 +6,21 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"seanime/internal/constants"
 )
 
 const defaultBaseURL = "https://api.simkl.com"
+
+// pinQuery builds the required client_id/app-name/app-version query parameters shared by
+// RequestPin and PollPin - see APIClient.do's appName/appVersion comment for why app-version
+// tracks Seanime's own release version.
+func pinQuery(clientID string) url.Values {
+	query := url.Values{}
+	query.Set("client_id", clientID)
+	query.Set("app-name", appName)
+	query.Set("app-version", constants.Version)
+	return query
+}
 
 type pinResponseWire struct {
 	Result          string `json:"result"`
@@ -26,13 +38,12 @@ func RequestPin(ctx context.Context, httpClient *http.Client, clientID string) (
 }
 
 func requestPinAt(ctx context.Context, httpClient *http.Client, baseURL, clientID string) (*PinResponse, error) {
-	query := url.Values{}
-	query.Set("client_id", clientID)
-	endpoint := baseURL + "/oauth/pin?" + query.Encode()
+	endpoint := baseURL + "/oauth/pin?" + pinQuery(clientID).Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", appName+"/"+constants.Version)
 	res, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -70,13 +81,12 @@ func PollPin(ctx context.Context, httpClient *http.Client, clientID, userCode st
 func pollPinAt(ctx context.Context, httpClient *http.Client, baseURL, clientID, userCode string) (accessToken string, done bool, err error) {
 	// userCode reaches here straight from a request body, so it must be escaped: an
 	// unescaped "../" or "?" would otherwise rewrite the path SIMKL is asked for.
-	query := url.Values{}
-	query.Set("client_id", clientID)
-	endpoint := baseURL + "/oauth/pin/" + url.PathEscape(userCode) + "?" + query.Encode()
+	endpoint := baseURL + "/oauth/pin/" + url.PathEscape(userCode) + "?" + pinQuery(clientID).Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", false, err
 	}
+	req.Header.Set("User-Agent", appName+"/"+constants.Version)
 	res, err := httpClient.Do(req)
 	if err != nil {
 		return "", false, err

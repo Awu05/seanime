@@ -3,13 +3,14 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"seanime/internal/api/simkl"
-	"seanime/internal/constants"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/platforms/platform"
 	syncpkg "seanime/internal/sync"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -29,7 +30,16 @@ func simklProfileID(c echo.Context) string {
 //	@route /api/v1/simkl/connect/start [POST]
 //	@returns simkl.PinResponse
 func (h *Handler) HandleSimklConnectStart(c echo.Context) error {
-	pin, err := simkl.RequestPin(c.Request().Context(), simkl.DefaultHTTPClient, constants.SimklClientId)
+	profileID := simklProfileID(c)
+	settings, err := h.App.Database.GetSimklSettings(profileID)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	if settings.ClientId == "" {
+		return h.RespondWithError(c, errors.New("set a SIMKL Client ID in SIMKL settings first"))
+	}
+
+	pin, err := simkl.RequestPin(c.Request().Context(), simkl.DefaultHTTPClient, settings.ClientId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -51,8 +61,15 @@ func (h *Handler) HandleSimklConnectPoll(c echo.Context) error {
 	}
 
 	profileID := simklProfileID(c)
+	settings, err := h.App.Database.GetSimklSettings(profileID)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	if settings.ClientId == "" {
+		return h.RespondWithError(c, errors.New("set a SIMKL Client ID in SIMKL settings first"))
+	}
 
-	token, done, err := simkl.PollPin(c.Request().Context(), simkl.DefaultHTTPClient, constants.SimklClientId, b.UserCode)
+	token, done, err := simkl.PollPin(c.Request().Context(), simkl.DefaultHTTPClient, settings.ClientId, b.UserCode)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -60,7 +77,7 @@ func (h *Handler) HandleSimklConnectPoll(c echo.Context) error {
 		return h.RespondWithData(c, false)
 	}
 
-	client := simkl.NewAPIClient(simkl.DefaultHTTPClient, token)
+	client := simkl.NewAPIClient(simkl.DefaultHTTPClient, token, settings.ClientId)
 	if err := client.TestConnection(c.Request().Context()); err != nil {
 		return h.RespondWithError(c, fmt.Errorf("connected but could not verify the SIMKL account: %w", err))
 	}
@@ -89,8 +106,9 @@ func (h *Handler) HandleSimklDisconnect(c echo.Context) error {
 // SimklSettingsResponse is what the settings endpoint returns. Connected is separate from
 // Enabled so the UI can distinguish "no account linked yet" from "linked but mirroring off".
 type SimklSettingsResponse struct {
-	Enabled   bool `json:"enabled"`
-	Connected bool `json:"connected"`
+	Enabled   bool   `json:"enabled"`
+	Connected bool   `json:"connected"`
+	ClientId  string `json:"clientId"`
 }
 
 // HandleGetSimklSettings
@@ -108,6 +126,7 @@ func (h *Handler) HandleGetSimklSettings(c echo.Context) error {
 	return h.RespondWithData(c, SimklSettingsResponse{
 		Enabled:   settings.Enabled,
 		Connected: accountErr == nil,
+		ClientId:  settings.ClientId,
 	})
 }
 
@@ -117,8 +136,13 @@ func (h *Handler) HandleGetSimklSettings(c echo.Context) error {
 //	@route /api/v1/simkl/settings [PATCH]
 //	@returns models.SimklSettings
 func (h *Handler) HandleSaveSimklSettings(c echo.Context) error {
+	// Enabled/ClientId are pointers so the enable toggle and the Client ID field can each be
+	// saved independently (two separate UI actions) without one PATCH's omitted field wiping
+	// out what the other already saved - a plain bool/string would default to false/"" when
+	// left out of the request body.
 	type body struct {
-		Enabled bool `json:"enabled"`
+		Enabled  *bool   `json:"enabled"`
+		ClientId *string `json:"clientId"`
 	}
 	var b body
 	if err := c.Bind(&b); err != nil {
@@ -126,7 +150,19 @@ func (h *Handler) HandleSaveSimklSettings(c echo.Context) error {
 	}
 
 	profileID := simklProfileID(c)
-	settings, err := h.App.Database.UpsertSimklSettings(&models.SimklSettings{ProfileID: profileID, Enabled: b.Enabled})
+	current, err := h.App.Database.GetSimklSettings(profileID)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	if b.Enabled != nil {
+		current.Enabled = *b.Enabled
+	}
+	if b.ClientId != nil {
+		current.ClientId = strings.TrimSpace(*b.ClientId)
+	}
+	current.ProfileID = profileID
+
+	settings, err := h.App.Database.UpsertSimklSettings(current)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -154,6 +190,28 @@ func (h *Handler) HandleSimklSyncNow(c echo.Context) error {
 	go h.seedSimklPendingSyncs(plat, profileID)
 
 	return h.RespondWithData(c, true)
+}
+
+// SimklSyncStatusResponse reports how many SIMKL sync rows are still queued for delivery.
+type SimklSyncStatusResponse struct {
+	Pending int64 `json:"pending"`
+}
+
+// HandleGetSimklSyncStatus
+//
+//	@summary returns how many SIMKL sync rows are still queued for delivery for the current profile.
+//	@desc The UI polls this after Sync Now to show a "syncing..." indicator until it reaches zero -
+//	@desc seeding and delivery both happen in the background (delivery on the retry worker's own
+//	@desc tick), so there is nothing else that reports completion.
+//	@route /api/v1/simkl/sync-status [GET]
+//	@returns handlers.SimklSyncStatusResponse
+func (h *Handler) HandleGetSimklSyncStatus(c echo.Context) error {
+	profileID := simklProfileID(c)
+	pending, err := h.App.Database.CountPendingSyncs(profileID, syncpkg.TargetSimkl)
+	if err != nil {
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, SimklSyncStatusResponse{Pending: pending})
 }
 
 // seedSimklPendingSyncs runs in the background so HandleSimklSyncNow can return immediately -

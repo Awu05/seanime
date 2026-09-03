@@ -6,6 +6,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -168,6 +169,51 @@ func TestFallbackPlatform_GetRawAnimeCollection_Healthy_NeverCallsSimkl(t *testi
 	_, err := fp.GetRawAnimeCollection(context.Background(), false)
 	require.NoError(t, err)
 	assert.Zero(t, simklClient.getAllCalls)
+}
+
+func TestFallbackPlatform_GetAnimeCollection_CachesWithinTTL(t *testing.T) {
+	inner := &fakeCollectionPlatform{err: errors.New("anilist down")}
+	simklClient := &fakeAllItemsClient{entries: []simkl.AllItemsEntry{
+		{Status: "watching", WatchedEpisodesCount: 3, TotalEpisodesCount: 24,
+			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
+	}}
+	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+		func() bool { return true }, func() bool { return false })
+
+	_, err := fp.GetAnimeCollection(context.Background(), false)
+	require.NoError(t, err)
+	// GetRawAnimeCollection shares the same cache as GetAnimeCollection - both serve the same
+	// SIMKL-built data, so a second read through either method must be a cache hit too.
+	_, err = fp.GetRawAnimeCollection(context.Background(), false)
+	require.NoError(t, err)
+	_, err = fp.GetAnimeCollection(context.Background(), false)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, simklClient.getAllCalls, "repeated reads within the TTL must not re-fetch from SIMKL")
+}
+
+func TestFallbackPlatform_GetAnimeCollection_RefetchesAfterTTLExpires(t *testing.T) {
+	inner := &fakeCollectionPlatform{err: errors.New("anilist down")}
+	simklClient := &fakeAllItemsClient{entries: []simkl.AllItemsEntry{
+		{Status: "watching", WatchedEpisodesCount: 3, TotalEpisodesCount: 24,
+			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
+	}}
+	fpAny := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+		func() bool { return true }, func() bool { return false })
+	fp := fpAny.(*FallbackPlatform)
+
+	_, err := fp.GetAnimeCollection(context.Background(), false)
+	require.NoError(t, err)
+	// Backdate the cache instead of sleeping the real TTL - this test only needs to prove a
+	// stale cache entry is not served, not wait out fallbackCacheTTL in real time.
+	fp.cacheMu.Lock()
+	fp.cachedAt = time.Now().Add(-fallbackCacheTTL - time.Second)
+	fp.cacheMu.Unlock()
+
+	_, err = fp.GetAnimeCollection(context.Background(), false)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, simklClient.getAllCalls, "an expired cache entry must trigger a real refetch")
 }
 
 // --- RawPlatform must unwrap both wrapper layers ---

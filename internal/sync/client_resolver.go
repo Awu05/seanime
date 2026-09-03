@@ -11,16 +11,22 @@ import (
 // connected. Backed by db.Database.GetSimklAccount in production.
 type TokenLookup func(profileID string) (accessToken string, ok bool)
 
-// resolvingClient re-resolves the access token on every call instead of caching it, so a
-// disconnect/reconnect takes effect immediately without recreating MirroringPlatform.
+// ClientIdLookup returns the profile's own SIMKL app client ID, or "" if none is configured yet.
+// Backed by db.Database.GetSimklSettings in production.
+type ClientIdLookup func(profileID string) (clientID string)
+
+// resolvingClient re-resolves the access token and client ID on every call instead of caching
+// them, so a disconnect/reconnect or a client ID change takes effect immediately without
+// recreating MirroringPlatform.
 type resolvingClient struct {
-	httpClient *http.Client
-	profileID  string
-	lookup     TokenLookup
+	httpClient  *http.Client
+	profileID   string
+	lookup      TokenLookup
+	clientIDFor ClientIdLookup
 }
 
-func NewResolvingSimklClient(httpClient *http.Client, profileID string, lookup TokenLookup) simkl.Client {
-	return &resolvingClient{httpClient: httpClient, profileID: profileID, lookup: lookup}
+func NewResolvingSimklClient(httpClient *http.Client, profileID string, lookup TokenLookup, clientIDFor ClientIdLookup) simkl.Client {
+	return &resolvingClient{httpClient: httpClient, profileID: profileID, lookup: lookup, clientIDFor: clientIDFor}
 }
 
 func (r *resolvingClient) client() (simkl.Client, bool) {
@@ -28,7 +34,7 @@ func (r *resolvingClient) client() (simkl.Client, bool) {
 	if !ok {
 		return nil, false
 	}
-	return simkl.NewAPIClient(r.httpClient, token), true
+	return simkl.NewAPIClient(r.httpClient, token, r.clientIDFor(r.profileID)), true
 }
 
 func (r *resolvingClient) AddToList(ctx context.Context, anilistID int, status string) error {
@@ -85,4 +91,44 @@ func (r *resolvingClient) GetAllItems(ctx context.Context) ([]simkl.AllItemsEntr
 		return nil, errors.New("simkl: not connected")
 	}
 	return c.GetAllItems(ctx)
+}
+
+func (r *resolvingClient) AddToListBatch(ctx context.Context, items []simkl.AddToListItem) error {
+	c, ok := r.client()
+	if !ok {
+		return errors.New("simkl: not connected")
+	}
+	return c.AddToListBatch(ctx, items)
+}
+
+func (r *resolvingClient) MarkProgressBatch(ctx context.Context, items []simkl.ProgressItem) error {
+	c, ok := r.client()
+	if !ok {
+		return errors.New("simkl: not connected")
+	}
+	return c.MarkProgressBatch(ctx, items)
+}
+
+func (r *resolvingClient) RemoveEntryBatch(ctx context.Context, anilistIDs []int) error {
+	c, ok := r.client()
+	if !ok {
+		return errors.New("simkl: not connected")
+	}
+	return c.RemoveEntryBatch(ctx, anilistIDs)
+}
+
+func (r *resolvingClient) SetRatingBatch(ctx context.Context, items []simkl.RatingItem) error {
+	c, ok := r.client()
+	if !ok {
+		return errors.New("simkl: not connected")
+	}
+	return c.SetRatingBatch(ctx, items)
+}
+
+func (r *resolvingClient) RemoveRatingBatch(ctx context.Context, anilistIDs []int) error {
+	c, ok := r.client()
+	if !ok {
+		return errors.New("simkl: not connected")
+	}
+	return c.RemoveRatingBatch(ctx, anilistIDs)
 }

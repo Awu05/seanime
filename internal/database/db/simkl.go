@@ -60,7 +60,7 @@ func (db *Database) GetSimklSettings(profileID string) (*models.SimklSettings, e
 func (db *Database) UpsertSimklSettings(settings *models.SimklSettings) (*models.SimklSettings, error) {
 	err := db.gormdb.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "profile_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"enabled"}),
+		DoUpdates: clause.AssignmentColumns([]string{"enabled", "client_id"}),
 	}).Create(settings).Error
 	if err != nil {
 		return nil, err
@@ -79,6 +79,19 @@ func (db *Database) EnqueuePendingSyncBatch(items []*models.PendingSync) error {
 		return nil
 	}
 	return db.gormdb.CreateInBatches(items, 100).Error
+}
+
+// CountPendingSyncs returns how many profileID+target rows are still actively being retried -
+// used by the UI to show a "syncing..." indicator after Sync Now, polling until this reaches
+// zero. Excludes rows that hit maxPendingSyncAttempts: those are permanently given up on (see
+// IncrementPendingSyncAttempt) but never deleted, so counting them would leave the indicator
+// stuck forever on an install with even one row that failed for good (e.g. a deleted anime).
+func (db *Database) CountPendingSyncs(profileID, target string) (int64, error) {
+	var count int64
+	err := db.gormdb.Model(&models.PendingSync{}).
+		Where("profile_id = ? AND target = ? AND attempts < ?", profileID, target, maxPendingSyncAttempts).
+		Count(&count).Error
+	return count, err
 }
 
 func (db *Database) GetDuePendingSyncs(target string, limit int) ([]*models.PendingSync, error) {

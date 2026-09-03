@@ -70,6 +70,17 @@ type fakeSimklClient struct {
 	removeRatingErr   error
 	removeEntryCalls  int
 	removeEntryErr    error
+
+	addToListBatchCalls    [][]simkl.AddToListItem
+	addToListBatchErr      error
+	markProgressBatchCalls [][]simkl.ProgressItem
+	markProgressBatchErr   error
+	removeEntryBatchCalls  [][]int
+	removeEntryBatchErr    error
+	setRatingBatchCalls    [][]simkl.RatingItem
+	setRatingBatchErr      error
+	removeRatingBatchCalls [][]int
+	removeRatingBatchErr   error
 }
 
 func (f *fakeSimklClient) AddToList(ctx context.Context, anilistID int, status string) error {
@@ -99,6 +110,27 @@ func (f *fakeSimklClient) RemoveRating(ctx context.Context, anilistID int) error
 func (f *fakeSimklClient) TestConnection(ctx context.Context) error { return nil }
 func (f *fakeSimklClient) GetAllItems(ctx context.Context) ([]simkl.AllItemsEntry, error) {
 	return nil, nil
+}
+
+func (f *fakeSimklClient) AddToListBatch(ctx context.Context, items []simkl.AddToListItem) error {
+	f.addToListBatchCalls = append(f.addToListBatchCalls, items)
+	return f.addToListBatchErr
+}
+func (f *fakeSimklClient) MarkProgressBatch(ctx context.Context, items []simkl.ProgressItem) error {
+	f.markProgressBatchCalls = append(f.markProgressBatchCalls, items)
+	return f.markProgressBatchErr
+}
+func (f *fakeSimklClient) RemoveEntryBatch(ctx context.Context, anilistIDs []int) error {
+	f.removeEntryBatchCalls = append(f.removeEntryBatchCalls, anilistIDs)
+	return f.removeEntryBatchErr
+}
+func (f *fakeSimklClient) SetRatingBatch(ctx context.Context, items []simkl.RatingItem) error {
+	f.setRatingBatchCalls = append(f.setRatingBatchCalls, items)
+	return f.setRatingBatchErr
+}
+func (f *fakeSimklClient) RemoveRatingBatch(ctx context.Context, anilistIDs []int) error {
+	f.removeRatingBatchCalls = append(f.removeRatingBatchCalls, anilistIDs)
+	return f.removeRatingBatchErr
 }
 
 type fakeQueue struct {
