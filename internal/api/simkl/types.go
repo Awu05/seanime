@@ -31,6 +31,13 @@ type animeEnvelope struct {
 	Anime []ShowEntry `json:"anime"`
 }
 
+// animeEnvelopeWithTo is the /sync/add-to-list body shape - the concrete "to" status is
+// nested per-item (confirmed against SIMKL's own add_anime_completed/dropped/hold/
+// plantowatch examples), not a single top-level field.
+type animeEnvelopeWithTo struct {
+	Anime []ShowEntry `json:"anime"`
+}
+
 // PinResponse is the response from GET /oauth/pin (step 1 of SIMKL's PIN/device flow).
 type PinResponse struct {
 	UserCode        string
