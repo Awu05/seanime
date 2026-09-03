@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"fmt"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
 	"strconv"
@@ -40,6 +41,23 @@ func mapSimklFormat(animeType string) *anilist.MediaFormat {
 	return &format
 }
 
+// buildSimklPosterURL turns SIMKL's poster field - a bare path fragment like
+// "74/74415673dcdc9cdd", not a usable URL on its own - into a full, directly-loadable image URL,
+// per SIMKL's documented image convention (https://api.simkl.org/conventions/images): images are
+// served from simkl.in/posters/{poster}_{size}.webp, proxied through wsrv.nl for resizing/caching
+// the way this codebase already does for other remote images. "_c" is the documented "compact
+// card" size (170x250px), the standard choice for list/card display - exactly the context
+// CoverImage.Large/Medium are used in throughout the app. An empty poster fragment returns nil
+// rather than a URL built from an empty path segment: a missing cover image (CoverImage is a
+// pointer field every consumer already handles) is preferable to a garbage one.
+func buildSimklPosterURL(poster string) *string {
+	if poster == "" {
+		return nil
+	}
+	url := fmt.Sprintf("https://wsrv.nl/?url=https://simkl.in/posters/%s_c.webp&q=90", poster)
+	return &url
+}
+
 // BuildAnimeCollectionFromSimkl converts a profile's SIMKL watchlist into an AniList-shaped
 // collection for FallbackPlatform to serve when AniList itself is unreachable. Only fields SIMKL
 // can reliably supply are populated - every other BaseAnime field is left nil, which every
@@ -67,10 +85,16 @@ func BuildAnimeCollectionFromSimkl(entries []simkl.AllItemsEntry) *anilist.Anime
 
 		title := e.Show.Title
 		year := e.Show.Year
+
+		var coverImage *anilist.BaseAnime_CoverImage
+		if posterURL := buildSimklPosterURL(e.Show.Poster); posterURL != nil {
+			coverImage = &anilist.BaseAnime_CoverImage{Large: posterURL, Medium: posterURL}
+		}
+
 		media := &anilist.BaseAnime{
 			ID:         mediaID,
 			Title:      &anilist.BaseAnime_Title{Romaji: &title},
-			CoverImage: &anilist.BaseAnime_CoverImage{Large: &e.Show.Poster, Medium: &e.Show.Poster},
+			CoverImage: coverImage,
 			Format:     mapSimklFormat(e.Show.AnimeType),
 			Episodes:   &episodes,
 			SeasonYear: &year,

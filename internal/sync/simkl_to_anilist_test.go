@@ -3,6 +3,7 @@ package sync
 import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ func TestBuildAnimeCollectionFromSimkl(t *testing.T) {
 			Status:               "watching",
 			WatchedEpisodesCount: 5,
 			TotalEpisodesCount:   24,
-			Show: simkl.AllItemsShow{Title: "Test Anime", Poster: "/poster/abc.jpg", Year: 2024, AnimeType: "tv", Ids: simkl.Ids{Anilist: "101922"}},
+			Show: simkl.AllItemsShow{Title: "Test Anime", Poster: "74/74415673dcdc9cdd", Year: 2024, AnimeType: "tv", Ids: simkl.Ids{Anilist: "101922"}},
 		},
 		{
 			Status:               "completed",
@@ -30,6 +31,11 @@ func TestBuildAnimeCollectionFromSimkl(t *testing.T) {
 			Status: "watching",
 			Show:   simkl.AllItemsShow{Title: "No AniList Match", Ids: simkl.Ids{Simkl: 999}},
 		},
+		{
+			// Empty poster - must leave CoverImage nil, not build a URL from an empty path segment.
+			Status: "plantowatch",
+			Show:   simkl.AllItemsShow{Title: "No Poster", Poster: "", Year: 2022, AnimeType: "tv", Ids: simkl.Ids{Anilist: "5680"}},
+		},
 	}
 
 	collection := BuildAnimeCollectionFromSimkl(entries)
@@ -39,7 +45,7 @@ func TestBuildAnimeCollectionFromSimkl(t *testing.T) {
 	for _, list := range collection.MediaListCollection.Lists {
 		all = append(all, list.Entries...)
 	}
-	require.Len(t, all, 2, "the unmapped entry must be skipped, not panic")
+	require.Len(t, all, 3, "the unmapped entry must be skipped, not panic")
 
 	byID := map[int]*anilist.AnimeCollection_MediaListCollection_Lists_Entries{}
 	for _, e := range all {
@@ -53,6 +59,13 @@ func TestBuildAnimeCollectionFromSimkl(t *testing.T) {
 	assert.Nil(t, watching.Score, "unrated entry must have a nil score, not a zero-value 0.0")
 	assert.Equal(t, "Test Anime", *watching.GetMedia().GetTitle().Romaji)
 	assert.Equal(t, 24, *watching.GetMedia().Episodes)
+	require.NotNil(t, watching.GetMedia().GetCoverImage())
+	require.NotNil(t, watching.GetMedia().GetCoverImage().Large)
+	assert.Equal(t, "https://wsrv.nl/?url=https://simkl.in/posters/74/74415673dcdc9cdd_c.webp&q=90", *watching.GetMedia().GetCoverImage().Large)
+	require.NotNil(t, watching.GetMedia().GetCoverImage().Medium)
+	assert.Equal(t, "https://wsrv.nl/?url=https://simkl.in/posters/74/74415673dcdc9cdd_c.webp&q=90", *watching.GetMedia().GetCoverImage().Medium)
+	assert.Contains(t, *watching.GetMedia().GetCoverImage().Large, "https://wsrv.nl/?url=https://simkl.in/posters/")
+	assert.True(t, strings.HasSuffix(*watching.GetMedia().GetCoverImage().Large, "_c.webp&q=90"))
 
 	completed := byID[21]
 	require.NotNil(t, completed)
@@ -60,4 +73,8 @@ func TestBuildAnimeCollectionFromSimkl(t *testing.T) {
 	assert.Equal(t, 12, *completed.Progress)
 	require.NotNil(t, completed.Score)
 	assert.Equal(t, float64(80), *completed.Score)
+
+	noPoster := byID[5680]
+	require.NotNil(t, noPoster)
+	assert.Nil(t, noPoster.GetMedia().GetCoverImage(), "an empty poster fragment must leave CoverImage nil, not build a URL from an empty path segment")
 }
