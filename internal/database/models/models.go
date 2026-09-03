@@ -295,6 +295,40 @@ type Mal struct {
 }
 
 // +---------------------+
+// |        SIMKL        |
+// +---------------------+
+
+// SimklAccount stores the per-profile SIMKL OAuth connection, mirroring how AniList's
+// own per-profile account (see Account) is stored - not the single-row Mal pattern.
+type SimklAccount struct {
+	BaseModel
+	ProfileID   string `gorm:"column:profile_id;index" json:"profileId"`
+	Username    string `gorm:"column:username" json:"username"`
+	AccessToken string `gorm:"column:access_token" json:"-"`
+}
+
+// SimklSettings stores per-profile SIMKL sync configuration.
+type SimklSettings struct {
+	BaseModel
+	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
+	Enabled   bool   `gorm:"column:enabled" json:"enabled"`
+}
+
+// PendingSync is a durably-queued list mutation awaiting delivery to a target service
+// ("anilist" or "simkl"). Rows are created when a mutation fails immediately, and deleted
+// once the background worker successfully delivers them.
+type PendingSync struct {
+	BaseModel
+	ProfileID     string    `gorm:"column:profile_id;index" json:"profileId"`
+	Target        string    `gorm:"column:target;index" json:"target"`
+	Operation     string    `gorm:"column:operation" json:"operation"`
+	Payload       []byte    `gorm:"column:payload" json:"-"`
+	Attempts      int       `gorm:"column:attempts" json:"attempts"`
+	LastError     string    `gorm:"column:last_error" json:"lastError"`
+	NextAttemptAt time.Time `gorm:"column:next_attempt_at;index" json:"nextAttemptAt"`
+}
+
+// +---------------------+
 // |    Scan Summary     |
 // +---------------------+
 
@@ -498,7 +532,7 @@ type MediastreamSettings struct {
 
 type TorrentstreamSettings struct {
 	BaseModel
-	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
+	ProfileID           string `gorm:"column:profile_id;index" json:"profileId"`
 	Enabled             bool   `gorm:"column:enabled" json:"enabled"`
 	AutoSelect          bool   `gorm:"column:auto_select" json:"autoSelect"`
 	PreferredResolution string `gorm:"column:preferred_resolution" json:"preferredResolution"`
@@ -577,12 +611,12 @@ type OnlinestreamMapping struct {
 
 type DebridSettings struct {
 	BaseModel
-	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
-	Enabled  bool   `gorm:"column:enabled" json:"enabled"`
-	Provider string `gorm:"column:provider" json:"provider"`
-	ApiKey   string `gorm:"column:api_key" json:"apiKey"`
-	ApiUrl      string `gorm:"column:api_url" json:"apiUrl"`             // StremThru: base URL of the instance
-	StoreName   string `gorm:"column:store_name" json:"storeName"`       // StremThru: debrid store name (e.g. torbox, realdebrid, pikpak)
+	ProfileID   string `gorm:"column:profile_id;index" json:"profileId"`
+	Enabled     bool   `gorm:"column:enabled" json:"enabled"`
+	Provider    string `gorm:"column:provider" json:"provider"`
+	ApiKey      string `gorm:"column:api_key" json:"apiKey"`
+	ApiUrl      string `gorm:"column:api_url" json:"apiUrl"`            // StremThru: base URL of the instance
+	StoreName   string `gorm:"column:store_name" json:"storeName"`      // StremThru: debrid store name (e.g. torbox, realdebrid, pikpak)
 	StoreApiKey string `gorm:"column:store_api_key" json:"storeApiKey"` // StremThru: debrid store API key (for public instances)
 	//FallbackToDebridStreamingView bool   `gorm:"column:fallback_to_debrid_streaming_view" json:"fallbackToDebridStreamingView"` // DEPRECATED
 	IncludeDebridStreamInLibrary bool   `gorm:"column:include_debrid_stream_in_library" json:"includeDebridStreamInLibrary"`
