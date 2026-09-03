@@ -53,15 +53,24 @@ func NewMirroringPlatform(inner platform.Platform, simklClient simkl.Client, que
 	}
 }
 
-// RawPlatform returns the unwrapped platform underneath a MirroringPlatform, or p unchanged
-// if it isn't one. The retry Worker MUST deliver AniList rows through this: replaying a row
-// through the wrapper would re-run interception, enqueueing a fresh duplicate row on every
-// failed attempt (unbounded queue growth) and re-mirroring to SIMKL on every success.
+// RawPlatform returns the unwrapped platform underneath any MirroringPlatform/FallbackPlatform
+// layers, or p unchanged if it isn't wrapped. The retry Worker MUST deliver AniList rows through
+// this: replaying a row through either wrapper would re-run interception, enqueueing a fresh
+// duplicate row on every failed attempt (unbounded queue growth) and re-mirroring to SIMKL on
+// every success. Loops rather than checking a single type since FallbackPlatform wraps outside
+// MirroringPlatform (raw -> MirroringPlatform -> FallbackPlatform) - a single type-assertion
+// would strip only the outer layer and leave the row replayed through MirroringPlatform anyway.
 func RawPlatform(p platform.Platform) platform.Platform {
-	if m, ok := p.(*MirroringPlatform); ok {
-		return m.Platform
+	for {
+		switch v := p.(type) {
+		case *MirroringPlatform:
+			p = v.Platform
+		case *FallbackPlatform:
+			p = v.Platform
+		default:
+			return p
+		}
 	}
-	return p
 }
 
 type mangaMediaContextKey struct{}
