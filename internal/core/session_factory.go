@@ -18,7 +18,7 @@ import (
 // collection fetches go to the profile's own AniList account — never the
 // global platform, which carries whichever account logged in last.
 func (a *App) sessionPlatform(profileID string) (platform.Platform, bool) {
-	if a.MultiUserEnabled && profileID != "" && profileID != "_default" && a.AnilistPool != nil {
+	if a.MultiUserEnabled && profileID != "" && profileID != DefaultProfileID && a.AnilistPool != nil {
 		return a.AnilistPool.GetPlatformForProfile(profileID), true
 	}
 	return a.AnilistPlatformRef.Get(), false
@@ -65,7 +65,10 @@ func (a *App) SeedSessionCollection(profileID string, session *ProfileStreamSess
 // wrapper (with its own currentTorrent/currentFile tracking) but shares the single anacrolix
 // torrent engine from the App's singleton.
 func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
-	// Resolve the profile's own platform (pool-backed in multi-user mode).
+	// Resolve the profile's own platform (pool-backed in multi-user mode). Both sources are
+	// already SIMKL-mirroring-wrapped — AnilistPool.GetPlatformForProfile wraps before caching
+	// and AnilistPlatformRef is only ever set through setDefaultAnilistPlatform — so this must
+	// NOT wrap again, which would double-mirror every mutation.
 	plat, isProfilePlatform := a.sessionPlatform(profileID)
 	platformRef := a.AnilistPlatformRef
 	refreshAnimeCollection := func() {

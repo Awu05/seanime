@@ -1,11 +1,13 @@
 package core
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata_provider"
+	"seanime/internal/api/simkl"
 	"seanime/internal/constants"
 	"seanime/internal/continuity"
 	"seanime/internal/database/db"
@@ -42,10 +44,12 @@ import (
 	"seanime/internal/platforms/anilist_platform"
 	"seanime/internal/platforms/offline_platform"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/platforms/simulated_platform"
 	"seanime/internal/playlist"
 	"seanime/internal/plugin"
 	"seanime/internal/report"
+	syncpkg "seanime/internal/sync"
 	"seanime/internal/torrent_clients/torrent_client"
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/torrentstream"
@@ -57,6 +61,7 @@ import (
 	"seanime/internal/videocore"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -81,10 +86,18 @@ type (
 		Watcher *scanner.Watcher
 
 		// API clients and providers
-		AnilistClientRef    *util.Ref[anilist.AnilistClient]
-		AnilistPlatformRef  *util.Ref[platform.Platform]
-		OfflinePlatformRef  *util.Ref[platform.Platform]
-		MetadataProviderRef *util.Ref[metadata_provider.Provider]
+		AnilistClientRef   *util.Ref[anilist.AnilistClient]
+		AnilistPlatformRef *util.Ref[platform.Platform]
+		// rawAnilistPlatformRef holds the CURRENT unwrapped default-profile AniList platform.
+		// Kept in sync by every code path that changes AnilistPlatformRef (see setDefaultAnilistPlatform).
+		// The background SIMKL sync worker reads this live (never a one-time-captured snapshot) so it
+		// never retries against a stale/closed platform after login, platform-switch, or offline-mode toggle.
+		rawAnilistPlatformRef *util.Ref[platform.Platform]
+		// platformSwitchMu guards setDefaultAnilistPlatform so rawAnilistPlatformRef and
+		// AnilistPlatformRef are always updated together as one atomic pair.
+		platformSwitchMu sync.Mutex
+		OfflinePlatformRef    *util.Ref[platform.Platform]
+		MetadataProviderRef   *util.Ref[metadata_provider.Provider]
 
 		// Library
 		FillerManager       *fillermanager.FillerManager
@@ -536,6 +549,47 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	if !app.IsOffline() {
 		go app.Updater.FetchAnnouncements()
 	}
+
+	// SIMKL backup-sync: wrap the active AniList platform so every list mutation is durably
+	// retried and mirrored to SIMKL. setDefaultAnilistPlatform is the single choke point for
+	// this — it installs the wrapper AND records the unwrapped platform in rawAnilistPlatformRef,
+	// which the worker below reads live. Retrying through the wrapped version instead would
+	// re-run interception logic on every retry and re-enqueue the same row onto itself forever.
+	app.setDefaultAnilistPlatform(app.AnilistPlatformRef.Get())
+
+	simklWorker := syncpkg.NewWorker(
+		app.Database,
+		func(profileID string) (simkl.Client, bool) {
+			profileID = NormalizeSimklProfileID(profileID)
+			// Also gate on the mirroring toggle, not just token presence: otherwise rows
+			// queued before the user disabled SIMKL sync keep draining to SIMKL forever.
+			if !app.simklEnabledFor(profileID)() {
+				return nil, false
+			}
+			token, ok := app.simklTokenLookup(profileID)
+			if !ok {
+				return nil, false
+			}
+			return simkl.NewAPIClient(simkl.DefaultHTTPClient, token), true
+		},
+		func(profileID string) platform.Platform {
+			// Resolve the raw platform through the ref every time: a login, platform switch
+			// or offline-mode toggle replaces (and closes) the previous one.
+			if profileID == "" || profileID == DefaultProfileID || app.AnilistPool == nil {
+				if app.rawAnilistPlatformRef == nil {
+					return nil
+				}
+				return app.rawAnilistPlatformRef.Get()
+			}
+			// The pool hands out pre-wrapped platforms; unwrap so a retry doesn't re-enter
+			// interception and enqueue a duplicate row for itself on every failed attempt.
+			return syncpkg.RawPlatform(app.AnilistPool.GetPlatformForProfile(profileID))
+		},
+		func() bool { return shared_platform.IsWorking.Load() },
+	)
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	go simklWorker.Run(workerCtx, 30*time.Second)
+	app.AddCleanupFunction(cancelWorker)
 
 	// Initialize all modules that depend on settings
 	app.InitOrRefreshModules("")

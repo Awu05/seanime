@@ -8,6 +8,7 @@ import (
 	"seanime/internal/extension"
 	"seanime/internal/manga"
 	manga_providers "seanime/internal/manga/providers"
+	syncpkg "seanime/internal/sync"
 	"seanime/internal/util/result"
 	"strconv"
 	"strings"
@@ -613,9 +614,10 @@ func (h *Handler) HandleUpdateMangaProgress(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	// Update the progress on AniList
+	// Update the progress on AniList. Always manga - SIMKL only tracks anime, so this must
+	// never be mirrored (see syncpkg.WithMangaMedia).
 	err := h.getAnilistPlatform(c).UpdateEntryProgress(
-		c.Request().Context(),
+		syncpkg.WithMangaMedia(c.Request().Context()),
 		b.MediaId,
 		b.ChapterNumber,
 		&b.TotalChapters,

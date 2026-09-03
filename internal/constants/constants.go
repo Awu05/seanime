@@ -6,11 +6,15 @@ import (
 )
 
 const (
-	Version              = "4.3.21"
-	VersionName          = "Hakumei"
-	GcTime               = time.Minute * 30
-	ConfigFileName       = "config.toml"
-	MalClientId          = "51cb4294feb400f3ddc66a30f9b9a00f"
+	Version        = "4.4.0"
+	VersionName    = "Hakumei"
+	GcTime         = time.Minute * 30
+	ConfigFileName = "config.toml"
+	MalClientId    = "51cb4294feb400f3ddc66a30f9b9a00f"
+	// SimklClientId is Seanime's registered SIMKL app client ID. Register an app at
+	// https://simkl.com/settings/developer to obtain one - this placeholder must be
+	// replaced before SIMKL sync will authenticate.
+	SimklClientId        = "REPLACE_WITH_REGISTERED_SIMKL_CLIENT_ID"
 	DiscordApplicationId = "1224777421941899285"
 	AnilistApiUrl        = "https://graphql.anilist.co"
 )

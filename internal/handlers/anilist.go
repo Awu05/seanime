@@ -6,6 +6,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/core"
 	"seanime/internal/platforms/shared_platform"
+	syncpkg "seanime/internal/sync"
 	"seanime/internal/util/result"
 	"strconv"
 	"strings"
@@ -139,8 +140,15 @@ func (h *Handler) HandleEditAnilistListEntry(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	ctx := c.Request().Context()
+	if p.Type == "manga" {
+		// SIMKL only tracks anime - without this marker a manga edit would be mirrored to
+		// SIMKL's anime endpoints as if it were an anime entry. See syncpkg.WithMangaMedia.
+		ctx = syncpkg.WithMangaMedia(ctx)
+	}
+
 	err := h.getAnilistPlatform(c).UpdateEntry(
-		c.Request().Context(),
+		ctx,
 		*p.MediaId,
 		p.Status,
 		p.Score,
@@ -288,7 +296,12 @@ func (h *Handler) HandleDeleteAnilistListEntry(c echo.Context) error {
 	}
 
 	// Delete the list entry
-	err := h.getAnilistPlatform(c).DeleteEntry(c.Request().Context(), *p.MediaId, listEntryID)
+	ctx := c.Request().Context()
+	if *p.Type == "manga" {
+		// See the matching comment in HandleEditAnilistListEntry - SIMKL only tracks anime.
+		ctx = syncpkg.WithMangaMedia(ctx)
+	}
+	err := h.getAnilistPlatform(c).DeleteEntry(ctx, *p.MediaId, listEntryID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

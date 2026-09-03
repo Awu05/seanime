@@ -68,6 +68,10 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 			p.app.Database,
 			func() {},
 		)
+		// Wrap BEFORE caching: every consumer of the pool (HTTP handlers, stream sessions)
+		// must get the mirroring wrapper, or SIMKL mirroring and AniList retry-queueing
+		// silently stop working for this profile.
+		plat = p.app.wrapAnilistPlatform(plat, profileID)
 		p.mu.Lock()
 		p.platforms[profileID] = plat
 		p.mu.Unlock()
@@ -87,6 +91,9 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 
 	// Set the username so collection fetches work
 	plat.SetUsername(username)
+
+	// Wrap BEFORE caching — see the no-token branch above.
+	plat = p.app.wrapAnilistPlatform(plat, profileID)
 
 	p.mu.Lock()
 	p.platforms[profileID] = plat
