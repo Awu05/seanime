@@ -1,0 +1,44 @@
+package sync
+
+import (
+	"math"
+	"seanime/internal/api/anilist"
+)
+
+// MapAnilistStatusToSimkl converts an AniList list status to SIMKL's watchlist status enum
+// ("watching", "plantowatch", "hold", "completed", "dropped"). SIMKL has no separate
+// "repeating" status, so it maps to "watching" like everywhere else in this codebase treats
+// rewatching as an in-progress state.
+func MapAnilistStatusToSimkl(status anilist.MediaListStatus) string {
+	switch status {
+	case anilist.MediaListStatusCurrent, anilist.MediaListStatusRepeating:
+		return "watching"
+	case anilist.MediaListStatusPlanning:
+		return "plantowatch"
+	case anilist.MediaListStatusCompleted:
+		return "completed"
+	case anilist.MediaListStatusDropped:
+		return "dropped"
+	case anilist.MediaListStatusPaused:
+		return "hold"
+	default:
+		return "watching"
+	}
+}
+
+// MapAnilistScoreToSimklRating converts AniList's 0-100 raw score scale to SIMKL's 1-10
+// rating scale. scoreRaw == 0 means "no score set" in Seanime's UI, which should remove
+// any existing SIMKL rating rather than send a rating of 0 (not a valid SIMKL rating).
+func MapAnilistScoreToSimklRating(scoreRaw int) (rating int, shouldRemove bool) {
+	if scoreRaw <= 0 {
+		return 0, true
+	}
+	rating = int(math.Round(float64(scoreRaw) / 10.0))
+	if rating < 1 {
+		rating = 1
+	}
+	if rating > 10 {
+		rating = 10
+	}
+	return rating, false
+}
