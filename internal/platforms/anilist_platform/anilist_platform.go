@@ -17,6 +17,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/samber/mo"
+	"golang.org/x/sync/singleflight"
 )
 
 type (
@@ -34,6 +35,10 @@ type (
 		helper                 *shared_platform.PlatformHelper
 		db                     *db.Database
 		extensionBankRef       *util.Ref[*extension.UnifiedBank]
+		// refreshGroup coalesces concurrent collection refreshes into a single network call.
+		// Without it, N concurrent requests hitting a cold cache (e.g. several dashboard widgets
+		// loading at once right after boot) each independently fire the same AniList query.
+		refreshGroup *singleflight.Group
 	}
 )
 
@@ -52,6 +57,7 @@ func NewAnilistPlatform(anilistClientRef *util.Ref[anilist.AnilistClient], exten
 		extensionBankRef:      extensionBankRef,
 		helper:                shared_platform.NewPlatformHelper(extensionBankRef, db, logger),
 		db:                    db,
+		refreshGroup:          &singleflight.Group{},
 	}
 
 	return ap
@@ -437,6 +443,13 @@ func (ap *AnilistPlatform) RefreshAnimeCollection(ctx context.Context) (*anilist
 }
 
 func (ap *AnilistPlatform) refreshAnimeCollection(ctx context.Context) error {
+	_, err, _ := ap.refreshGroup.Do("animeCollection", func() (interface{}, error) {
+		return nil, ap.doRefreshAnimeCollection(ctx)
+	})
+	return err
+}
+
+func (ap *AnilistPlatform) doRefreshAnimeCollection(ctx context.Context) error {
 	userName, ok := ap.getUsername()
 	if !ok {
 		return errors.New("anilist: Username is not set")
@@ -579,6 +592,13 @@ func (ap *AnilistPlatform) RefreshMangaCollection(ctx context.Context) (*anilist
 }
 
 func (ap *AnilistPlatform) refreshMangaCollection(ctx context.Context) error {
+	_, err, _ := ap.refreshGroup.Do("mangaCollection", func() (interface{}, error) {
+		return nil, ap.doRefreshMangaCollection(ctx)
+	})
+	return err
+}
+
+func (ap *AnilistPlatform) doRefreshMangaCollection(ctx context.Context) error {
 	userName, ok := ap.getUsername()
 	if !ok {
 		return errors.New("anilist: Username is not set")
