@@ -149,12 +149,21 @@ func (h *Handler) HandleSimklSyncNow(c echo.Context) error {
 				continue
 			}
 			mediaID := entry.GetMedia().GetID()
-			_ = client.AddToList(ctx, mediaID, simklStatusForEntry(entry))
+			if err := client.AddToList(ctx, mediaID, simklStatusForEntry(entry)); err != nil {
+				h.App.Logger.Err(err).Int("mediaID", mediaID).Msg("simkl: failed to add entry to list during sync-now")
+			}
 			if entry.Progress != nil && *entry.Progress > 0 {
-				_ = client.MarkProgress(ctx, mediaID, *entry.Progress)
+				if err := client.MarkProgress(ctx, mediaID, *entry.Progress); err != nil {
+					h.App.Logger.Err(err).Int("mediaID", mediaID).Msg("simkl: failed to mark progress during sync-now")
+				}
 			}
 			if entry.Score != nil && *entry.Score > 0 {
-				_ = client.SetRating(ctx, mediaID, int(*entry.Score)/10)
+				rating, shouldRemove := syncpkg.MapAnilistScoreToSimklRating(int(*entry.Score))
+				if !shouldRemove {
+					if err := client.SetRating(ctx, mediaID, rating); err != nil {
+						h.App.Logger.Err(err).Int("mediaID", mediaID).Int("rating", rating).Msg("simkl: failed to set rating during sync-now")
+					}
+				}
 			}
 		}
 	}
