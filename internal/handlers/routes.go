@@ -267,6 +267,17 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1.POST("/mal/logout", h.HandleMALLogout)
 
 	//
+	// SIMKL
+	//
+
+	v1.POST("/simkl/connect/start", h.HandleSimklConnectStart)
+	v1.POST("/simkl/connect/poll", h.HandleSimklConnectPoll)
+	v1.POST("/simkl/disconnect", h.HandleSimklDisconnect)
+	v1.GET("/simkl/settings", h.HandleGetSimklSettings)
+	v1.PATCH("/simkl/settings", h.HandleSaveSimklSettings)
+	v1.POST("/simkl/sync-now", h.HandleSimklSyncNow)
+
+	//
 	// Library
 	//
 
