@@ -24,6 +24,7 @@ type Client interface {
 	SetRating(ctx context.Context, anilistID int, rating int) error
 	RemoveRating(ctx context.Context, anilistID int) error
 	TestConnection(ctx context.Context) error
+	GetAllItems(ctx context.Context) ([]AllItemsEntry, error)
 }
 
 type APIClient struct {
