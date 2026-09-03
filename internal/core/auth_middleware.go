@@ -14,7 +14,7 @@ func GetProfileIDFromContext(c interface{ Get(string) interface{} }) string {
 // so every SIMKL DB read/write keyed on a request's profileID must go through this first.
 func NormalizeSimklProfileID(profileID string) string {
 	if profileID == "" {
-		return DefaultSimklProfileID
+		return DefaultProfileID
 	}
 	return profileID
 }

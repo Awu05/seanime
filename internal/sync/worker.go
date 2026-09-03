@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"seanime/internal/api/simkl"
 	"seanime/internal/database/models"
 	"seanime/internal/platforms/platform"
@@ -69,9 +70,9 @@ func (w *Worker) Run(ctx context.Context, interval time.Duration) {
 
 // FlushOnce attempts delivery of every currently-due row for both targets.
 func (w *Worker) FlushOnce(ctx context.Context) {
-	w.flushTarget(ctx, "simkl")
+	w.flushTarget(ctx, TargetSimkl)
 	if w.anilistHealthy() {
-		w.flushTarget(ctx, "anilist")
+		w.flushTarget(ctx, TargetAnilist)
 	}
 }
 
@@ -83,9 +84,9 @@ func (w *Worker) flushTarget(ctx context.Context, target string) {
 	for _, row := range rows {
 		var deliverErr error
 		switch target {
-		case "simkl":
+		case TargetSimkl:
 			deliverErr = w.deliverToSimkl(ctx, row)
-		case "anilist":
+		case TargetAnilist:
 			deliverErr = w.deliverToAnilist(ctx, row)
 		}
 
@@ -103,20 +104,20 @@ func (w *Worker) deliverToSimkl(ctx context.Context, row *models.PendingSync) er
 		return errors.New("simkl: not connected for profile " + row.ProfileID)
 	}
 	switch row.Operation {
-	case "update_progress":
-		var p updateProgressPayload
+	case OpUpdateProgress:
+		var p UpdateProgressPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
 		return client.MarkProgress(ctx, p.MediaID, p.Progress)
-	case "delete_entry":
-		var p deleteEntryPayload
+	case OpDeleteEntry:
+		var p DeleteEntryPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
 		return client.RemoveEntry(ctx, p.MediaID)
-	case "update_entry":
-		var p updateEntryPayload
+	case OpUpdateEntry:
+		var p UpdateEntryPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
@@ -133,8 +134,8 @@ func (w *Worker) deliverToSimkl(ctx context.Context, row *models.PendingSync) er
 			return client.SetRating(ctx, p.MediaID, rating)
 		}
 		return nil
-	case "add_to_collection":
-		var p addToCollectionPayload
+	case OpAddToCollection:
+		var p AddToCollectionPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
@@ -145,7 +146,7 @@ func (w *Worker) deliverToSimkl(ctx context.Context, row *models.PendingSync) er
 		}
 		return nil
 	default:
-		return nil
+		return fmt.Errorf("simkl: unknown pending-sync operation %q", row.Operation)
 	}
 }
 
@@ -155,37 +156,37 @@ func (w *Worker) deliverToAnilist(ctx context.Context, row *models.PendingSync) 
 		return errors.New("anilist: no platform available for profile " + row.ProfileID)
 	}
 	switch row.Operation {
-	case "update_progress":
-		var p updateProgressPayload
+	case OpUpdateProgress:
+		var p UpdateProgressPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
 		return plat.UpdateEntryProgress(ctx, p.MediaID, p.Progress, p.TotalEpisodes)
-	case "update_entry":
-		var p updateEntryPayload
+	case OpUpdateEntry:
+		var p UpdateEntryPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
 		return plat.UpdateEntry(ctx, p.MediaID, p.Status, p.ScoreRaw, p.Progress, p.StartedAt, p.CompletedAt)
-	case "update_repeat":
-		var p updateRepeatPayload
+	case OpUpdateRepeat:
+		var p UpdateRepeatPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
 		return plat.UpdateEntryRepeat(ctx, p.MediaID, p.Repeat)
-	case "delete_entry":
-		var p deleteEntryPayload
+	case OpDeleteEntry:
+		var p DeleteEntryPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
 		return plat.DeleteEntry(ctx, p.MediaID, p.EntryID)
-	case "add_to_collection":
-		var p addToCollectionPayload
+	case OpAddToCollection:
+		var p AddToCollectionPayload
 		if err := json.Unmarshal(row.Payload, &p); err != nil {
 			return err
 		}
 		return plat.AddMediaToCollection(ctx, p.MediaIDs)
 	default:
-		return nil
+		return fmt.Errorf("anilist: unknown pending-sync operation %q", row.Operation)
 	}
 }

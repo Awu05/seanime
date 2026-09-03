@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // maxPendingSyncAttempts caps how many times a row is retried. Without it a permanently
@@ -24,20 +25,16 @@ func (db *Database) GetSimklAccount(profileID string) (*models.SimklAccount, err
 	return &res, nil
 }
 
+// UpsertSimklAccount inserts or updates the profile's SIMKL account. The OnConflict clause
+// (backed by SimklAccount.ProfileID's uniqueIndex) makes this atomic under concurrent calls
+// for the same profile - e.g. two PIN-poll requests both completing at once - so they settle
+// on a single row instead of racing into duplicates.
 func (db *Database) UpsertSimklAccount(account *models.SimklAccount) (*models.SimklAccount, error) {
-	var existing models.SimklAccount
-	err := db.gormdb.Where("profile_id = ?", account.ProfileID).First(&existing).Error
-	if err == nil {
-		account.BaseModel = existing.BaseModel
-		if err := db.gormdb.Save(account).Error; err != nil {
-			return nil, err
-		}
-		return account, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	if err := db.gormdb.Create(account).Error; err != nil {
+	err := db.gormdb.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "profile_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"username", "access_token"}),
+	}).Create(account).Error
+	if err != nil {
 		return nil, err
 	}
 	return account, nil
@@ -58,20 +55,14 @@ func (db *Database) GetSimklSettings(profileID string) (*models.SimklSettings, e
 	return &res, nil
 }
 
+// UpsertSimklSettings inserts or updates the profile's SIMKL settings. See UpsertSimklAccount
+// for why this goes through OnConflict rather than a find-then-write.
 func (db *Database) UpsertSimklSettings(settings *models.SimklSettings) (*models.SimklSettings, error) {
-	var existing models.SimklSettings
-	err := db.gormdb.Where("profile_id = ?", settings.ProfileID).First(&existing).Error
-	if err == nil {
-		settings.BaseModel = existing.BaseModel
-		if err := db.gormdb.Save(settings).Error; err != nil {
-			return nil, err
-		}
-		return settings, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	if err := db.gormdb.Create(settings).Error; err != nil {
+	err := db.gormdb.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "profile_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"enabled"}),
+	}).Create(settings).Error
+	if err != nil {
 		return nil, err
 	}
 	return settings, nil
@@ -79,6 +70,15 @@ func (db *Database) UpsertSimklSettings(settings *models.SimklSettings) (*models
 
 func (db *Database) EnqueuePendingSync(item *models.PendingSync) error {
 	return db.gormdb.Create(item).Error
+}
+
+// EnqueuePendingSyncBatch inserts many rows in chunked batches instead of one INSERT per row -
+// used by the SIMKL "sync now" seed, which can enqueue thousands of rows at once.
+func (db *Database) EnqueuePendingSyncBatch(items []*models.PendingSync) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return db.gormdb.CreateInBatches(items, 100).Error
 }
 
 func (db *Database) GetDuePendingSyncs(target string, limit int) ([]*models.PendingSync, error) {
@@ -90,13 +90,30 @@ func (db *Database) GetDuePendingSyncs(target string, limit int) ([]*models.Pend
 	return res, err
 }
 
+// IncrementPendingSyncAttempt records a failed delivery attempt. Once a row's attempts reach
+// maxPendingSyncAttempts, GetDuePendingSyncs stops returning it forever - so that transition is
+// logged here, otherwise a permanently-undeliverable row (revoked token, deleted profile) would
+// just silently stop syncing with no trace anywhere.
 func (db *Database) IncrementPendingSyncAttempt(id uint, nextAttemptAt time.Time, lastErr string) error {
-	return db.gormdb.Model(&models.PendingSync{}).Where("id = ?", id).
+	err := db.gormdb.Model(&models.PendingSync{}).Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"attempts":        gorm.Expr("attempts + 1"),
 			"next_attempt_at": nextAttemptAt,
 			"last_error":      lastErr,
 		}).Error
+	if err != nil {
+		return err
+	}
+
+	if db.Logger == nil {
+		return nil
+	}
+	var row models.PendingSync
+	if fetchErr := db.gormdb.Select("attempts", "target", "operation", "profile_id").First(&row, id).Error; fetchErr == nil && row.Attempts >= maxPendingSyncAttempts {
+		db.Logger.Warn().Uint("id", id).Str("target", row.Target).Str("operation", row.Operation).Str("profileID", row.ProfileID).
+			Str("lastError", lastErr).Msg("pending sync: row exhausted its retry budget and will no longer be retried")
+	}
+	return nil
 }
 
 func (db *Database) DeletePendingSync(id uint) error {

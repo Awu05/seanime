@@ -93,6 +93,9 @@ type (
 		// The background SIMKL sync worker reads this live (never a one-time-captured snapshot) so it
 		// never retries against a stale/closed platform after login, platform-switch, or offline-mode toggle.
 		rawAnilistPlatformRef *util.Ref[platform.Platform]
+		// platformSwitchMu guards setDefaultAnilistPlatform so rawAnilistPlatformRef and
+		// AnilistPlatformRef are always updated together as one atomic pair.
+		platformSwitchMu sync.Mutex
 		OfflinePlatformRef    *util.Ref[platform.Platform]
 		MetadataProviderRef   *util.Ref[metadata_provider.Provider]
 
@@ -557,8 +560,11 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	simklWorker := syncpkg.NewWorker(
 		app.Database,
 		func(profileID string) (simkl.Client, bool) {
-			if profileID == "" {
-				profileID = DefaultSimklProfileID
+			profileID = NormalizeSimklProfileID(profileID)
+			// Also gate on the mirroring toggle, not just token presence: otherwise rows
+			// queued before the user disabled SIMKL sync keep draining to SIMKL forever.
+			if !app.simklEnabledFor(profileID)() {
+				return nil, false
 			}
 			token, ok := app.simklTokenLookup(profileID)
 			if !ok {
@@ -569,7 +575,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		func(profileID string) platform.Platform {
 			// Resolve the raw platform through the ref every time: a login, platform switch
 			// or offline-mode toggle replaces (and closes) the previous one.
-			if profileID == "" || profileID == DefaultSimklProfileID || app.AnilistPool == nil {
+			if profileID == "" || profileID == DefaultProfileID || app.AnilistPool == nil {
 				if app.rawAnilistPlatformRef == nil {
 					return nil
 				}

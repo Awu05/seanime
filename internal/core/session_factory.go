@@ -18,7 +18,7 @@ import (
 // collection fetches go to the profile's own AniList account — never the
 // global platform, which carries whichever account logged in last.
 func (a *App) sessionPlatform(profileID string) (platform.Platform, bool) {
-	if a.MultiUserEnabled && profileID != "" && profileID != "_default" && a.AnilistPool != nil {
+	if a.MultiUserEnabled && profileID != "" && profileID != DefaultProfileID && a.AnilistPool != nil {
 		return a.AnilistPool.GetPlatformForProfile(profileID), true
 	}
 	return a.AnilistPlatformRef.Get(), false

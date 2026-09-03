@@ -302,7 +302,7 @@ type Mal struct {
 // own per-profile account (see Account) is stored - not the single-row Mal pattern.
 type SimklAccount struct {
 	BaseModel
-	ProfileID   string `gorm:"column:profile_id;index" json:"profileId"`
+	ProfileID   string `gorm:"column:profile_id;uniqueIndex" json:"profileId"`
 	Username    string `gorm:"column:username" json:"username"`
 	AccessToken string `gorm:"column:access_token" json:"-"`
 }
@@ -310,7 +310,7 @@ type SimklAccount struct {
 // SimklSettings stores per-profile SIMKL sync configuration.
 type SimklSettings struct {
 	BaseModel
-	ProfileID string `gorm:"column:profile_id;index" json:"profileId"`
+	ProfileID string `gorm:"column:profile_id;uniqueIndex" json:"profileId"`
 	Enabled   bool   `gorm:"column:enabled" json:"enabled"`
 }
 

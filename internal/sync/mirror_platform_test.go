@@ -279,3 +279,53 @@ func TestMirroringPlatform_AddMediaToCollection_AnilistFails_Queued(t *testing.T
 	require.Len(t, queue.enqueued, 1)
 	assert.Equal(t, "add_to_collection", queue.enqueued[0].Operation)
 }
+
+// Manga list mutations must never reach SIMKL: SIMKL only tracks anime, and
+// platform.Platform's mutating methods carry no media-type argument to tell the two apart -
+// see WithMangaMedia.
+
+func TestMirroringPlatform_UpdateEntry_MangaMedia_SkipsSimkl(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	status := anilist.MediaListStatusCompleted
+	score := 85
+	ctx := WithMangaMedia(context.Background())
+	err := mp.UpdateEntry(ctx, 101922, &status, &score, nil, nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, inner.updateEntryCalls, "the real AniList call must still go through")
+	assert.Zero(t, simklClient.addToListCalls, "manga must never be mirrored to SIMKL's anime endpoints")
+	assert.Zero(t, simklClient.setRatingCalls)
+	assert.Empty(t, queue.enqueued)
+}
+
+func TestMirroringPlatform_UpdateEntryProgress_MangaMedia_SkipsSimkl(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	ctx := WithMangaMedia(context.Background())
+	err := mp.UpdateEntryProgress(ctx, 101922, 5, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, inner.updateProgressCalls)
+	assert.Zero(t, simklClient.markProgressCalls, "manga reading progress must never be mirrored to SIMKL")
+}
+
+func TestMirroringPlatform_DeleteEntry_MangaMedia_SkipsSimkl(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	ctx := WithMangaMedia(context.Background())
+	err := mp.DeleteEntry(ctx, 101922, 555)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, inner.deleteEntryCalls)
+	assert.Zero(t, simklClient.removeEntryCalls, "deleting a manga entry must not delete a SIMKL anime entry")
+}

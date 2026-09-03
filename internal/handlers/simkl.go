@@ -1,23 +1,19 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
 	"seanime/internal/constants"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
+	"seanime/internal/platforms/platform"
+	syncpkg "seanime/internal/sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
 )
-
-// shouldEnableSimklSync reports whether SIMKL mirroring should actually be active: it
-// requires both an active connection (access token present) and the user's enabled toggle.
-func shouldEnableSimklSync(connected bool, enabledToggle bool) bool {
-	return connected && enabledToggle
-}
 
 // simklProfileID returns the profile ID SIMKL rows are keyed on for this request. It must be
 // normalized: GetProfileIDFromContext returns "" in single-user/sidecar mode, while the core
@@ -137,28 +133,12 @@ func (h *Handler) HandleSaveSimklSettings(c echo.Context) error {
 	return h.RespondWithData(c, settings)
 }
 
-// simklEnqueuedEntryPayload mirrors the JSON shape of internal/sync's unexported
-// updateEntryPayload. The worker only json.Unmarshals by key, so the tags — not the Go type —
-// are what must stay in lockstep with internal/sync/mirror_platform.go.
-type simklEnqueuedEntryPayload struct {
-	MediaID  int                      `json:"mediaId"`
-	Status   *anilist.MediaListStatus `json:"status,omitempty"`
-	ScoreRaw *int                     `json:"scoreRaw,omitempty"`
-}
-
-// simklEnqueuedProgressPayload mirrors internal/sync's updateProgressPayload (totalEpisodes
-// is omitempty there, and unknown for a seed, so it is left out).
-type simklEnqueuedProgressPayload struct {
-	MediaID  int `json:"mediaId"`
-	Progress int `json:"progress"`
-}
-
 // HandleSimklSyncNow
 //
 //	@summary seeds SIMKL with the user's entire current AniList collection.
 //	@desc Without this, SIMKL only mirrors changes made after connecting - existing entries never reach it otherwise.
-//	@desc Entries are enqueued onto the durable pending-sync queue rather than pushed inline, so a large
-//	@desc library neither blocks this request for minutes nor loses failed entries permanently.
+//	@desc Seeding runs in the background after this request returns, and rows are batch-inserted rather than
+//	@desc one at a time, so a large library neither blocks this request for minutes nor loses failed entries permanently.
 //	@route /api/v1/simkl/sync-now [POST]
 //	@returns bool
 func (h *Handler) HandleSimklSyncNow(c echo.Context) error {
@@ -170,14 +150,28 @@ func (h *Handler) HandleSimklSyncNow(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	collection, err := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
+	plat := h.getAnilistPlatform(c)
+	go h.seedSimklPendingSyncs(plat, profileID)
+
+	return h.RespondWithData(c, true)
+}
+
+// seedSimklPendingSyncs runs in the background so HandleSimklSyncNow can return immediately -
+// a multi-thousand-entry library would otherwise hold the HTTP request open for the entire
+// seed. The AniList platform must be resolved from the request (via getAnilistPlatform) before
+// the handler returns, since echo.Context is invalid once that happens; everything after that
+// uses a background context.
+func (h *Handler) seedSimklPendingSyncs(plat platform.Platform, profileID string) {
+	collection, err := plat.GetAnimeCollection(context.Background(), false)
 	if err != nil {
-		return h.RespondWithError(c, err)
+		h.App.Logger.Err(err).Str("profileID", profileID).Msg("simkl: sync-now failed to fetch the AniList collection")
+		return
 	}
 	if collection == nil || collection.MediaListCollection == nil {
-		return h.RespondWithData(c, true)
+		return
 	}
 
+	var rows []*models.PendingSync
 	for _, list := range collection.MediaListCollection.Lists {
 		for _, entry := range list.Entries {
 			if entry.Status == nil || entry.GetMedia() == nil {
@@ -185,42 +179,43 @@ func (h *Handler) HandleSimklSyncNow(c echo.Context) error {
 			}
 			mediaID := entry.GetMedia().GetID()
 
-			entryPayload := simklEnqueuedEntryPayload{MediaID: mediaID, Status: entry.Status}
+			entryPayload := syncpkg.UpdateEntryPayload{MediaID: mediaID, Status: entry.Status}
 			if entry.Score != nil && *entry.Score > 0 {
 				scoreRaw := int(*entry.Score)
 				entryPayload.ScoreRaw = &scoreRaw
 			}
-			h.enqueueSimklSeedRow(profileID, "update_entry", mediaID, entryPayload)
+			if row := h.buildSimklSeedRow(profileID, syncpkg.OpUpdateEntry, mediaID, entryPayload); row != nil {
+				rows = append(rows, row)
+			}
 
 			if entry.Progress != nil && *entry.Progress > 0 {
-				h.enqueueSimklSeedRow(profileID, "update_progress", mediaID,
-					simklEnqueuedProgressPayload{MediaID: mediaID, Progress: *entry.Progress})
+				progressPayload := syncpkg.UpdateProgressPayload{MediaID: mediaID, Progress: *entry.Progress}
+				if row := h.buildSimklSeedRow(profileID, syncpkg.OpUpdateProgress, mediaID, progressPayload); row != nil {
+					rows = append(rows, row)
+				}
 			}
 		}
 	}
 
-	return h.RespondWithData(c, true)
+	if err := h.App.Database.EnqueuePendingSyncBatch(rows); err != nil {
+		h.App.Logger.Err(err).Str("profileID", profileID).Int("rows", len(rows)).Msg("simkl: sync-now failed to enqueue seeded rows")
+	}
 }
 
-// enqueueSimklSeedRow persists one pending-sync row for the seed. A failure here is logged
-// per-entry rather than failing the whole request, matching how the inline version reported
-// per-entry problems — one bad row shouldn't abandon the rest of the collection.
-func (h *Handler) enqueueSimklSeedRow(profileID string, operation string, mediaID int, payload interface{}) {
+// buildSimklSeedRow encodes one seed entry as a *models.PendingSync, or nil (logged) if the
+// payload can't be encoded. A single bad entry shouldn't abandon the rest of the collection.
+func (h *Handler) buildSimklSeedRow(profileID string, operation string, mediaID int, payload interface{}) *models.PendingSync {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		h.App.Logger.Err(err).Int("mediaID", mediaID).Str("operation", operation).
 			Msg("simkl: failed to encode sync-now payload")
-		return
+		return nil
 	}
-	err = h.App.Database.EnqueuePendingSync(&models.PendingSync{
+	return &models.PendingSync{
 		ProfileID:     profileID,
-		Target:        "simkl",
+		Target:        syncpkg.TargetSimkl,
 		Operation:     operation,
 		Payload:       encoded,
 		NextAttemptAt: time.Now(),
-	})
-	if err != nil {
-		h.App.Logger.Err(err).Int("mediaID", mediaID).Str("operation", operation).
-			Msg("simkl: failed to enqueue entry during sync-now")
 	}
 }

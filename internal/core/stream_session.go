@@ -42,7 +42,7 @@ func NewStreamSessionManager(inactivityTimeout time.Duration) *StreamSessionMana
 // outside the lock.
 func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory func(string) *ProfileStreamSession) (*ProfileStreamSession, bool) {
 	if profileID == "" {
-		profileID = "_default"
+		profileID = DefaultProfileID
 	}
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -78,7 +78,7 @@ func (sm *StreamSessionManager) WithSessionsLocked(fn func(sessions []*ProfileSt
 // Safe to call when no session exists.
 func (sm *StreamSessionManager) EvictSession(profileID string) {
 	if profileID == "" {
-		profileID = "_default"
+		profileID = DefaultProfileID
 	}
 	sm.mu.Lock()
 	session, ok := sm.sessions[profileID]

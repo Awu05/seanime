@@ -16,6 +16,21 @@ type PendingSyncEnqueuer interface {
 	EnqueuePendingSync(item *models.PendingSync) error
 }
 
+// Target and operation names, shared by MirroringPlatform's enqueue calls, the Worker's
+// delivery switches, and the SIMKL "sync now" seed - kept as named constants (rather than
+// repeated string literals across three files) so a typo is a compile error, not a row that
+// silently falls into the switch's default case and gets treated as delivered.
+const (
+	TargetAnilist = "anilist"
+	TargetSimkl   = "simkl"
+
+	OpUpdateProgress  = "update_progress"
+	OpUpdateEntry     = "update_entry"
+	OpUpdateRepeat    = "update_repeat"
+	OpDeleteEntry     = "delete_entry"
+	OpAddToCollection = "add_to_collection"
+)
+
 // MirroringPlatform wraps a real platform.Platform, delegating every read method unchanged
 // (via interface embedding) and intercepting only the mutating methods to: (1) always
 // attempt the real AniList call and queue it for retry if it fails, and (2) always attempt
@@ -49,7 +64,25 @@ func RawPlatform(p platform.Platform) platform.Platform {
 	return p
 }
 
-type updateProgressPayload struct {
+type mangaMediaContextKey struct{}
+
+// WithMangaMedia marks ctx as a manga list mutation. platform.Platform's mutating methods
+// (UpdateEntry, UpdateEntryProgress, UpdateEntryRepeat, DeleteEntry, AddMediaToCollection) take
+// no media-type argument and are shared by both anime and manga callers - e.g.
+// HandleEditAnilistListEntry and HandleDeleteAnilistListEntry handle both from one endpoint,
+// keyed only by mediaID. Without this marker MirroringPlatform can't tell manga mutations from
+// anime ones, and mirrors them to SIMKL's anime-only endpoints anyway - creating bogus "anime"
+// entries in the user's real SIMKL account for what are actually manga list changes.
+func WithMangaMedia(ctx context.Context) context.Context {
+	return context.WithValue(ctx, mangaMediaContextKey{}, true)
+}
+
+func isMangaMedia(ctx context.Context) bool {
+	v, _ := ctx.Value(mangaMediaContextKey{}).(bool)
+	return v
+}
+
+type UpdateProgressPayload struct {
 	MediaID       int  `json:"mediaId"`
 	Progress      int  `json:"progress"`
 	TotalEpisodes *int `json:"totalEpisodes,omitempty"`
@@ -58,22 +91,22 @@ type updateProgressPayload struct {
 func (m *MirroringPlatform) UpdateEntryProgress(ctx context.Context, mediaID int, progress int, totalEpisodes *int) error {
 	anilistErr := m.Platform.UpdateEntryProgress(ctx, mediaID, progress, totalEpisodes)
 	if anilistErr != nil {
-		m.enqueue("anilist", "update_progress", updateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
+		m.enqueue(TargetAnilist, OpUpdateProgress, UpdateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
 	}
 
 	// progress <= 0 is skipped on the SIMKL side: MarkProgress(0) builds an empty episode list,
 	// which is byte-identical to RemoveEntry's request body and would DELETE the backup entry.
 	// A progress reset must be a no-op on the backup, never a deletion.
-	if progress > 0 && m.simklEnabled() {
+	if progress > 0 && m.simklEnabled() && !isMangaMedia(ctx) {
 		if simklErr := m.simklClient.MarkProgress(ctx, mediaID, progress); simklErr != nil {
-			m.enqueue("simkl", "update_progress", updateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
+			m.enqueue(TargetSimkl, OpUpdateProgress, UpdateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
 		}
 	}
 
 	return anilistErr
 }
 
-type updateEntryPayload struct {
+type UpdateEntryPayload struct {
 	MediaID     int                      `json:"mediaId"`
 	Status      *anilist.MediaListStatus `json:"status,omitempty"`
 	ScoreRaw    *int                     `json:"scoreRaw,omitempty"`
@@ -84,12 +117,12 @@ type updateEntryPayload struct {
 
 func (m *MirroringPlatform) UpdateEntry(ctx context.Context, mediaID int, status *anilist.MediaListStatus, scoreRaw *int, progress *int, startedAt *anilist.FuzzyDateInput, completedAt *anilist.FuzzyDateInput) error {
 	anilistErr := m.Platform.UpdateEntry(ctx, mediaID, status, scoreRaw, progress, startedAt, completedAt)
-	payload := updateEntryPayload{MediaID: mediaID, Status: status, ScoreRaw: scoreRaw, Progress: progress, StartedAt: startedAt, CompletedAt: completedAt}
+	payload := UpdateEntryPayload{MediaID: mediaID, Status: status, ScoreRaw: scoreRaw, Progress: progress, StartedAt: startedAt, CompletedAt: completedAt}
 	if anilistErr != nil {
-		m.enqueue("anilist", "update_entry", payload)
+		m.enqueue(TargetAnilist, OpUpdateEntry, payload)
 	}
 
-	if m.simklEnabled() {
+	if m.simklEnabled() && !isMangaMedia(ctx) {
 		var simklFailed bool
 		if status != nil {
 			if err := m.simklClient.AddToList(ctx, mediaID, MapAnilistStatusToSimkl(*status)); err != nil {
@@ -109,14 +142,14 @@ func (m *MirroringPlatform) UpdateEntry(ctx context.Context, mediaID int, status
 			}
 		}
 		if simklFailed {
-			m.enqueue("simkl", "update_entry", payload)
+			m.enqueue(TargetSimkl, OpUpdateEntry, payload)
 		}
 	}
 
 	return anilistErr
 }
 
-type updateRepeatPayload struct {
+type UpdateRepeatPayload struct {
 	MediaID int `json:"mediaId"`
 	Repeat  int `json:"repeat"`
 }
@@ -124,14 +157,14 @@ type updateRepeatPayload struct {
 func (m *MirroringPlatform) UpdateEntryRepeat(ctx context.Context, mediaID int, repeat int) error {
 	anilistErr := m.Platform.UpdateEntryRepeat(ctx, mediaID, repeat)
 	if anilistErr != nil {
-		m.enqueue("anilist", "update_repeat", updateRepeatPayload{MediaID: mediaID, Repeat: repeat})
+		m.enqueue(TargetAnilist, OpUpdateRepeat, UpdateRepeatPayload{MediaID: mediaID, Repeat: repeat})
 	}
 	// SIMKL has no direct "repeat count" concept exposed by the sync endpoints used here;
 	// rewatch tracking on SIMKL's side is out of scope per the design spec.
 	return anilistErr
 }
 
-type deleteEntryPayload struct {
+type DeleteEntryPayload struct {
 	MediaID int `json:"mediaId"`
 	EntryID int `json:"entryId"`
 }
@@ -139,29 +172,32 @@ type deleteEntryPayload struct {
 func (m *MirroringPlatform) DeleteEntry(ctx context.Context, mediaID int, entryID int) error {
 	anilistErr := m.Platform.DeleteEntry(ctx, mediaID, entryID)
 	if anilistErr != nil {
-		m.enqueue("anilist", "delete_entry", deleteEntryPayload{MediaID: mediaID, EntryID: entryID})
+		m.enqueue(TargetAnilist, OpDeleteEntry, DeleteEntryPayload{MediaID: mediaID, EntryID: entryID})
 	}
 
-	if m.simklEnabled() {
+	if m.simklEnabled() && !isMangaMedia(ctx) {
 		if err := m.simklClient.RemoveEntry(ctx, mediaID); err != nil {
-			m.enqueue("simkl", "delete_entry", deleteEntryPayload{MediaID: mediaID, EntryID: entryID})
+			m.enqueue(TargetSimkl, OpDeleteEntry, DeleteEntryPayload{MediaID: mediaID, EntryID: entryID})
 		}
 	}
 
 	return anilistErr
 }
 
-type addToCollectionPayload struct {
+type AddToCollectionPayload struct {
 	MediaIDs []int `json:"mediaIds"`
 }
 
 func (m *MirroringPlatform) AddMediaToCollection(ctx context.Context, mIds []int) error {
 	anilistErr := m.Platform.AddMediaToCollection(ctx, mIds)
 	if anilistErr != nil {
-		m.enqueue("anilist", "add_to_collection", addToCollectionPayload{MediaIDs: mIds})
+		m.enqueue(TargetAnilist, OpAddToCollection, AddToCollectionPayload{MediaIDs: mIds})
 	}
 
-	if m.simklEnabled() {
+	// AddMediaToCollection has no manga equivalent in platform.Platform (there is no
+	// "addMangaToCollection" - manga has no downloaded-file collection concept), but the
+	// isMangaMedia guard is kept here too for defense in depth if that ever changes.
+	if m.simklEnabled() && !isMangaMedia(ctx) {
 		var simklFailed bool
 		for _, id := range mIds {
 			if err := m.simklClient.AddToList(ctx, id, "plantowatch"); err != nil {
@@ -169,7 +205,7 @@ func (m *MirroringPlatform) AddMediaToCollection(ctx context.Context, mIds []int
 			}
 		}
 		if simklFailed {
-			m.enqueue("simkl", "add_to_collection", addToCollectionPayload{MediaIDs: mIds})
+			m.enqueue(TargetSimkl, OpAddToCollection, AddToCollectionPayload{MediaIDs: mIds})
 		}
 	}
 
