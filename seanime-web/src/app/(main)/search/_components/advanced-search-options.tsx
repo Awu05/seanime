@@ -182,6 +182,7 @@ export function AdvancedSearchOptions() {
                     fieldLabelClass="hidden"
                 />
                 <Select
+                    disabled={!anilistHealthy}
                     leftAddon={
                         <RiSignalTowerLine className={cn((params.status !== null && !!params.status.length) && "text-indigo-300 font-bold text-xl")} />}
                     label="Status" placeholder="All statuses" className="w-full"
@@ -208,6 +209,7 @@ export function AdvancedSearchOptions() {
                     })}
                 />
                 {serverStatus?.settings?.anilist?.enableAdultContent && <Switch
+                    disabled={!anilistHealthy}
                     label="Adult"
                     value={params.isAdult}
                     onValueChange={v => setParams(draft => {
