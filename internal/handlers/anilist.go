@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
+	"seanime/internal/api/simkl"
 	"seanime/internal/core"
 	"seanime/internal/platforms/shared_platform"
 	syncpkg "seanime/internal/sync"
@@ -324,6 +326,80 @@ var (
 	anilistListSeasonAnimeCache = result.NewCache[string, []*anilist.BaseAnime]()
 )
 
+// shouldTrySimklDiscoveryFallback reports whether a Discover/Search/Calendar/Details fallback
+// call should be attempted: AniList must be known down AND the profile must have a SIMKL
+// client_id configured. This is intentionally lighter than Component 1's tracking-fallback gate
+// (FallbackPlatform.simklAvailable) - see the spec's "revised gating" note: no OAuth/AccessToken/
+// Enabled requirement, just the client_id.
+func shouldTrySimklDiscoveryFallback(simklClientID string) bool {
+	return !shared_platform.IsWorking.Load() && syncpkg.DiscoveryAvailable(simklClientID)
+}
+
+// simklClientForProfile builds a SIMKL API client for discovery-fallback calls (search,
+// trending, calendar, details) using only the profile's configured client_id - no access token
+// needed for these endpoints, unlike Component 1's per-profile sync client.
+func (h *Handler) simklClientForProfile(c echo.Context) (*simkl.APIClient, bool) {
+	profileID := core.NormalizeSimklProfileID(core.GetProfileIDFromContext(c))
+	settings, err := h.App.Database.GetSimklSettings(profileID)
+	if err != nil || settings.ClientId == "" {
+		return nil, false
+	}
+	return simkl.NewAPIClient(simkl.DefaultHTTPClient, "", settings.ClientId), true
+}
+
+// simklDiscoveryEnrichmentCache resolves SIMKL ids to AniList-mapped detail records for
+// discovery-fallback list results (see internal/sync/id_resolution_cache.go) - package-level and
+// shared across requests since the resolved crosswalk itself is stable regardless of which
+// profile's client made the call. The resolver function is NOT stored here - see
+// IDResolutionCache's doc comment: it is passed fresh to each ResolveMany call so two profiles'
+// concurrent requests never race onto each other's SIMKL client.
+var simklDiscoveryEnrichmentCache = syncpkg.NewIDResolutionCache(8, 24*time.Hour)
+
+const simklDiscoveryEnrichmentCap = 20
+
+// simklDiscoveryFallback handles Discover's trending section and Search's text-query fallback
+// (see spec Component 2). page/perPage/sort filtering beyond "trending vs text search" is not
+// replicated - SIMKL has no equivalent server-side filters - so this returns a best-effort
+// unfiltered result set capped at simklDiscoveryEnrichmentCap items.
+func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, search *string) (*anilist.ListAnime, error) {
+	var media []*anilist.BaseAnime
+	if search != nil && *search != "" {
+		results, err := simklClient.SearchAnime(ctx, *search)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]int, len(results))
+		for i, r := range results {
+			ids[i] = r.Ids.SimklID
+		}
+		// GetAnimeDetails already matches syncpkg.IDResolver's signature exactly - no wrapper
+		// closure needed.
+		resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
+		media = syncpkg.MapSearchResultsToBaseAnime(results, resolved)
+	} else {
+		entries, err := simklClient.GetTrendingAnime(ctx)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]int, len(entries))
+		for i, e := range entries {
+			ids[i] = e.Ids.SimklID
+		}
+		resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
+		media = syncpkg.MapTrendingToBaseAnime(entries, resolved)
+	}
+
+	total := len(media)
+	return &anilist.ListAnime{
+		Page: &anilist.ListAnime_Page{
+			Media: media,
+			PageInfo: &anilist.ListAnime_Page_PageInfo{
+				Total: &total,
+			},
+		},
+	}, nil
+}
+
 // HandleAnilistListAnime
 //
 //	@summary returns a list of anime based on the search parameters.
@@ -408,6 +484,11 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 		h.App.GetUserAnilistToken(),
 	)
 	if err != nil {
+		if simklClient, ok := h.simklClientForProfile(c); ok && shouldTrySimklDiscoveryFallback(simklClient.ClientID()) {
+			if fallback, fbErr := simklDiscoveryFallback(c.Request().Context(), simklClient, p.Search); fbErr == nil {
+				return h.RespondWithData(c, fallback)
+			}
+		}
 		return h.RespondWithError(c, err)
 	}
 
