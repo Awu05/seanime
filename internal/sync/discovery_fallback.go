@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"sort"
 	"strconv"
 	"time"
 
@@ -91,6 +92,35 @@ func MapTrendingToBaseAnime(entries []simkl.TrendingEntry, resolved map[int]*sim
 		mapped = append(mapped, mapDiscoveryEntry(anilistID, e.Title, e.Year, e.Poster))
 	}
 	return mapped
+}
+
+// FilterAndSortUpcoming drops premiere entries that have already aired (or whose date SIMKL
+// returned in an unparseable form) and sorts the remainder soonest-first. Live-verified the bare
+// /anime/premieres endpoint already returns exclusively future-dated, ascending-by-date results -
+// but that's an observed characteristic of an undocumented endpoint, not a guarantee, and
+// simklDiscoveryEnrichmentCap keeps only the first N entries after this call, so relying on wire
+// order alone would let a future SIMKL-side change silently show already-premiered titles under
+// "Coming Soon" - the same category of wrong-data bug this fallback exists to avoid.
+func FilterAndSortUpcoming(entries []simkl.PremiereEntry, now time.Time) []simkl.PremiereEntry {
+	type dated struct {
+		entry simkl.PremiereEntry
+		at    time.Time
+	}
+	parsed := make([]dated, 0, len(entries))
+	for _, e := range entries {
+		at, err := time.Parse(time.RFC3339, e.Date)
+		if err != nil || at.Before(now) {
+			continue
+		}
+		parsed = append(parsed, dated{entry: e, at: at})
+	}
+	sort.Slice(parsed, func(i, j int) bool { return parsed[i].at.Before(parsed[j].at) })
+
+	filtered := make([]simkl.PremiereEntry, len(parsed))
+	for i, p := range parsed {
+		filtered[i] = p.entry
+	}
+	return filtered
 }
 
 // MapUpcomingToBaseAnime converts SIMKL premiere entries into AniList-shaped BaseAnime, for

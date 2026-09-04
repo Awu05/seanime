@@ -78,10 +78,14 @@ func TestMapUpcomingToBaseAnime(t *testing.T) {
 	assert.Equal(t, 500000, mapped[0].ID)
 	assert.Equal(t, "Upcoming Anime", *mapped[0].Title.Romaji)
 	assert.Equal(t, "Upcoming Anime", *mapped[0].Title.UserPreferred, "frontend cards read title.userPreferred, not title.romaji")
+	assert.Equal(t, "Upcoming Anime", *mapped[0].Title.English)
+	assert.Equal(t, 2026, *mapped[0].SeasonYear)
 	require.NotNil(t, mapped[0].IsAdult)
 	assert.False(t, *mapped[0].IsAdult)
 	require.NotNil(t, mapped[0].Type)
 	assert.Equal(t, anilist.MediaTypeAnime, *mapped[0].Type)
+	require.NotNil(t, mapped[0].CountryOfOrigin)
+	assert.Equal(t, "JP", *mapped[0].CountryOfOrigin)
 	require.NotNil(t, mapped[0].CoverImage)
 	require.NotNil(t, mapped[0].CoverImage.ExtraLarge, "MediaEntryCard's poster element reads coverImage.extraLarge exclusively, with no fallback to large/medium")
 	assert.Contains(t, *mapped[0].CoverImage.ExtraLarge, "20/20391426")
@@ -230,4 +234,24 @@ func TestFilterAiringSchedulesByWindow(t *testing.T) {
 		assert.Equal(t, 100, filtered[0].AiringAt)
 		assert.Equal(t, 200, filtered[1].AiringAt)
 	})
+}
+
+func TestFilterAndSortUpcoming(t *testing.T) {
+	now, err := time.Parse(time.RFC3339, "2026-09-04T00:00:00Z")
+	require.NoError(t, err)
+
+	entries := []simkl.PremiereEntry{
+		{Title: "Already Aired", Date: "2026-09-01T00:00:00Z"},           // before now - dropped
+		{Title: "Furthest Out", Date: "2026-10-25T00:00:00+09:00"},       // kept, sorts last
+		{Title: "Unparseable Date", Date: "not-a-real-date"},             // dropped
+		{Title: "Soonest", Date: "2026-09-18T00:00:00+09:00"},            // kept, sorts first
+		{Title: "Middle", Date: "2026-10-01T00:00:00+09:00"},             // kept, sorts middle
+	}
+
+	filtered := FilterAndSortUpcoming(entries, now)
+
+	require.Len(t, filtered, 3, "already-aired and unparseable-date entries must be dropped")
+	assert.Equal(t, "Soonest", filtered[0].Title)
+	assert.Equal(t, "Middle", filtered[1].Title)
+	assert.Equal(t, "Furthest Out", filtered[2].Title)
 }

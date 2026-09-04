@@ -70,9 +70,13 @@ func (c *APIClient) GetTrendingAnime(ctx context.Context) ([]TrendingEntry, erro
 	return results, nil
 }
 
-// PremiereEntry is one item from GET /anime/premieres. Live-verified: same shape as TrendingEntry
-// (title/year/poster/ids) plus a premiere Date - like every other list endpoint, no ids.anilist,
-// so it still needs the same enrichment step as trending/search before it can be mapped.
+// PremiereEntry is one item from GET /anime/premieres. Live-verified
+// (docs/superpowers/plans/simkl-endpoint-findings.md, "Step 3b: Premieres"): same shape as
+// TrendingEntry (title/year/poster/ids) plus a premiere Date - like every other list endpoint, no
+// ids.anilist, so it still needs the same enrichment step as trending/search before it can be
+// mapped. The bare path (no filter segment) was confirmed to return exclusively future-dated,
+// already-ascending-by-date results, but internal/sync.FilterAndSortUpcoming still filters/sorts
+// explicitly rather than trusting that as a permanent guarantee of an undocumented endpoint.
 type PremiereEntry struct {
 	Title  string       `json:"title"`
 	Year   int          `json:"year"`

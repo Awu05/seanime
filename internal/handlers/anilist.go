@@ -435,6 +435,10 @@ func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, s
 		if err != nil {
 			return nil, err
 		}
+		// Drops already-aired entries and sorts soonest-first before the enrichment cap below
+		// keeps only the first simklDiscoveryEnrichmentCap of them - see FilterAndSortUpcoming's
+		// doc comment for why this isn't just trusting the feed's observed ordering.
+		entries = syncpkg.FilterAndSortUpcoming(entries, time.Now())
 		ids := make([]int, len(entries))
 		for i, e := range entries {
 			ids[i] = e.Ids.SimklID
