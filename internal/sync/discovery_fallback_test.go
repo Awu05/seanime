@@ -2,6 +2,7 @@ package sync
 
 import (
 	"testing"
+	"time"
 
 	"seanime/internal/api/simkl"
 
@@ -53,6 +54,29 @@ func TestMapCalendarToBaseAnime(t *testing.T) {
 	require.Len(t, mapped, 1)
 	assert.Equal(t, 300000, mapped[0].ID)
 	assert.Equal(t, "Airing Now", *mapped[0].Title.Romaji)
+}
+
+func TestMapCalendarToAiringSchedules(t *testing.T) {
+	entries := []simkl.CalendarEntry{
+		{SimklID: 500, Date: "2026-09-04T12:00:00Z", Episode: simkl.CalendarEpisode{Episode: 5}},
+		{SimklID: 501, Date: "2026-09-05T12:00:00Z", Episode: simkl.CalendarEpisode{Episode: 1}}, // unresolved
+		{SimklID: 502, Date: "not-a-real-date", Episode: simkl.CalendarEpisode{Episode: 2}},      // unparseable date
+	}
+	resolved := map[int]*simkl.AnimeDetail{
+		500: {Title: "Airing Now", Year: 2024, Ids: simkl.FullIds{Anilist: "300000"}},
+		502: {Title: "Bad Date", Year: 2024, Ids: simkl.FullIds{Anilist: "300002"}},
+	} // 501 deliberately absent - unresolved
+
+	mapped := MapCalendarToAiringSchedules(entries, resolved)
+
+	require.Len(t, mapped, 1, "unresolved and unparseable-date entries must be dropped")
+	assert.Equal(t, 300000, mapped[0].Media.ID)
+	assert.Equal(t, "Airing Now", *mapped[0].Media.Title.Romaji)
+	assert.Equal(t, 5, mapped[0].Episode)
+	assert.Equal(t, 500, mapped[0].ID)
+	expectedAiredAt, err := time.Parse(time.RFC3339, "2026-09-04T12:00:00Z")
+	require.NoError(t, err)
+	assert.Equal(t, int(expectedAiredAt.Unix()), mapped[0].AiringAt)
 }
 
 func TestMapAnimeDetailToAnilist(t *testing.T) {

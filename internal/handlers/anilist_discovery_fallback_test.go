@@ -3,7 +3,9 @@ package handlers
 import (
 	"testing"
 
+	"seanime/internal/api/simkl"
 	"seanime/internal/platforms/shared_platform"
+	syncpkg "seanime/internal/sync"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -21,4 +23,14 @@ func TestShouldTrySimklDiscoveryFallback(t *testing.T) {
 	assert.True(t, shouldTrySimklDiscoveryFallback("some-client-id"))
 
 	shared_platform.IsWorking.Store(true) // restore package-level default for other tests
+}
+
+// TestSimklCalendarFallback_EmptyWhenNoEntries exercises the zero-entries path without a real
+// SIMKL server - simklCalendarFallback must return an empty (not nil-panicking) slice when
+// GetAnimeCalendar's underlying result maps to nothing resolvable, mirroring the "reduced
+// sections over broken ones" principle.
+func TestSimklCalendarFallback_EmptyWhenNoEntries(t *testing.T) {
+	mapped := syncpkg.MapCalendarToBaseAnime(nil, map[int]*simkl.AnimeDetail{})
+	assert.Empty(t, mapped)
+	assert.NotNil(t, mapped, "must return an empty slice, not nil, so JSON encodes as [] not null")
 }

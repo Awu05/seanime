@@ -400,6 +400,45 @@ func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, s
 	}, nil
 }
 
+// simklCalendarFallback handles Component 3 (Schedule page fallback) for both
+// HandleAnilistListSeasonAnime and HandleAnilistListRecentAiringAnime. Both return a flat
+// []*anilist.BaseAnime-compatible shape, so one helper serves both call sites - the "This Season"
+// tab gets a reduced (rolling-window) result compared to its normal full-season query, and the
+// recent/upcoming airing section is a closer fit since it's already window-based in its normal
+// AniList-backed form (see spec Component 3).
+func simklCalendarFallback(ctx context.Context, simklClient *simkl.APIClient) ([]*anilist.BaseAnime, error) {
+	entries, err := simklClient.GetAnimeCalendar(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]int, len(entries))
+	for i, e := range entries {
+		ids[i] = e.SimklID // bare field on CalendarEntry, not nested under Ids - see Task 3
+	}
+	resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
+
+	return syncpkg.MapCalendarToBaseAnime(entries, resolved), nil
+}
+
+// simklCalendarFallbackSchedules is simklCalendarFallback's counterpart for
+// HandleAnilistListRecentAiringAnime, which needs ListRecentAnime_Page_AiringSchedules entries
+// (with per-entry airingAt/episode) rather than bare BaseAnime.
+func simklCalendarFallbackSchedules(ctx context.Context, simklClient *simkl.APIClient) ([]*anilist.ListRecentAnime_Page_AiringSchedules, error) {
+	entries, err := simklClient.GetAnimeCalendar(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]int, len(entries))
+	for i, e := range entries {
+		ids[i] = e.SimklID // bare field on CalendarEntry, not nested under Ids - see Task 3
+	}
+	resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
+
+	return syncpkg.MapCalendarToAiringSchedules(entries, resolved), nil
+}
+
 // HandleAnilistListAnime
 //
 //	@summary returns a list of anime based on the search parameters.
@@ -571,6 +610,11 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 			h.App.GetUserAnilistToken(),
 		)
 		if err != nil {
+			if simklClient, ok := h.simklClientForProfile(c); ok && shouldTrySimklDiscoveryFallback(simklClient.ClientID()) {
+				if fallback, fbErr := simklCalendarFallback(c.Request().Context(), simklClient); fbErr == nil {
+					return h.RespondWithData(c, fallback)
+				}
+			}
 			return h.RespondWithError(c, err)
 		}
 		if ret == nil || ret.GetPage() == nil {
@@ -648,6 +692,15 @@ func (h *Handler) HandleAnilistListRecentAiringAnime(c echo.Context) error {
 		h.App.GetUserAnilistToken(),
 	)
 	if err != nil {
+		if simklClient, ok := h.simklClientForProfile(c); ok && shouldTrySimklDiscoveryFallback(simklClient.ClientID()) {
+			if schedules, fbErr := simklCalendarFallbackSchedules(c.Request().Context(), simklClient); fbErr == nil {
+				return h.RespondWithData(c, &anilist.ListRecentAnime{
+					Page: &anilist.ListRecentAnime_Page{
+						AiringSchedules: schedules,
+					},
+				})
+			}
+		}
 		return h.RespondWithError(c, err)
 	}
 

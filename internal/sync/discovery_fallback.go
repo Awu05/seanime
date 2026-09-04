@@ -2,6 +2,7 @@ package sync
 
 import (
 	"strconv"
+	"time"
 
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
@@ -91,6 +92,40 @@ func MapCalendarToBaseAnime(entries []simkl.CalendarEntry, resolved map[int]*sim
 			continue
 		}
 		mapped = append(mapped, mapDiscoveryEntry(anilistID, detail.Title, detail.Year, ""))
+	}
+	return mapped
+}
+
+// MapCalendarToAiringSchedules converts SIMKL airing-calendar entries into
+// ListRecentAnime_Page_AiringSchedules-shaped entries, for HandleAnilistListRecentAiringAnime's
+// fallback specifically (contrast with MapCalendarToBaseAnime, used by the "This Season" tab's
+// fallback, which only needs bare BaseAnime). Title/Year come from the resolved AnimeDetail, not
+// the calendar entry itself (see MapCalendarToBaseAnime's doc comment, Task 6 - CalendarEntry has
+// neither). date is parsed from SIMKL's ISO-8601 string; a parse failure drops that entry rather
+// than fabricating an airingAt of 0 (which would sort as "already aired long ago" and misplace
+// the entry).
+func MapCalendarToAiringSchedules(entries []simkl.CalendarEntry, resolved map[int]*simkl.AnimeDetail) []*anilist.ListRecentAnime_Page_AiringSchedules {
+	mapped := make([]*anilist.ListRecentAnime_Page_AiringSchedules, 0, len(entries))
+	for _, e := range entries {
+		detail, ok := resolved[e.SimklID]
+		if !ok {
+			continue
+		}
+		anilistID, err := strconv.Atoi(detail.Ids.Anilist)
+		if err != nil {
+			continue
+		}
+		airedAt, err := time.Parse(time.RFC3339, e.Date)
+		if err != nil {
+			continue
+		}
+		media := mapDiscoveryEntry(anilistID, detail.Title, detail.Year, "")
+		mapped = append(mapped, &anilist.ListRecentAnime_Page_AiringSchedules{
+			AiringAt: int(airedAt.Unix()),
+			Episode:  e.Episode.Episode,
+			ID:       e.SimklID, // SIMKL has no separate "airing schedule id" - simkl_id is the closest stable identifier available
+			Media:    media,
+		})
 	}
 	return mapped
 }
