@@ -2165,10 +2165,71 @@ export const API_ENDPOINTS = {
             methods: ["PATCH"],
             endpoint: "/api/v1/settings/auto-downloader",
         },
+        /**
+         *  @description
+         *  Route tests connectivity to qBittorrent with the given (not necessarily saved) settings.
+         *  Lets the client verify a qBittorrent host/port/credentials combination before saving it.
+         */
+        TestQbittorrentConnection: {
+            key: "SETTINGS-test-qbittorrent-connection",
+            methods: ["POST"],
+            endpoint: "/api/v1/settings/qbittorrent/test-connection",
+        },
         SaveMediaPlayerSettings: {
             key: "SETTINGS-save-media-player-settings",
             methods: ["PATCH"],
             endpoint: "/api/v1/settings/media-player",
+        },
+    },
+    SIMKL: {
+        SimklConnectStart: {
+            key: "SIMKL-simkl-connect-start",
+            methods: ["POST"],
+            endpoint: "/api/v1/simkl/connect/start",
+        },
+        SimklConnectPoll: {
+            key: "SIMKL-simkl-connect-poll",
+            methods: ["POST"],
+            endpoint: "/api/v1/simkl/connect/poll",
+        },
+        SimklDisconnect: {
+            key: "SIMKL-simkl-disconnect",
+            methods: ["POST"],
+            endpoint: "/api/v1/simkl/disconnect",
+        },
+        GetSimklSettings: {
+            key: "SIMKL-get-simkl-settings",
+            methods: ["GET"],
+            endpoint: "/api/v1/simkl/settings",
+        },
+        SaveSimklSettings: {
+            key: "SIMKL-save-simkl-settings",
+            methods: ["PATCH"],
+            endpoint: "/api/v1/simkl/settings",
+        },
+        /**
+         *  @description
+         *  Route seeds SIMKL with the user's entire current AniList collection.
+         *  Without this, SIMKL only mirrors changes made after connecting - existing entries never reach it otherwise.
+         *  Seeding runs in the background after this request returns, and rows are batch-inserted rather than
+         *  one at a time, so a large library neither blocks this request for minutes nor loses failed entries permanently.
+         */
+        SimklSyncNow: {
+            key: "SIMKL-simkl-sync-now",
+            methods: ["POST"],
+            endpoint: "/api/v1/simkl/sync-now",
+        },
+        /**
+         *  @description
+         *  Route returns how many SIMKL sync rows are still queued for delivery for the current profile.
+         *  The UI polls this after Sync Now to show a "syncing..." indicator until it reaches zero -
+         *  seeding and delivery both happen in the background (delivery on the retry worker's own
+         *  tick), so there is nothing else that reports completion.
+         */
+        GetSimklSyncStatus: {
+            key: "SIMKL-get-simkl-sync-status",
+            methods: ["GET"],
+            endpoint: "/api/v1/simkl/sync-status",
         },
     },
     STATUS: {

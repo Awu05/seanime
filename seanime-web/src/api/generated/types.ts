@@ -2932,6 +2932,31 @@ export type RouteHandlerParam = {
 }
 
 /**
+ * - Filepath: internal/handlers/simkl.go
+ * - Filename: simkl.go
+ * - Package: handlers
+ * @description
+ *  SimklSettingsResponse is what the settings endpoint returns. Connected is separate from
+ *  Enabled so the UI can distinguish "no account linked yet" from "linked but mirroring off".
+ */
+export type SimklSettingsResponse = {
+    enabled: boolean
+    connected: boolean
+    clientId: string
+}
+
+/**
+ * - Filepath: internal/handlers/simkl.go
+ * - Filename: simkl.go
+ * - Package: handlers
+ * @description
+ *  SimklSyncStatusResponse reports how many SIMKL sync rows are still queued for delivery.
+ */
+export type SimklSyncStatusResponse = {
+    pending: number
+}
+
+/**
  * - Filepath: internal/handlers/status.go
  * - Filename: status.go
  * - Package: handlers
@@ -2951,6 +2976,7 @@ export type Status = {
     versionName: string
     themeSettings?: Models_Theme
     isOffline: boolean
+    anilistHealthy: boolean
     mediastreamSettings?: Models_MediastreamSettings
     torrentstreamSettings?: Models_TorrentstreamSettings
     debridSettings?: Models_DebridSettings
@@ -4309,6 +4335,22 @@ export type Models_SilencedMediaEntry = {
 }
 
 /**
+ * - Filepath: internal/database/models/models.go
+ * - Filename: models.go
+ * - Package: models
+ * @description
+ *  SimklSettings stores per-profile SIMKL sync configuration.
+ */
+export type Models_SimklSettings = {
+    profileId: string
+    enabled: boolean
+    clientId: string
+    id: number
+    createdAt?: string
+    updatedAt?: string
+}
+
+/**
  * - Filepath: ..\internal\database\models\models.go
  * - Filename: models.go
  * - Package: models
@@ -5351,6 +5393,24 @@ export type Report_WebSocketLog = {
     eventType: string
     payload?: Record<string, any>
     timestamp?: string
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Simkl
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * - Filepath: internal/api/simkl/types.go
+ * - Filename: types.go
+ * - Package: simkl
+ * @description
+ *  PinResponse is the response from GET /oauth/pin (step 1 of SIMKL's PIN/device flow).
+ */
+export type PinResponse = {
+    userCode: string
+    verificationUri: string
+    expiresIn: number
+    interval: number
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
