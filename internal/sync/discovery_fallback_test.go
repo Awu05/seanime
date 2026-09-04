@@ -34,6 +34,9 @@ func TestMapSearchResultsToBaseAnime(t *testing.T) {
 	assert.Equal(t, anilist.MediaTypeAnime, *mapped[0].Type)
 	require.NotNil(t, mapped[0].CountryOfOrigin)
 	assert.Equal(t, "JP", *mapped[0].CountryOfOrigin)
+	require.NotNil(t, mapped[0].CoverImage)
+	require.NotNil(t, mapped[0].CoverImage.ExtraLarge, "MediaEntryCard's poster element reads coverImage.extraLarge exclusively, with no fallback to large/medium")
+	assert.Contains(t, *mapped[0].CoverImage.ExtraLarge, "ab/abc123")
 }
 
 func TestMapTrendingToBaseAnime(t *testing.T) {
@@ -55,6 +58,9 @@ func TestMapTrendingToBaseAnime(t *testing.T) {
 	assert.Equal(t, anilist.MediaTypeAnime, *mapped[0].Type)
 	require.NotNil(t, mapped[0].CountryOfOrigin)
 	assert.Equal(t, "JP", *mapped[0].CountryOfOrigin)
+	require.NotNil(t, mapped[0].CoverImage)
+	require.NotNil(t, mapped[0].CoverImage.ExtraLarge, "MediaEntryCard's poster element reads coverImage.extraLarge exclusively, with no fallback to large/medium")
+	assert.Contains(t, *mapped[0].CoverImage.ExtraLarge, "cd/cde456")
 }
 
 func TestMapCalendarToBaseAnime(t *testing.T) {
@@ -80,7 +86,8 @@ func TestMapCalendarToBaseAnime(t *testing.T) {
 	require.NotNil(t, mapped[0].CountryOfOrigin)
 	assert.Equal(t, "JP", *mapped[0].CountryOfOrigin)
 	require.NotNil(t, mapped[0].CoverImage, "CalendarEntry itself has no poster - this must come from the resolved AnimeDetail's Poster field")
-	assert.Contains(t, *mapped[0].CoverImage.Large, "14/14625673bbdc6b52ea")
+	require.NotNil(t, mapped[0].CoverImage.ExtraLarge, "MediaEntryCard's poster element reads coverImage.extraLarge exclusively, with no fallback to large/medium")
+	assert.Contains(t, *mapped[0].CoverImage.ExtraLarge, "14/14625673bbdc6b52ea")
 }
 
 // TestMapCalendarToBaseAnime_DedupesByResolvedAnilistID covers the case where the calendar feed's
@@ -129,7 +136,8 @@ func TestMapCalendarToAiringSchedules(t *testing.T) {
 	require.NotNil(t, mapped[0].Media.CountryOfOrigin)
 	assert.Equal(t, "JP", *mapped[0].Media.CountryOfOrigin)
 	require.NotNil(t, mapped[0].Media.CoverImage, "CalendarEntry itself has no poster - this must come from the resolved AnimeDetail's Poster field")
-	assert.Contains(t, *mapped[0].Media.CoverImage.Large, "14/14625673bbdc6b52ea")
+	require.NotNil(t, mapped[0].Media.CoverImage.ExtraLarge, "MediaEntryCard's poster element reads coverImage.extraLarge exclusively, with no fallback to large/medium")
+	assert.Contains(t, *mapped[0].Media.CoverImage.ExtraLarge, "14/14625673bbdc6b52ea")
 	assert.Equal(t, 5, mapped[0].Episode)
 	assert.Equal(t, 500, mapped[0].ID)
 	expectedAiredAt, err := time.Parse(time.RFC3339, "2026-09-04T12:00:00Z")

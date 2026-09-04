@@ -46,8 +46,10 @@ func mapSimklFormat(animeType string) *anilist.MediaFormat {
 // on SIMKL's own CDN, per SIMKL's documented image-serving convention
 // (https://api.simkl.org/conventions/images): images are served from
 // simkl.in/{category}/{poster}_{size}.{ext}, here category "posters", size "_c" (the documented
-// "compact card" size, 170x250px - the standard choice for list/card display, exactly the context
-// CoverImage.Large/Medium are used in throughout the app) and extension ".webp". No image proxy is
+// "compact card" size, 170x250px - the standard choice for list/card display) and extension
+// ".webp". Callers must set this on CoverImage.ExtraLarge, not just Large/Medium:
+// MediaEntryCard's actual poster element (media-entry-card.tsx:456) reads
+// coverImage.extraLarge exclusively, with no fallback to the other sizes. No image proxy is
 // used: the URL points straight at SIMKL, so there is no third-party hop to break precisely when
 // the user is already degraded (AniList down). An empty poster fragment returns nil rather than a
 // URL built from an empty path segment: a missing cover image (CoverImage is a pointer field every
@@ -90,7 +92,7 @@ func BuildAnimeCollectionFromSimkl(entries []simkl.AllItemsEntry) *anilist.Anime
 
 		var coverImage *anilist.BaseAnime_CoverImage
 		if posterURL := buildSimklPosterURL(e.Show.Poster); posterURL != nil {
-			coverImage = &anilist.BaseAnime_CoverImage{Large: posterURL, Medium: posterURL}
+			coverImage = &anilist.BaseAnime_CoverImage{ExtraLarge: posterURL, Large: posterURL, Medium: posterURL}
 		}
 
 		media := &anilist.BaseAnime{

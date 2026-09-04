@@ -72,6 +72,8 @@ func TestBuildAnimeCollectionFromSimkl(t *testing.T) {
 	assert.Equal(t, "Test Anime", *watching.GetMedia().GetTitle().English)
 	assert.Equal(t, 24, *watching.GetMedia().Episodes)
 	require.NotNil(t, watching.GetMedia().GetCoverImage())
+	require.NotNil(t, watching.GetMedia().GetCoverImage().ExtraLarge, "MediaEntryCard's poster element reads coverImage.extraLarge exclusively, with no fallback to large/medium")
+	assert.Equal(t, "https://simkl.in/posters/74/74415673dcdc9cdd_c.webp", *watching.GetMedia().GetCoverImage().ExtraLarge)
 	require.NotNil(t, watching.GetMedia().GetCoverImage().Large)
 	assert.Equal(t, "https://simkl.in/posters/74/74415673dcdc9cdd_c.webp", *watching.GetMedia().GetCoverImage().Large)
 	require.NotNil(t, watching.GetMedia().GetCoverImage().Medium)

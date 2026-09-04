@@ -29,7 +29,10 @@ func DiscoveryAvailable(clientID string) bool {
 func mapDiscoveryEntry(anilistID int, title string, year int, poster string) *anilist.BaseAnime {
 	var coverImage *anilist.BaseAnime_CoverImage
 	if posterURL := buildSimklPosterURL(poster); posterURL != nil {
-		coverImage = &anilist.BaseAnime_CoverImage{Large: posterURL, Medium: posterURL}
+		// MediaEntryCard's actual poster element (media-entry-card.tsx:456) reads
+		// coverImage.extraLarge exclusively, with no fallback to large/medium - omitting it left
+		// every SIMKL-sourced card's thumbnail blank despite the URL being valid and loadable.
+		coverImage = &anilist.BaseAnime_CoverImage{ExtraLarge: posterURL, Large: posterURL, Medium: posterURL}
 	}
 	yearCopy := year
 	isAdult := false
