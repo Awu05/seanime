@@ -153,12 +153,18 @@ func (f *FallbackPlatform) GetAnimeDetails(ctx context.Context, id int) (*anilis
 
 	simklID, ok, lookupErr := f.discoverySimklClient.SearchIDByAnilist(ctx, id)
 	if lookupErr != nil || !ok {
-		return details, err // fall back to whatever the real platform returned - a success, if forced
+		if forced {
+			return details, err // fall back to the real platform's successful result
+		}
+		return nil, err // surface the original AniList error, not a SIMKL-side one - unchanged from before forcing existed
 	}
 
 	detail, detailErr := f.discoverySimklClient.GetAnimeDetails(ctx, simklID)
 	if detailErr != nil {
-		return details, err
+		if forced {
+			return details, err
+		}
+		return nil, err
 	}
 
 	return MapAnimeDetailToAnilist(id, detail), nil

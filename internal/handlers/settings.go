@@ -10,6 +10,7 @@ import (
 	"seanime/internal/core"
 	"seanime/internal/database/db"
 	"seanime/internal/database/models"
+	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/torrent_clients/qbittorrent"
 	"seanime/internal/torrents/torrent"
 	"seanime/internal/util"
@@ -351,10 +352,18 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 		}()
 	}
 
-	status := h.NewStatus(c)
-
 	// Refresh modules that depend on the settings
 	h.App.InitOrRefreshModules(profileID)
+
+	// InitOrRefreshModules always reads the GLOBAL settings row (see its own implementation),
+	// which does not reflect what was actually just saved when this save went to a per-profile row
+	// instead (multi-user mode, UpsertSettingsForProfile above) - without this, toggling "Force
+	// SIMKL fallback" on a multi-user instance would persist correctly but never actually take
+	// effect. Re-applying the just-submitted value directly here also means the status response
+	// below reflects it immediately, rather than waiting for the frontend's next status poll.
+	shared_platform.ForceSimklFallback.Store(b.Anilist.ForceSimklFallback)
+
+	status := h.NewStatus(c)
 
 	return h.RespondWithData(c, status)
 }
@@ -416,9 +425,15 @@ func (h *Handler) HandlePatchSetting(c echo.Context) error {
 
 	h.App.WSEventManager.SendToProfile(profileID, "settings", settings)
 
-	status := h.NewStatus(c)
-
 	h.App.InitOrRefreshModules(profileID)
+
+	// See the matching comment in HandleSaveSettings: InitOrRefreshModules reads the global
+	// settings row, which a per-profile patch (multi-user mode) never touches.
+	if nextSettings.Anilist != nil {
+		shared_platform.ForceSimklFallback.Store(nextSettings.Anilist.ForceSimklFallback)
+	}
+
+	status := h.NewStatus(c)
 
 	return h.RespondWithData(c, status)
 }

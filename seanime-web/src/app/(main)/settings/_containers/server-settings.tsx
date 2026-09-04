@@ -304,7 +304,7 @@ export function ServerSettings(props: ServerSettingsProps) {
                     name="forceSimklFallback"
                     label="Force SIMKL fallback"
                     help="If enabled, Discover, Search, Schedule, and anime details will always use SIMKL instead of AniList, even while AniList is healthy."
-                    moreHelp="For manually testing the SIMKL fallback (Settings > Anime Tracker > SIMKL must have a client ID saved). Unlike 'Enable cache-only mode' above, this only affects these four surfaces - it does not touch AniList caching, mutations, or your collection. Turn this off when you are done testing."
+                    moreHelp="For manually testing the SIMKL fallback (Settings > Anime Tracker > SIMKL must have a client ID saved). Unlike 'Enable cache-only mode' above, this only affects these four surfaces - it does not touch AniList caching, mutations, or your collection. This affects the whole server, not just your profile, on multi-user instances. Turn this off when you are done testing."
                     icon={<TbFlask className="" />}
                 />
             </SettingsCard>

@@ -199,8 +199,16 @@ func (h *Handler) HandleGetAnilistAnimeDetails(c echo.Context) error {
 	// AND write: otherwise a previously-cached real AniList result would keep being served (never
 	// even calling the platform again) for the whole TTL, defeating the point of forcing a fresh
 	// SIMKL-fallback attempt - see FallbackPlatform.GetAnimeDetails for where the force actually
-	// engages the SIMKL call.
+	// engages the SIMKL call. Gated on DiscoveryAvailable too (checked only if the cheap atomic is
+	// already true, same as forcedSimklClient) - with the override on but no client_id configured,
+	// FallbackPlatform can't do anything with it anyway, so there's no reason to also disable
+	// caching in that state.
 	forced := shared_platform.ForceSimklFallback.Load()
+	if forced {
+		if simklClient, ok := h.simklClientForProfile(c); !ok || !syncpkg.DiscoveryAvailable(simklClient.ClientID()) {
+			forced = false
+		}
+	}
 
 	if !forced {
 		if details, ok := detailsCache.Get(mId); ok {
