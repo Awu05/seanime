@@ -94,3 +94,26 @@ func MapCalendarToBaseAnime(entries []simkl.CalendarEntry, resolved map[int]*sim
 	}
 	return mapped
 }
+
+// MapAnimeDetailToAnilist converts a SIMKL anime detail record into AnimeDetailsById_Media - the
+// "extra fields" shape HandleGetAnilistAnimeDetails returns on top of whatever BaseAnime the
+// frontend already has cached from a list query. anilistID is supplied by the caller (see this
+// task's Interfaces note on why) rather than parsed from detail.Ids.Anilist here. Only
+// genres/description map cleanly; SIMKL's characters/staff/relations/rankings/recommendations/
+// studios/trailer shapes differ enough from AniList's that this pass leaves those nil rather than
+// attempt a lossy best-effort mapping - the frontend's existing nil-safe accessors already handle
+// an AnimeDetailsById_Media with only some fields populated (this is the same convention
+// Component 1's BuildAnimeCollectionFromSimkl uses for BaseAnime).
+func MapAnimeDetailToAnilist(anilistID int, detail *simkl.AnimeDetail) *anilist.AnimeDetailsById_Media {
+	genres := make([]*string, len(detail.Genres))
+	for i, g := range detail.Genres {
+		g := g
+		genres[i] = &g
+	}
+	description := detail.Overview
+	return &anilist.AnimeDetailsById_Media{
+		ID:          anilistID,
+		Description: &description,
+		Genres:      genres,
+	}
+}

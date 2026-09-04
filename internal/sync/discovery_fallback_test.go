@@ -55,6 +55,24 @@ func TestMapCalendarToBaseAnime(t *testing.T) {
 	assert.Equal(t, "Airing Now", *mapped[0].Title.Romaji)
 }
 
+func TestMapAnimeDetailToAnilist(t *testing.T) {
+	detail := &simkl.AnimeDetail{
+		Title:         "Frieren",
+		Overview:      "A story about elves.",
+		Genres:        []string{"Adventure", "Drama"},
+		TotalEpisodes: 28,
+		Ids:           simkl.FullIds{Simkl: 1990194, Anilist: "154587"},
+	}
+
+	mapped := MapAnimeDetailToAnilist(154587, detail)
+
+	require.NotNil(t, mapped)
+	assert.Equal(t, 154587, mapped.ID)
+	assert.Equal(t, "A story about elves.", *mapped.Description)
+	require.Len(t, mapped.Genres, 2)
+	assert.Equal(t, "Adventure", *mapped.Genres[0])
+}
+
 func TestDiscoveryAvailable(t *testing.T) {
 	assert.True(t, DiscoveryAvailable("some-client-id"))
 	assert.False(t, DiscoveryAvailable(""))
