@@ -3923,6 +3923,7 @@ export type Models_AnilistSettings = {
     enableAdultContent: boolean
     blurAdultContent: boolean
     disableCacheLayer: boolean
+    forceSimklFallback: boolean
 }
 
 /**

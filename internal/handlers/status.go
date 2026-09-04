@@ -61,7 +61,7 @@ func (h *Handler) newRestrictedStatus() *Status {
 		ServerReady:       h.App.ServerReady,
 		ServerHasPassword: h.App.Config.Server.Password != "",
 		MultiUserEnabled:  h.App.MultiUserEnabled,
-		AnilistHealthy:    shared_platform.IsWorking.Load(),
+		AnilistHealthy:    shared_platform.EffectiveAnilistHealthy(),
 	}
 }
 
@@ -143,7 +143,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		VersionName:           constants.VersionName,
 		ThemeSettings:         theme,
 		IsOffline:             h.App.Config.Server.Offline,
-		AnilistHealthy:        shared_platform.IsWorking.Load(),
+		AnilistHealthy:        shared_platform.EffectiveAnilistHealthy(),
 		MediastreamSettings:   h.getMediastreamSettings(c),
 		TorrentstreamSettings: h.getTorrentstreamSettings(c),
 		DebridSettings:        h.getDebridSettings(c),

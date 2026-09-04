@@ -195,14 +195,23 @@ func (h *Handler) HandleGetAnilistAnimeDetails(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	if details, ok := detailsCache.Get(mId); ok {
-		return h.RespondWithData(c, details)
+	// The forced-testing override (Settings > App > Metadata Providers) bypasses the cache read
+	// AND write: otherwise a previously-cached real AniList result would keep being served (never
+	// even calling the platform again) for the whole TTL, defeating the point of forcing a fresh
+	// SIMKL-fallback attempt - see FallbackPlatform.GetAnimeDetails for where the force actually
+	// engages the SIMKL call.
+	forced := shared_platform.ForceSimklFallback.Load()
+
+	if !forced {
+		if details, ok := detailsCache.Get(mId); ok {
+			return h.RespondWithData(c, details)
+		}
 	}
 	details, err := h.getAnilistPlatform(c).GetAnimeDetails(c.Request().Context(), mId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
-	if shared_platform.IsWorking.Load() {
+	if shared_platform.IsWorking.Load() && !forced {
 		detailsCache.Set(mId, details)
 	}
 
@@ -347,6 +356,29 @@ func (h *Handler) simklClientForProfile(c echo.Context) (*simkl.APIClient, bool)
 		return nil, false
 	}
 	return simkl.NewAPIClient(simkl.DefaultHTTPClient, "", settings.ClientId), true
+}
+
+// shouldForceSimklFallback reports whether the manual "force SIMKL fallback" testing override
+// (Settings > App > Metadata Providers) should engage: the override must be on AND the profile
+// must have a SIMKL client_id configured. Mirrors shouldTrySimklDiscoveryFallback's shape, but is
+// checked BEFORE attempting the real AniList call rather than in its error branch - forcing is
+// meant to skip waiting on AniList entirely, not just override its result after the fact.
+func shouldForceSimklFallback(simklClientID string) bool {
+	return shared_platform.ForceSimklFallback.Load() && syncpkg.DiscoveryAvailable(simklClientID)
+}
+
+// forcedSimklClient returns a usable SIMKL client only when shouldForceSimklFallback is true for
+// this profile - lets a user verify the Discover/Search/Schedule fallback UI without needing
+// AniList to actually be down.
+func (h *Handler) forcedSimklClient(c echo.Context) (*simkl.APIClient, bool) {
+	if !shared_platform.ForceSimklFallback.Load() {
+		return nil, false // cheap check first, avoids a DB read on every request when the override is off
+	}
+	simklClient, ok := h.simklClientForProfile(c)
+	if !ok || !shouldForceSimklFallback(simklClient.ClientID()) {
+		return nil, false
+	}
+	return simklClient, true
 }
 
 // simklDiscoveryEnrichmentCache resolves SIMKL ids to AniList-mapped detail records for
@@ -517,6 +549,14 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 		isAdult = &val
 	}
 
+	// Checked before the cache lookup too, so a forced test always exercises a fresh SIMKL call
+	// rather than serving a previously-cached real AniList result.
+	if simklClient, ok := h.forcedSimklClient(c); ok {
+		if fallback, fbErr := simklDiscoveryFallback(c.Request().Context(), simklClient, p.Search); fbErr == nil {
+			return h.RespondWithData(c, fallback)
+		}
+	}
+
 	cacheKey := anilist.ListAnimeCacheKey(
 		p.Page,
 		p.Search,
@@ -609,6 +649,14 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 	if !enableAdult {
 		falseVal := false
 		isAdultPtr = &falseVal
+	}
+
+	// Checked before the cache lookup too, so a forced test always exercises a fresh SIMKL call
+	// rather than serving a previously-cached real AniList result.
+	if simklClient, ok := h.forcedSimklClient(c); ok {
+		if fallback, fbErr := simklCalendarFallback(c.Request().Context(), simklClient); fbErr == nil {
+			return h.RespondWithData(c, fallback)
+		}
 	}
 
 	sortParts := make([]string, len(p.Sort))
@@ -704,6 +752,18 @@ func (h *Handler) HandleAnilistListRecentAiringAnime(c echo.Context) error {
 	if p.Page == nil || p.PerPage == nil {
 		*p.Page = 1
 		*p.PerPage = 50
+	}
+
+	// Checked before the cache lookup too, so a forced test always exercises a fresh SIMKL call
+	// rather than serving a previously-cached real AniList result.
+	if simklClient, ok := h.forcedSimklClient(c); ok {
+		if schedules, fbErr := simklCalendarFallbackSchedules(c.Request().Context(), simklClient, p.AiringAtGreater, p.AiringAtLesser); fbErr == nil {
+			return h.RespondWithData(c, &anilist.ListRecentAnime{
+				Page: &anilist.ListRecentAnime_Page{
+					AiringSchedules: schedules,
+				},
+			})
+		}
 	}
 
 	cacheKey := fmt.Sprintf("%v-%v-%v-%v-%v-%v-%v", p.Page, p.Search, p.PerPage, p.AiringAtGreater, p.AiringAtLesser, p.NotYetAired, p.Sort)

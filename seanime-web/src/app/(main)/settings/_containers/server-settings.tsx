@@ -18,7 +18,7 @@ import { FaRedo } from "react-icons/fa"
 import { LuCircleAlert, LuCloudUpload, LuDatabaseBackup, LuEyeOff, LuImageOff, LuImages, LuShield, LuStarOff, LuUserPen } from "react-icons/lu"
 import { MdDownloading } from "react-icons/md"
 import { RiMovieAiLine } from "react-icons/ri"
-import { TbAlertSquareRoundedOff, TbBrowserShare, TbChecklist, TbClockPlay, TbDownloadOff, TbProgressCheck, TbRating18Plus } from "react-icons/tb"
+import { TbAlertSquareRoundedOff, TbBrowserShare, TbChecklist, TbClockPlay, TbDownloadOff, TbFlask, TbProgressCheck, TbRating18Plus } from "react-icons/tb"
 import { useServerStatus } from "../../_hooks/use-server-status"
 
 type ServerSettingsProps = {
@@ -298,6 +298,14 @@ export function ServerSettings(props: ServerSettingsProps) {
                     label="Use fallback episode metadata"
                     help="If enabled, Seanime will use an alternative source to fetch episode metadata."
                     icon={<LuImages className="" />}
+                />
+                <Field.Switch
+                    side="right"
+                    name="forceSimklFallback"
+                    label="Force SIMKL fallback"
+                    help="If enabled, Discover, Search, Schedule, and anime details will always use SIMKL instead of AniList, even while AniList is healthy."
+                    moreHelp="For manually testing the SIMKL fallback (Settings > Anime Tracker > SIMKL must have a client ID saved). Unlike 'Enable cache-only mode' above, this only affects these four surfaces - it does not touch AniList caching, mutations, or your collection. Turn this off when you are done testing."
+                    icon={<TbFlask className="" />}
                 />
             </SettingsCard>
 

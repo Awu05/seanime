@@ -390,6 +390,7 @@ func (a *App) InitOrRefreshModules(profileID string) {
 
 	if settings.Anilist != nil {
 		shared_platform.ShouldCache.Store(!settings.Anilist.DisableCacheLayer)
+		shared_platform.ForceSimklFallback.Store(settings.Anilist.ForceSimklFallback)
 	}
 
 	// Initialize JWT secret if not set — load from DB or generate and persist

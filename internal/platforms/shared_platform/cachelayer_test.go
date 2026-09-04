@@ -318,6 +318,32 @@ func TestCacheLayerCustomQuerySurfacesNetworkErrorWhenNoCacheFallback(t *testing
 	require.Contains(t, err.Error(), "The AniList API has been temporarily disabled due to severe stability issues.")
 }
 
+// TestEffectiveAnilistHealthy covers the manual "force SIMKL fallback" testing override's
+// interaction with the real health flag: forcing must make the status endpoint (and therefore the
+// frontend banner) report unhealthy even while IsWorking is genuinely true, without mutating
+// IsWorking itself - only IsWorking drives the background health-check loop and the cache
+// layer's own request/mutation behavior, which forcing must not disturb.
+func TestEffectiveAnilistHealthy(t *testing.T) {
+	t.Cleanup(func() {
+		IsWorking.Store(true)
+		ForceSimklFallback.Store(false)
+	})
+
+	IsWorking.Store(true)
+	ForceSimklFallback.Store(false)
+	require.True(t, EffectiveAnilistHealthy(), "genuinely healthy and not forced")
+
+	ForceSimklFallback.Store(true)
+	require.False(t, EffectiveAnilistHealthy(), "forcing must report unhealthy even though AniList is fine")
+	require.True(t, IsWorking.Load(), "forcing must not mutate IsWorking itself")
+
+	IsWorking.Store(false)
+	require.False(t, EffectiveAnilistHealthy(), "genuinely down, regardless of the force flag")
+
+	ForceSimklFallback.Store(false)
+	require.False(t, EffectiveAnilistHealthy(), "genuinely down even when not forced")
+}
+
 func newTestCacheLayer(t *testing.T, client *cacheLayerTestClient) *CacheLayer {
 	t.Helper()
 	ShouldCache.Store(true)

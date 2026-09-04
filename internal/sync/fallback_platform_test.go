@@ -5,6 +5,7 @@ import (
 	"errors"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
+	"seanime/internal/platforms/shared_platform"
 	"testing"
 	"time"
 
@@ -329,6 +330,67 @@ func TestFallbackPlatform_GetAnimeDetails_NotDiscoveryAvailable_ErrorSurfaces(t 
 
 	require.Error(t, err)
 	assert.Equal(t, "anilist down", err.Error(), "with discovery unavailable, SIMKL must never be consulted")
+}
+
+// --- GetAnimeDetails: manual "force SIMKL fallback" testing override ---
+
+func TestFallbackPlatform_GetAnimeDetails_ForcedEngagesEvenWhenHealthy(t *testing.T) {
+	shared_platform.ForceSimklFallback.Store(true)
+	t.Cleanup(func() { shared_platform.ForceSimklFallback.Store(false) })
+
+	inner := &fakeDetailsPlatform{details: &anilist.AnimeDetailsById_Media{ID: 1}}
+	fp := &FallbackPlatform{
+		Platform:           inner,
+		anilistHealthy:     func() bool { return true }, // AniList is genuinely fine
+		discoveryAvailable: func() bool { return true },
+		discoverySimklClient: &fakeDetailsSimklClient{
+			simklID: 46994,
+			found:   true,
+			detail:  &simkl.AnimeDetail{Title: "Frieren", Ids: simkl.FullIds{Anilist: "154587"}},
+		},
+	}
+
+	details, err := fp.GetAnimeDetails(context.Background(), 154587)
+
+	require.NoError(t, err)
+	require.NotNil(t, details)
+	assert.True(t, inner.called, "the real platform is still called first even when forced")
+	assert.Equal(t, 154587, details.ID, "must be the SIMKL-derived result, not the real platform's healthy one")
+}
+
+func TestFallbackPlatform_GetAnimeDetails_ForcedButSimklFailsFallsBackToRealResult(t *testing.T) {
+	shared_platform.ForceSimklFallback.Store(true)
+	t.Cleanup(func() { shared_platform.ForceSimklFallback.Store(false) })
+
+	inner := &fakeDetailsPlatform{details: &anilist.AnimeDetailsById_Media{ID: 1}}
+	fp := &FallbackPlatform{
+		Platform:             inner,
+		anilistHealthy:       func() bool { return true },
+		discoveryAvailable:   func() bool { return true },
+		discoverySimklClient: &fakeDetailsSimklClient{found: false}, // SIMKL has no crosswalk for this id
+	}
+
+	details, err := fp.GetAnimeDetails(context.Background(), 1)
+
+	require.NoError(t, err, "the real call succeeded - a failed forced SIMKL attempt must not turn that into an error")
+	assert.Same(t, inner.details, details, "must fall back to the real platform's successful result, not nil")
+}
+
+func TestFallbackPlatform_GetAnimeDetails_ForcedButNotDiscoveryAvailable_RealResultPassesThrough(t *testing.T) {
+	shared_platform.ForceSimklFallback.Store(true)
+	t.Cleanup(func() { shared_platform.ForceSimklFallback.Store(false) })
+
+	inner := &fakeDetailsPlatform{details: &anilist.AnimeDetailsById_Media{ID: 1}}
+	fp := &FallbackPlatform{
+		Platform:           inner,
+		anilistHealthy:     func() bool { return true },
+		discoveryAvailable: func() bool { return false }, // no client_id configured
+	}
+
+	details, err := fp.GetAnimeDetails(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Same(t, inner.details, details, "forcing must still respect discoveryAvailable - no client_id, nothing to force")
 }
 
 // --- RawPlatform must unwrap both wrapper layers ---

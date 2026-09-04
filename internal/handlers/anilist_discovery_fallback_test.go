@@ -25,6 +25,22 @@ func TestShouldTrySimklDiscoveryFallback(t *testing.T) {
 	shared_platform.IsWorking.Store(true) // restore package-level default for other tests
 }
 
+// TestShouldForceSimklFallback exercises the manual "force SIMKL fallback" testing override
+// (Settings > App > Metadata Providers) independently of shouldTrySimklDiscoveryFallback: it must
+// engage regardless of whether AniList is actually healthy, but still require a configured
+// client_id - there's nothing to force without one.
+func TestShouldForceSimklFallback(t *testing.T) {
+	t.Cleanup(func() { shared_platform.ForceSimklFallback.Store(false) })
+
+	shared_platform.IsWorking.Store(true) // AniList is genuinely fine
+	shared_platform.ForceSimklFallback.Store(false)
+	assert.False(t, shouldForceSimklFallback("some-client-id"), "must not force when the override is off")
+
+	shared_platform.ForceSimklFallback.Store(true)
+	assert.False(t, shouldForceSimklFallback(""), "must not force with no client id configured")
+	assert.True(t, shouldForceSimklFallback("some-client-id"), "must force even though AniList is healthy")
+}
+
 // TestSimklCalendarFallback_EmptyWhenNoEntries exercises the zero-entries path without a real
 // SIMKL server - simklCalendarFallback must return an empty (not nil-panicking) slice when
 // GetAnimeCalendar's underlying result maps to nothing resolvable, mirroring the "reduced

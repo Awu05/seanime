@@ -5,6 +5,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/platforms/shared_platform"
 	"sync"
 	"time"
 )
@@ -136,20 +137,28 @@ func (f *FallbackPlatform) GetRawAnimeCollection(ctx context.Context, bypassCach
 // (completed OAuth connection) - see the spec's "revised gating" note. id here is an AniList id
 // (this method's contract, inherited from platform.Platform), so SIMKL must be looked up in
 // reverse via SearchIDByAnilist before its GetAnimeDetails(simklID) call can be made.
+//
+// shared_platform.ForceSimklFallback (a manual testing override, Settings > App > Metadata
+// Providers) makes this engage even when the real call above succeeds - unlike every other gate
+// here, forcing does NOT require err != nil. If the SIMKL side then fails for any reason, this
+// still falls back to whatever the real platform returned (details, err) rather than losing a
+// perfectly good result just because the forced test path didn't pan out.
 func (f *FallbackPlatform) GetAnimeDetails(ctx context.Context, id int) (*anilist.AnimeDetailsById_Media, error) {
 	details, err := f.Platform.GetAnimeDetails(ctx, id)
-	if err == nil || f.anilistHealthy() || !f.discoveryAvailable() || f.discoverySimklClient == nil {
+	forced := shared_platform.ForceSimklFallback.Load()
+	shouldTryFallback := forced || (err != nil && !f.anilistHealthy())
+	if !shouldTryFallback || !f.discoveryAvailable() || f.discoverySimklClient == nil {
 		return details, err
 	}
 
 	simklID, ok, lookupErr := f.discoverySimklClient.SearchIDByAnilist(ctx, id)
 	if lookupErr != nil || !ok {
-		return nil, err // surface the original AniList error, not a SIMKL-side one
+		return details, err // fall back to whatever the real platform returned - a success, if forced
 	}
 
 	detail, detailErr := f.discoverySimklClient.GetAnimeDetails(ctx, simklID)
 	if detailErr != nil {
-		return nil, err
+		return details, err
 	}
 
 	return MapAnimeDetailToAnilist(id, detail), nil
