@@ -94,8 +94,12 @@ func BuildAnimeCollectionFromSimkl(entries []simkl.AllItemsEntry) *anilist.Anime
 		}
 
 		media := &anilist.BaseAnime{
-			ID:         mediaID,
-			Title:      &anilist.BaseAnime_Title{Romaji: &title},
+			ID: mediaID,
+			Title: &anilist.BaseAnime_Title{
+				Romaji:        &title,
+				English:       &title,
+				UserPreferred: &title,
+			},
 			CoverImage: coverImage,
 			Format:     mapSimklFormat(e.Show.AnimeType),
 			Episodes:   &episodes,

@@ -19,18 +19,34 @@ func DiscoveryAvailable(clientID string) bool {
 // mapDiscoveryEntry builds a thin BaseAnime from the fields common to search/trending results,
 // mirroring BuildAnimeCollectionFromSimkl's convention in simkl_to_anilist.go: only fields SIMKL
 // can reliably supply are populated, every other BaseAnime field stays nil (every consumer's
-// generated Get* accessors are nil-safe).
+// generated Get* accessors are nil-safe). Title.UserPreferred/English (not just Romaji) and
+// IsAdult/Type/CountryOfOrigin are populated because the frontend never reads Title.Romaji
+// (MediaEntryCard and the schedule/home-screen containers read title.userPreferred), and two
+// schedule containers filter on isAdult === false && type === "ANIME" && countryOfOrigin === "JP" -
+// leaving those nil left every SIMKL-sourced card blank-titled and every recent-airing entry
+// filtered out. Every SIMKL discovery source (search, trending, calendar) is anime-only, so these
+// are safe universal defaults for every caller of this function.
 func mapDiscoveryEntry(anilistID int, title string, year int, poster string) *anilist.BaseAnime {
 	var coverImage *anilist.BaseAnime_CoverImage
 	if posterURL := buildSimklPosterURL(poster); posterURL != nil {
 		coverImage = &anilist.BaseAnime_CoverImage{Large: posterURL, Medium: posterURL}
 	}
 	yearCopy := year
+	isAdult := false
+	mediaType := anilist.MediaTypeAnime
+	countryOfOrigin := "JP"
 	return &anilist.BaseAnime{
-		ID:         anilistID,
-		Title:      &anilist.BaseAnime_Title{Romaji: &title},
-		CoverImage: coverImage,
-		SeasonYear: &yearCopy,
+		ID: anilistID,
+		Title: &anilist.BaseAnime_Title{
+			Romaji:        &title,
+			English:       &title,
+			UserPreferred: &title,
+		},
+		CoverImage:      coverImage,
+		SeasonYear:      &yearCopy,
+		IsAdult:         &isAdult,
+		Type:            &mediaType,
+		CountryOfOrigin: &countryOfOrigin,
 	}
 }
 
@@ -82,6 +98,7 @@ func MapTrendingToBaseAnime(entries []simkl.TrendingEntry, resolved map[int]*sim
 // Same drop-if-unresolved rule as the other Map*ToBaseAnime functions.
 func MapCalendarToBaseAnime(entries []simkl.CalendarEntry, resolved map[int]*simkl.AnimeDetail) []*anilist.BaseAnime {
 	mapped := make([]*anilist.BaseAnime, 0, len(entries))
+	seen := make(map[int]bool, len(entries))
 	for _, e := range entries {
 		detail, ok := resolved[e.SimklID]
 		if !ok {
@@ -91,6 +108,10 @@ func MapCalendarToBaseAnime(entries []simkl.CalendarEntry, resolved map[int]*sim
 		if err != nil {
 			continue
 		}
+		if seen[anilistID] {
+			continue
+		}
+		seen[anilistID] = true
 		mapped = append(mapped, mapDiscoveryEntry(anilistID, detail.Title, detail.Year, ""))
 	}
 	return mapped
@@ -128,6 +149,26 @@ func MapCalendarToAiringSchedules(entries []simkl.CalendarEntry, resolved map[in
 		})
 	}
 	return mapped
+}
+
+// FilterAiringSchedulesByWindow drops entries outside [airingAtGreater, airingAtLesser] (either
+// bound nil means unbounded on that side), mirroring AniList's own airingAt_greater/airingAt_lesser
+// query semantics so the SIMKL fallback respects the same request window the caller asked for.
+func FilterAiringSchedulesByWindow(schedules []*anilist.ListRecentAnime_Page_AiringSchedules, airingAtGreater, airingAtLesser *int) []*anilist.ListRecentAnime_Page_AiringSchedules {
+	if airingAtGreater == nil && airingAtLesser == nil {
+		return schedules
+	}
+	filtered := make([]*anilist.ListRecentAnime_Page_AiringSchedules, 0, len(schedules))
+	for _, s := range schedules {
+		if airingAtGreater != nil && s.AiringAt < *airingAtGreater {
+			continue
+		}
+		if airingAtLesser != nil && s.AiringAt > *airingAtLesser {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	return filtered
 }
 
 // MapAnimeDetailToAnilist converts a SIMKL anime detail record into AnimeDetailsById_Media - the

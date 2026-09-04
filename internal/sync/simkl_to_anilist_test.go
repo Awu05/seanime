@@ -68,6 +68,8 @@ func TestBuildAnimeCollectionFromSimkl(t *testing.T) {
 	assert.Equal(t, 5, *watching.Progress)
 	assert.Nil(t, watching.Score, "unrated entry must have a nil score, not a zero-value 0.0")
 	assert.Equal(t, "Test Anime", *watching.GetMedia().GetTitle().Romaji)
+	assert.Equal(t, "Test Anime", *watching.GetMedia().GetTitle().UserPreferred, "frontend cards read title.userPreferred, not title.romaji")
+	assert.Equal(t, "Test Anime", *watching.GetMedia().GetTitle().English)
 	assert.Equal(t, 24, *watching.GetMedia().Episodes)
 	require.NotNil(t, watching.GetMedia().GetCoverImage())
 	require.NotNil(t, watching.GetMedia().GetCoverImage().Large)

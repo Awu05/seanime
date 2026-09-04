@@ -202,7 +202,9 @@ func (h *Handler) HandleGetAnilistAnimeDetails(c echo.Context) error {
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
-	detailsCache.Set(mId, details)
+	if shared_platform.IsWorking.Load() {
+		detailsCache.Set(mId, details)
+	}
 
 	return h.RespondWithData(c, details)
 }
@@ -400,6 +402,41 @@ func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, s
 	}, nil
 }
 
+var simklCalendarEntriesCache = result.NewCache[string, []simkl.CalendarEntry]()
+
+const simklCalendarCacheKey = "calendar"
+
+// getCalendarEntriesCached wraps GetAnimeCalendar with a short TTL - the feed itself doesn't vary
+// per profile/client_id, and every simklCalendarFallback*/HandleAnilistList* caller during a single
+// outage would otherwise re-download the same ~658-row feed on every request.
+func getCalendarEntriesCached(ctx context.Context, simklClient *simkl.APIClient) ([]simkl.CalendarEntry, error) {
+	if entries, ok := simklCalendarEntriesCache.Get(simklCalendarCacheKey); ok {
+		return entries, nil
+	}
+	entries, err := simklClient.GetAnimeCalendar(ctx)
+	if err != nil {
+		return nil, err
+	}
+	simklCalendarEntriesCache.SetT(simklCalendarCacheKey, entries, 5*time.Minute)
+	return entries, nil
+}
+
+// dedupeSimklIDs collects each entry's SimklID once, preserving first-seen order. The calendar
+// feed has one row per episode, so deduping before capping at simklDiscoveryEnrichmentCap avoids
+// wasting resolve slots on repeated concurrent lookups of the same show.
+func dedupeSimklIDs(entries []simkl.CalendarEntry) []int {
+	seen := make(map[int]bool, len(entries))
+	ids := make([]int, 0, len(entries))
+	for _, e := range entries {
+		if seen[e.SimklID] {
+			continue
+		}
+		seen[e.SimklID] = true
+		ids = append(ids, e.SimklID)
+	}
+	return ids
+}
+
 // simklCalendarFallback handles Component 3 (Schedule page fallback) for both
 // HandleAnilistListSeasonAnime and HandleAnilistListRecentAiringAnime. Both return a flat
 // []*anilist.BaseAnime-compatible shape, so one helper serves both call sites - the "This Season"
@@ -407,15 +444,12 @@ func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, s
 // recent/upcoming airing section is a closer fit since it's already window-based in its normal
 // AniList-backed form (see spec Component 3).
 func simklCalendarFallback(ctx context.Context, simklClient *simkl.APIClient) ([]*anilist.BaseAnime, error) {
-	entries, err := simklClient.GetAnimeCalendar(ctx)
+	entries, err := getCalendarEntriesCached(ctx, simklClient)
 	if err != nil {
 		return nil, err
 	}
 
-	ids := make([]int, len(entries))
-	for i, e := range entries {
-		ids[i] = e.SimklID // bare field on CalendarEntry, not nested under Ids - see Task 3
-	}
+	ids := dedupeSimklIDs(entries)
 	resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
 
 	return syncpkg.MapCalendarToBaseAnime(entries, resolved), nil
@@ -423,20 +457,20 @@ func simklCalendarFallback(ctx context.Context, simklClient *simkl.APIClient) ([
 
 // simklCalendarFallbackSchedules is simklCalendarFallback's counterpart for
 // HandleAnilistListRecentAiringAnime, which needs ListRecentAnime_Page_AiringSchedules entries
-// (with per-entry airingAt/episode) rather than bare BaseAnime.
-func simklCalendarFallbackSchedules(ctx context.Context, simklClient *simkl.APIClient) ([]*anilist.ListRecentAnime_Page_AiringSchedules, error) {
-	entries, err := simklClient.GetAnimeCalendar(ctx)
+// (with per-entry airingAt/episode) rather than bare BaseAnime. airingAtGreater/airingAtLesser
+// mirror the caller's own request window (see FilterAiringSchedulesByWindow) so the fallback
+// doesn't always return the full unfiltered calendar feed.
+func simklCalendarFallbackSchedules(ctx context.Context, simklClient *simkl.APIClient, airingAtGreater, airingAtLesser *int) ([]*anilist.ListRecentAnime_Page_AiringSchedules, error) {
+	entries, err := getCalendarEntriesCached(ctx, simklClient)
 	if err != nil {
 		return nil, err
 	}
 
-	ids := make([]int, len(entries))
-	for i, e := range entries {
-		ids[i] = e.SimklID // bare field on CalendarEntry, not nested under Ids - see Task 3
-	}
+	ids := dedupeSimklIDs(entries)
 	resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
 
-	return syncpkg.MapCalendarToAiringSchedules(entries, resolved), nil
+	schedules := syncpkg.MapCalendarToAiringSchedules(entries, resolved)
+	return syncpkg.FilterAiringSchedulesByWindow(schedules, airingAtGreater, airingAtLesser), nil
 }
 
 // HandleAnilistListAnime
@@ -693,7 +727,7 @@ func (h *Handler) HandleAnilistListRecentAiringAnime(c echo.Context) error {
 	)
 	if err != nil {
 		if simklClient, ok := h.simklClientForProfile(c); ok && shouldTrySimklDiscoveryFallback(simklClient.ClientID()) {
-			if schedules, fbErr := simklCalendarFallbackSchedules(c.Request().Context(), simklClient); fbErr == nil {
+			if schedules, fbErr := simklCalendarFallbackSchedules(c.Request().Context(), simklClient, p.AiringAtGreater, p.AiringAtLesser); fbErr == nil {
 				return h.RespondWithData(c, &anilist.ListRecentAnime{
 					Page: &anilist.ListRecentAnime_Page{
 						AiringSchedules: schedules,

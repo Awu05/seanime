@@ -34,3 +34,49 @@ func TestSimklCalendarFallback_EmptyWhenNoEntries(t *testing.T) {
 	assert.Empty(t, mapped)
 	assert.NotNil(t, mapped, "must return an empty slice, not nil, so JSON encodes as [] not null")
 }
+
+// TestDedupeSimklIDs covers dedupeSimklIDs, which collapses the calendar feed's one-row-per-episode
+// shape (a weekly show contributes ~5 rows across its 5-week window, all sharing a SimklID) down to
+// one id per show before resolve slots are spent on it - order-preserving, first occurrence wins
+// position, so downstream consumers see a stable ordering.
+func TestDedupeSimklIDs(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []simkl.CalendarEntry
+		want    []int
+	}{
+		{
+			name:    "empty input",
+			entries: nil,
+			want:    []int{},
+		},
+		{
+			name: "no duplicates",
+			entries: []simkl.CalendarEntry{
+				{SimklID: 1}, {SimklID: 2}, {SimklID: 3},
+			},
+			want: []int{1, 2, 3},
+		},
+		{
+			name: "consecutive duplicates",
+			entries: []simkl.CalendarEntry{
+				{SimklID: 5}, {SimklID: 5}, {SimklID: 5},
+			},
+			want: []int{5},
+		},
+		{
+			name: "interleaved duplicates preserve first-seen order",
+			entries: []simkl.CalendarEntry{
+				{SimklID: 10}, {SimklID: 20}, {SimklID: 10}, {SimklID: 30}, {SimklID: 20}, {SimklID: 10},
+			},
+			want: []int{10, 20, 30},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dedupeSimklIDs(tt.entries)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
