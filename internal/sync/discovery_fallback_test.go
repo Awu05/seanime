@@ -63,7 +63,7 @@ func TestMapCalendarToBaseAnime(t *testing.T) {
 		{SimklID: 501, Date: "2026-09-05T12:00:00Z"},
 	}
 	resolved := map[int]*simkl.AnimeDetail{
-		500: {Title: "Airing Now", Year: 2024, Ids: simkl.FullIds{Anilist: "300000"}},
+		500: {Title: "Airing Now", Year: 2024, Poster: "14/14625673bbdc6b52ea", Ids: simkl.FullIds{Anilist: "300000"}},
 	} // 501 deliberately absent - unresolved
 
 	mapped := MapCalendarToBaseAnime(entries, resolved)
@@ -79,6 +79,8 @@ func TestMapCalendarToBaseAnime(t *testing.T) {
 	assert.Equal(t, anilist.MediaTypeAnime, *mapped[0].Type)
 	require.NotNil(t, mapped[0].CountryOfOrigin)
 	assert.Equal(t, "JP", *mapped[0].CountryOfOrigin)
+	require.NotNil(t, mapped[0].CoverImage, "CalendarEntry itself has no poster - this must come from the resolved AnimeDetail's Poster field")
+	assert.Contains(t, *mapped[0].CoverImage.Large, "14/14625673bbdc6b52ea")
 }
 
 // TestMapCalendarToBaseAnime_DedupesByResolvedAnilistID covers the case where the calendar feed's
@@ -109,7 +111,7 @@ func TestMapCalendarToAiringSchedules(t *testing.T) {
 		{SimklID: 502, Date: "not-a-real-date", Episode: simkl.CalendarEpisode{Episode: 2}},      // unparseable date
 	}
 	resolved := map[int]*simkl.AnimeDetail{
-		500: {Title: "Airing Now", Year: 2024, Ids: simkl.FullIds{Anilist: "300000"}},
+		500: {Title: "Airing Now", Year: 2024, Poster: "14/14625673bbdc6b52ea", Ids: simkl.FullIds{Anilist: "300000"}},
 		502: {Title: "Bad Date", Year: 2024, Ids: simkl.FullIds{Anilist: "300002"}},
 	} // 501 deliberately absent - unresolved
 
@@ -126,6 +128,8 @@ func TestMapCalendarToAiringSchedules(t *testing.T) {
 	assert.Equal(t, anilist.MediaTypeAnime, *mapped[0].Media.Type)
 	require.NotNil(t, mapped[0].Media.CountryOfOrigin)
 	assert.Equal(t, "JP", *mapped[0].Media.CountryOfOrigin)
+	require.NotNil(t, mapped[0].Media.CoverImage, "CalendarEntry itself has no poster - this must come from the resolved AnimeDetail's Poster field")
+	assert.Contains(t, *mapped[0].Media.CoverImage.Large, "14/14625673bbdc6b52ea")
 	assert.Equal(t, 5, mapped[0].Episode)
 	assert.Equal(t, 500, mapped[0].ID)
 	expectedAiredAt, err := time.Parse(time.RFC3339, "2026-09-04T12:00:00Z")

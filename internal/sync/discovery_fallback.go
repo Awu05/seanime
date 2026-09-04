@@ -112,7 +112,7 @@ func MapCalendarToBaseAnime(entries []simkl.CalendarEntry, resolved map[int]*sim
 			continue
 		}
 		seen[anilistID] = true
-		mapped = append(mapped, mapDiscoveryEntry(anilistID, detail.Title, detail.Year, ""))
+		mapped = append(mapped, mapDiscoveryEntry(anilistID, detail.Title, detail.Year, detail.Poster))
 	}
 	return mapped
 }
@@ -140,7 +140,7 @@ func MapCalendarToAiringSchedules(entries []simkl.CalendarEntry, resolved map[in
 		if err != nil {
 			continue
 		}
-		media := mapDiscoveryEntry(anilistID, detail.Title, detail.Year, "")
+		media := mapDiscoveryEntry(anilistID, detail.Title, detail.Year, detail.Poster)
 		mapped = append(mapped, &anilist.ListRecentAnime_Page_AiringSchedules{
 			AiringAt: int(airedAt.Unix()),
 			Episode:  e.Episode.Episode,

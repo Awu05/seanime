@@ -263,7 +263,10 @@ export function SimklSettingsContainer() {
                     {pin && (
                         <Alert
                             intent="info"
-                            description={`Go to ${pin.verificationUri} and enter code: ${pin.userCode}`}
+                            description={<>
+                                Go to <a href={pin.verificationUri} target="_blank" rel="noreferrer" className="underline font-medium">{pin.verificationUri}</a> and
+                                enter code: {pin.userCode}
+                            </>}
                         />
                     )}
 

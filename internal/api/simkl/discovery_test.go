@@ -69,7 +69,7 @@ func TestGetAnimeDetails(t *testing.T) {
 		// NOTE: anilist/mal are quoted JSON strings on the real API, not numbers - confirmed by
 		// Task 1's live verification (docs/superpowers/plans/simkl-endpoint-findings.md). Only
 		// "simkl" itself comes back as a bare int.
-		w.Write([]byte(`{"title":"Frieren","year":2023,"overview":"A story about elves.","genres":["Adventure","Drama"],"total_episodes":28,"ids":{"simkl":46994,"anilist":"154587","mal":"52991"}}`))
+		w.Write([]byte(`{"title":"Frieren","year":2023,"poster":"14/14625673bbdc6b52ea","overview":"A story about elves.","genres":["Adventure","Drama"],"total_episodes":28,"ids":{"simkl":46994,"anilist":"154587","mal":"52991"}}`))
 	}))
 	defer server.Close()
 
@@ -78,6 +78,7 @@ func TestGetAnimeDetails(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Frieren", detail.Title)
 	assert.Equal(t, "154587", detail.Ids.Anilist)
+	assert.Equal(t, "14/14625673bbdc6b52ea", detail.Poster, "the calendar mapping path has no poster of its own and relies on this field")
 }
 
 func TestSearchIDByAnilist(t *testing.T) {

@@ -150,7 +150,12 @@ type AnimeDetail struct {
 	Overview      string   `json:"overview"`
 	Genres        []string `json:"genres"`
 	TotalEpisodes int      `json:"total_episodes"`
-	Ids           FullIds  `json:"ids"`
+	// Poster is a bare path fragment (e.g. "14/14625673bbdc6b52ea"), not a usable URL on its own -
+	// see buildSimklPosterURL in internal/sync. Needed by the calendar mapping path
+	// (MapCalendarToBaseAnime/MapCalendarToAiringSchedules), the only callers with no poster of
+	// their own to fall back on - CalendarEntry itself carries neither title nor poster.
+	Poster string  `json:"poster"`
+	Ids    FullIds `json:"ids"`
 }
 
 // GetAnimeDetails fetches the full record for one title by its SIMKL id - the only SIMKL
