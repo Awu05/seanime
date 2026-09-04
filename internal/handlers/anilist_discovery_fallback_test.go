@@ -3,6 +3,7 @@ package handlers
 import (
 	"testing"
 
+	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
 	"seanime/internal/platforms/shared_platform"
 	syncpkg "seanime/internal/sync"
@@ -39,6 +40,22 @@ func TestShouldForceSimklFallback(t *testing.T) {
 	shared_platform.ForceSimklFallback.Store(true)
 	assert.False(t, shouldForceSimklFallback(""), "must not force with no client id configured")
 	assert.True(t, shouldForceSimklFallback("some-client-id"), "must force even though AniList is healthy")
+}
+
+// TestIsUpcomingOnlyStatus covers the gate that routes Discover's "Coming Soon" section to
+// GetUpcomingAnime instead of silently falling into the trending branch - the bug that motivated
+// adding this function in the first place.
+func TestIsUpcomingOnlyStatus(t *testing.T) {
+	notYetReleased := anilist.MediaStatusNotYetReleased
+	releasing := anilist.MediaStatusReleasing
+
+	assert.True(t, isUpcomingOnlyStatus([]*anilist.MediaStatus{&notYetReleased}),
+		"exactly what useDiscoverUpcomingAnime sends")
+	assert.False(t, isUpcomingOnlyStatus(nil), "Trending's request has no status filter at all")
+	assert.False(t, isUpcomingOnlyStatus([]*anilist.MediaStatus{}))
+	assert.False(t, isUpcomingOnlyStatus([]*anilist.MediaStatus{&releasing}))
+	assert.False(t, isUpcomingOnlyStatus([]*anilist.MediaStatus{&notYetReleased, &releasing}),
+		"a broader multi-status query has no single SIMKL equivalent to fall back to")
 }
 
 // TestSimklCalendarFallback_EmptyWhenNoEntries exercises the zero-entries path without a real

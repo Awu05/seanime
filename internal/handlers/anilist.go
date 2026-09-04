@@ -399,13 +399,25 @@ var simklDiscoveryEnrichmentCache = syncpkg.NewIDResolutionCache(8, 24*time.Hour
 
 const simklDiscoveryEnrichmentCap = 20
 
-// simklDiscoveryFallback handles Discover's trending section and Search's text-query fallback
-// (see spec Component 2). page/perPage/sort filtering beyond "trending vs text search" is not
-// replicated - SIMKL has no equivalent server-side filters - so this returns a best-effort
-// unfiltered result set capped at simklDiscoveryEnrichmentCap items.
-func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, search *string) (*anilist.ListAnime, error) {
+// isUpcomingOnlyStatus reports whether a list-anime request is Discover's "Coming Soon" section
+// specifically - the only caller that requests exactly NOT_YET_RELEASED and nothing else
+// (useDiscoverUpcomingAnime sends status: ["NOT_YET_RELEASED"], no other status alongside it).
+// Deliberately narrow rather than "contains NOT_YET_RELEASED anywhere": a broader multi-status
+// query has no single SIMKL equivalent to fall back to.
+func isUpcomingOnlyStatus(status []*anilist.MediaStatus) bool {
+	return len(status) == 1 && status[0] != nil && *status[0] == anilist.MediaStatusNotYetReleased
+}
+
+// simklDiscoveryFallback handles Discover's trending section, Search's text-query fallback, and
+// Discover's "Coming Soon" section (see spec Component 2). Before this added the "Coming Soon"
+// branch, a NOT_YET_RELEASED-only request silently fell into the trending branch instead - wrong
+// data, not a crash, so it went unnoticed until checked directly. page/perPage/sort filtering
+// beyond these three cases is not replicated - SIMKL has no equivalent server-side filters - so
+// this returns a best-effort unfiltered result set capped at simklDiscoveryEnrichmentCap items.
+func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, search *string, status []*anilist.MediaStatus) (*anilist.ListAnime, error) {
 	var media []*anilist.BaseAnime
-	if search != nil && *search != "" {
+	switch {
+	case search != nil && *search != "":
 		results, err := simklClient.SearchAnime(ctx, *search)
 		if err != nil {
 			return nil, err
@@ -418,7 +430,18 @@ func simklDiscoveryFallback(ctx context.Context, simklClient *simkl.APIClient, s
 		// closure needed.
 		resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
 		media = syncpkg.MapSearchResultsToBaseAnime(results, resolved)
-	} else {
+	case isUpcomingOnlyStatus(status):
+		entries, err := simklClient.GetUpcomingAnime(ctx)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]int, len(entries))
+		for i, e := range entries {
+			ids[i] = e.Ids.SimklID
+		}
+		resolved := simklDiscoveryEnrichmentCache.ResolveMany(ctx, simklClient.GetAnimeDetails, ids, simklDiscoveryEnrichmentCap)
+		media = syncpkg.MapUpcomingToBaseAnime(entries, resolved)
+	default:
 		entries, err := simklClient.GetTrendingAnime(ctx)
 		if err != nil {
 			return nil, err
@@ -560,7 +583,7 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 	// Checked before the cache lookup too, so a forced test always exercises a fresh SIMKL call
 	// rather than serving a previously-cached real AniList result.
 	if simklClient, ok := h.forcedSimklClient(c); ok {
-		if fallback, fbErr := simklDiscoveryFallback(c.Request().Context(), simklClient, p.Search); fbErr == nil {
+		if fallback, fbErr := simklDiscoveryFallback(c.Request().Context(), simklClient, p.Search, p.Status); fbErr == nil {
 			return h.RespondWithData(c, fallback)
 		}
 	}
@@ -606,7 +629,7 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 	)
 	if err != nil {
 		if simklClient, ok := h.simklClientForProfile(c); ok && shouldTrySimklDiscoveryFallback(simklClient.ClientID()) {
-			if fallback, fbErr := simklDiscoveryFallback(c.Request().Context(), simklClient, p.Search); fbErr == nil {
+			if fallback, fbErr := simklDiscoveryFallback(c.Request().Context(), simklClient, p.Search, p.Status); fbErr == nil {
 				return h.RespondWithData(c, fallback)
 			}
 		}

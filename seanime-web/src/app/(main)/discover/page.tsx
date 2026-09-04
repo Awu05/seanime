@@ -125,10 +125,10 @@ export default function Page() {
                             <DiscoverPastSeason />
                         </div>}
                         <DiscoverMissedSequelsSection />
-                        {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-upcoming-container>
+                        <div className="space-y-2 z-[5] relative" data-discover-page-anime-upcoming-container>
                             <h2>Coming Soon</h2>
                             <DiscoverUpcoming />
-                        </div>}
+                        </div>
                         {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-trending-movies-container>
                             <h2>Trending Movies</h2>
                             <DiscoverTrendingMovies />

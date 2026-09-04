@@ -40,6 +40,22 @@ func TestGetTrendingAnime(t *testing.T) {
 	assert.Equal(t, "Sample Anime", results[0].Title)
 }
 
+func TestGetUpcomingAnime(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/anime/premieres", r.URL.Path)
+		w.Write([]byte(`[{"title":"Upcoming Anime","year":2026,"date":"2026-09-18T00:00:00+09:00","poster":"20/20391426","ids":{"simkl_id":456,"slug":"upcoming-anime"}}]`))
+	}))
+	defer server.Close()
+
+	client := &APIClient{httpClient: server.Client(), clientID: "test-client-id", baseURL: server.URL}
+	results, err := client.GetUpcomingAnime(context.Background())
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "Upcoming Anime", results[0].Title)
+	assert.Equal(t, "2026-09-18T00:00:00+09:00", results[0].Date)
+	assert.Equal(t, 456, results[0].Ids.SimklID)
+}
+
 func TestGetAnimeCalendar(t *testing.T) {
 	// NOTE: this hits data.simkl.in, a different host than api.simkl.com (APIClient.baseURL) -
 	// confirmed by Task 1's live verification (docs/superpowers/plans/simkl-endpoint-findings.md).

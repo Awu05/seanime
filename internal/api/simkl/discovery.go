@@ -70,6 +70,33 @@ func (c *APIClient) GetTrendingAnime(ctx context.Context) ([]TrendingEntry, erro
 	return results, nil
 }
 
+// PremiereEntry is one item from GET /anime/premieres. Live-verified: same shape as TrendingEntry
+// (title/year/poster/ids) plus a premiere Date - like every other list endpoint, no ids.anilist,
+// so it still needs the same enrichment step as trending/search before it can be mapped.
+type PremiereEntry struct {
+	Title  string       `json:"title"`
+	Year   int          `json:"year"`
+	Poster string       `json:"poster"`
+	Date   string       `json:"date"`
+	Ids    DiscoveryIds `json:"ids"`
+}
+
+// GetUpcomingAnime returns SIMKL's upcoming-premieres list, used as Discover's "Coming Soon"
+// section's fallback candidate pool.
+func (c *APIClient) GetUpcomingAnime(ctx context.Context) ([]PremiereEntry, error) {
+	res, err := c.do(ctx, http.MethodGet, "/anime/premieres", nil)
+	if err != nil {
+		return nil, fmt.Errorf("simkl: get upcoming anime: %w", err)
+	}
+	defer res.Body.Close()
+
+	var results []PremiereEntry
+	if err := json.NewDecoder(res.Body).Decode(&results); err != nil {
+		return nil, fmt.Errorf("simkl: decode upcoming results: %w", err)
+	}
+	return results, nil
+}
+
 // calendarURL is the CDN-hosted anime airing calendar feed - a different host from
 // APIClient.baseURL (api.simkl.com), so GetAnimeCalendar bypasses c.do() and fetches it directly.
 // Live-verified (docs/superpowers/plans/simkl-endpoint-findings.md): this feed needs no

@@ -63,6 +63,30 @@ func TestMapTrendingToBaseAnime(t *testing.T) {
 	assert.Contains(t, *mapped[0].CoverImage.ExtraLarge, "cd/cde456")
 }
 
+func TestMapUpcomingToBaseAnime(t *testing.T) {
+	entries := []simkl.PremiereEntry{
+		{Title: "Upcoming Anime", Year: 2026, Poster: "20/20391426", Date: "2026-09-18T00:00:00+09:00", Ids: simkl.DiscoveryIds{SimklID: 456}},
+		{Title: "No AniList Mapping", Year: 2026, Ids: simkl.DiscoveryIds{SimklID: 999}},
+	}
+	resolved := map[int]*simkl.AnimeDetail{
+		456: {Ids: simkl.FullIds{Anilist: "500000"}},
+	} // 999 deliberately absent - unresolved
+
+	mapped := MapUpcomingToBaseAnime(entries, resolved)
+
+	require.Len(t, mapped, 1, "unresolved entries must be dropped, not included with a zero id")
+	assert.Equal(t, 500000, mapped[0].ID)
+	assert.Equal(t, "Upcoming Anime", *mapped[0].Title.Romaji)
+	assert.Equal(t, "Upcoming Anime", *mapped[0].Title.UserPreferred, "frontend cards read title.userPreferred, not title.romaji")
+	require.NotNil(t, mapped[0].IsAdult)
+	assert.False(t, *mapped[0].IsAdult)
+	require.NotNil(t, mapped[0].Type)
+	assert.Equal(t, anilist.MediaTypeAnime, *mapped[0].Type)
+	require.NotNil(t, mapped[0].CoverImage)
+	require.NotNil(t, mapped[0].CoverImage.ExtraLarge, "MediaEntryCard's poster element reads coverImage.extraLarge exclusively, with no fallback to large/medium")
+	assert.Contains(t, *mapped[0].CoverImage.ExtraLarge, "20/20391426")
+}
+
 func TestMapCalendarToBaseAnime(t *testing.T) {
 	entries := []simkl.CalendarEntry{
 		{SimklID: 500, Date: "2026-09-04T12:00:00Z"},
