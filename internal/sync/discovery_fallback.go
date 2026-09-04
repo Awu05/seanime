@@ -72,3 +72,25 @@ func MapTrendingToBaseAnime(entries []simkl.TrendingEntry, resolved map[int]*sim
 	}
 	return mapped
 }
+
+// MapCalendarToBaseAnime converts SIMKL airing-calendar entries into AniList-shaped BaseAnime,
+// for Component 3 (Schedule page fallback - both the "This Season" tab, reduced to whatever
+// falls within the calendar's rolling window, and the recent/upcoming airing section, which is
+// already window-based in its normal form so this is a closer fit). Title/Year come from the
+// resolved AnimeDetail, not the calendar entry itself - CalendarEntry has neither (see Task 3).
+// Same drop-if-unresolved rule as the other Map*ToBaseAnime functions.
+func MapCalendarToBaseAnime(entries []simkl.CalendarEntry, resolved map[int]*simkl.AnimeDetail) []*anilist.BaseAnime {
+	mapped := make([]*anilist.BaseAnime, 0, len(entries))
+	for _, e := range entries {
+		detail, ok := resolved[e.SimklID]
+		if !ok {
+			continue
+		}
+		anilistID, err := strconv.Atoi(detail.Ids.Anilist)
+		if err != nil {
+			continue
+		}
+		mapped = append(mapped, mapDiscoveryEntry(anilistID, detail.Title, detail.Year, ""))
+	}
+	return mapped
+}

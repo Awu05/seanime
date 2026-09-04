@@ -39,6 +39,22 @@ func TestMapTrendingToBaseAnime(t *testing.T) {
 	assert.Equal(t, "Sample Anime", *mapped[0].Title.Romaji)
 }
 
+func TestMapCalendarToBaseAnime(t *testing.T) {
+	entries := []simkl.CalendarEntry{
+		{SimklID: 500, Date: "2026-09-04T12:00:00Z"},
+		{SimklID: 501, Date: "2026-09-05T12:00:00Z"},
+	}
+	resolved := map[int]*simkl.AnimeDetail{
+		500: {Title: "Airing Now", Year: 2024, Ids: simkl.FullIds{Anilist: "300000"}},
+	} // 501 deliberately absent - unresolved
+
+	mapped := MapCalendarToBaseAnime(entries, resolved)
+
+	require.Len(t, mapped, 1)
+	assert.Equal(t, 300000, mapped[0].ID)
+	assert.Equal(t, "Airing Now", *mapped[0].Title.Romaji)
+}
+
 func TestDiscoveryAvailable(t *testing.T) {
 	assert.True(t, DiscoveryAvailable("some-client-id"))
 	assert.False(t, DiscoveryAvailable(""))
