@@ -27,6 +27,21 @@ var ShouldCache = atomic.Bool{}
 var IsWorking = atomic.Bool{}
 var AnilistClient = atomic.Value{}
 
+// ForceSimklFallback is a manual testing override (Settings > App > Metadata Providers): when
+// true, the SIMKL Discover/Search/Schedule/Details fallback engages even though AniList is
+// healthy. Unlike IsWorking, nothing auto-reverts this - the health-check loop below only ever
+// touches IsWorking, so a forced test stays on until the user turns it off, regardless of whether
+// the periodic AniList ping succeeds.
+var ForceSimklFallback = atomic.Bool{}
+
+// EffectiveAnilistHealthy reports whether AniList should be treated as healthy for the purposes
+// of user-facing fallback signals (the status endpoint's anilistHealthy field, which drives the
+// frontend banner and disabled controls) - false whenever the real check fails OR the manual
+// force-fallback override is on, so the degraded UI is testable without a real outage.
+func EffectiveAnilistHealthy() bool {
+	return IsWorking.Load() && !ForceSimklFallback.Load()
+}
+
 type failureRecord struct {
 	timestamp time.Time
 	err       error

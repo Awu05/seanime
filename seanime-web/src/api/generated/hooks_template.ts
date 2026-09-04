@@ -2713,6 +2713,17 @@
 //     })
 // }
 
+// export function useTestQbittorrentConnection() {
+//     return useServerMutation<boolean>({
+//         endpoint: API_ENDPOINTS.SETTINGS.TestQbittorrentConnection.endpoint,
+//         method: API_ENDPOINTS.SETTINGS.TestQbittorrentConnection.methods[0],
+//         mutationKey: [API_ENDPOINTS.SETTINGS.TestQbittorrentConnection.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
 // export function useSaveMediaPlayerSettings() {
 //     return useServerMutation<boolean, SaveMediaPlayerSettings_Variables>({
 //         endpoint: API_ENDPOINTS.SETTINGS.SaveMediaPlayerSettings.endpoint,
@@ -2721,6 +2732,83 @@
 //         onSuccess: async () => {
 //
 //         },
+//     })
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// simkl
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// export function useSimklConnectStart() {
+//     return useServerMutation<PinResponse>({
+//         endpoint: API_ENDPOINTS.SIMKL.SimklConnectStart.endpoint,
+//         method: API_ENDPOINTS.SIMKL.SimklConnectStart.methods[0],
+//         mutationKey: [API_ENDPOINTS.SIMKL.SimklConnectStart.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
+// export function useSimklConnectPoll() {
+//     return useServerMutation<boolean, SimklConnectPoll_Variables>({
+//         endpoint: API_ENDPOINTS.SIMKL.SimklConnectPoll.endpoint,
+//         method: API_ENDPOINTS.SIMKL.SimklConnectPoll.methods[0],
+//         mutationKey: [API_ENDPOINTS.SIMKL.SimklConnectPoll.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
+// export function useSimklDisconnect() {
+//     return useServerMutation<boolean>({
+//         endpoint: API_ENDPOINTS.SIMKL.SimklDisconnect.endpoint,
+//         method: API_ENDPOINTS.SIMKL.SimklDisconnect.methods[0],
+//         mutationKey: [API_ENDPOINTS.SIMKL.SimklDisconnect.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
+// export function useGetSimklSettings() {
+//     return useServerQuery<SimklSettingsResponse>({
+//         endpoint: API_ENDPOINTS.SIMKL.GetSimklSettings.endpoint,
+//         method: API_ENDPOINTS.SIMKL.GetSimklSettings.methods[0],
+//         queryKey: [API_ENDPOINTS.SIMKL.GetSimklSettings.key],
+//         enabled: true,
+//     })
+// }
+
+// export function useSaveSimklSettings() {
+//     return useServerMutation<Models_SimklSettings, SaveSimklSettings_Variables>({
+//         endpoint: API_ENDPOINTS.SIMKL.SaveSimklSettings.endpoint,
+//         method: API_ENDPOINTS.SIMKL.SaveSimklSettings.methods[0],
+//         mutationKey: [API_ENDPOINTS.SIMKL.SaveSimklSettings.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
+// export function useSimklSyncNow() {
+//     return useServerMutation<boolean>({
+//         endpoint: API_ENDPOINTS.SIMKL.SimklSyncNow.endpoint,
+//         method: API_ENDPOINTS.SIMKL.SimklSyncNow.methods[0],
+//         mutationKey: [API_ENDPOINTS.SIMKL.SimklSyncNow.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
+// export function useGetSimklSyncStatus() {
+//     return useServerQuery<SimklSyncStatusResponse>({
+//         endpoint: API_ENDPOINTS.SIMKL.GetSimklSyncStatus.endpoint,
+//         method: API_ENDPOINTS.SIMKL.GetSimklSyncStatus.methods[0],
+//         queryKey: [API_ENDPOINTS.SIMKL.GetSimklSyncStatus.key],
+//         enabled: true,
 //     })
 // }
 

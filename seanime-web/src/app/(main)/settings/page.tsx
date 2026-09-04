@@ -516,6 +516,7 @@ export default function Page() {
                                         enableAdultContent: data.enableAdultContent,
                                         blurAdultContent: data.blurAdultContent,
                                         disableCacheLayer: data.disableCacheLayer,
+                                        forceSimklFallback: data.forceSimklFallback,
                                     },
                                     notifications: {
                                         disableNotifications: data?.disableNotifications ?? false,
@@ -607,6 +608,7 @@ export default function Page() {
                                 enableMangaRichPresence: status?.settings?.discord?.enableMangaRichPresence ?? false,
                                 enableAdultContent: status?.settings?.anilist?.enableAdultContent ?? false,
                                 blurAdultContent: status?.settings?.anilist?.blurAdultContent ?? false,
+                                forceSimklFallback: status?.settings?.anilist?.forceSimklFallback ?? false,
                                 dohProvider: status?.settings?.library?.dohProvider || "-",
                                 openTorrentClientOnStart: status?.settings?.library?.openTorrentClientOnStart ?? false,
                                 openWebURLOnStart: status?.settings?.library?.openWebURLOnStart ?? false,
