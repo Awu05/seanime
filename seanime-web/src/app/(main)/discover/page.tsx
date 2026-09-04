@@ -1,4 +1,6 @@
+import { AnilistFallbackBanner } from "@/app/(main)/_components/anilist-fallback-banner"
 import { PluginWebviewSlot } from "@/app/(main)/_features/plugin/webview/plugin-webviews"
+import { useAnilistHealthy } from "@/app/(main)/_hooks/use-anilist-healthy"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { DiscoverPageHeader } from "@/app/(main)/discover/_components/discover-page-header"
 import { DiscoverAiringSchedule } from "@/app/(main)/discover/_containers/discover-airing-schedule"
@@ -21,6 +23,7 @@ import React from "react"
 export default function Page() {
 
     const serverStatus = useServerStatus()
+    const anilistHealthy = useAnilistHealthy()
     const router = useRouter()
     const [pageType, setPageType] = useAtom(__discord_pageTypeAtom)
     const searchParams = useSearchParams()
@@ -92,6 +95,8 @@ export default function Page() {
 
                 <PluginWebviewSlot slot="after-discover-screen-header" />
 
+                <AnilistFallbackBanner />
+
                 <AnimatePresence mode="wait" initial={false}>
                     {pageType === "anime" && <PageWrapper
                         key="anime"
@@ -111,23 +116,23 @@ export default function Page() {
                             <DiscoverTrending />
                         </div>
                         <RecentReleases />
-                        <div className="space-y-2 z-[5] relative" data-discover-page-anime-highest-rated-container>
+                        {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-highest-rated-container>
                             <h2>Top of the Season</h2>
                             <DiscoverThisSeason />
-                        </div>
-                        <div className="space-y-2 z-[5] relative" data-discover-page-anime-highest-rated-container>
+                        </div>}
+                        {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-highest-rated-container>
                             <h2>Best of Last Season</h2>
                             <DiscoverPastSeason />
-                        </div>
+                        </div>}
                         <DiscoverMissedSequelsSection />
-                        <div className="space-y-2 z-[5] relative" data-discover-page-anime-upcoming-container>
+                        {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-upcoming-container>
                             <h2>Coming Soon</h2>
                             <DiscoverUpcoming />
-                        </div>
-                        <div className="space-y-2 z-[5] relative" data-discover-page-anime-trending-movies-container>
+                        </div>}
+                        {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-trending-movies-container>
                             <h2>Trending Movies</h2>
                             <DiscoverTrendingMovies />
-                        </div>
+                        </div>}
                         {/*<div className="space-y-2 z-[5] relative">*/}
                         {/*    <h2>Popular shows</h2>*/}
                         {/*    <DiscoverPopular />*/}
