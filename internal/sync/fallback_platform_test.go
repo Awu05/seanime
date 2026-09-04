@@ -55,8 +55,9 @@ func TestFallbackPlatform_Writes_PassThroughEvenWhenUnhealthy(t *testing.T) {
 	simklClient := &fakeAllItemsClient{}
 	queue := &fakeQueue{}
 	fp := NewFallbackPlatform(inner, simklClient, queue, "profile-1",
-		func() bool { return true },  // simklAvailable = true
-		func() bool { return false }) // anilistHealthy = false
+		func() bool { return true },   // simklAvailable = true
+		func() bool { return false },  // anilistHealthy = false
+		func() bool { return false }, nil) // discoveryAvailable / discoverySimklClient: unused by this test
 
 	require.NoError(t, fp.UpdateEntryProgress(context.Background(), 101922, 5, nil))
 	status := anilist.MediaListStatusCompleted
@@ -84,7 +85,8 @@ func TestFallbackPlatform_GetAnimeCollection_Unhealthy_BuildsFromSimkl(t *testin
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
 	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return false })
+		func() bool { return true }, func() bool { return false },
+		func() bool { return false }, nil)
 
 	collection, err := fp.GetAnimeCollection(context.Background(), false)
 	require.NoError(t, err)
@@ -105,7 +107,8 @@ func TestFallbackPlatform_GetAnimeCollection_Healthy_NeverCallsSimkl(t *testing.
 	inner := &fakeCollectionPlatform{collection: &anilist.AnimeCollection{}}
 	simklClient := &fakeAllItemsClient{}
 	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return true })
+		func() bool { return true }, func() bool { return true },
+		func() bool { return false }, nil)
 
 	_, err := fp.GetAnimeCollection(context.Background(), false)
 	require.NoError(t, err)
@@ -118,7 +121,8 @@ func TestFallbackPlatform_GetAnimeCollection_Unhealthy_NoSimkl_ErrorSurfaces(t *
 	simklClient := &fakeAllItemsClient{}
 	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
 		func() bool { return false }, // simklAvailable = false: not connected
-		func() bool { return false }) // anilistHealthy = false
+		func() bool { return false }, // anilistHealthy = false
+		func() bool { return false }, nil)
 
 	_, err := fp.GetAnimeCollection(context.Background(), false)
 	require.ErrorIs(t, err, wantErr, "with no SIMKL fallback available, the real error must surface")
@@ -130,7 +134,8 @@ func TestFallbackPlatform_GetAnimeCollection_SimklAlsoFails_SurfacesAnilistError
 	inner := &fakeCollectionPlatform{err: wantErr}
 	simklClient := &fakeAllItemsClient{getAllErr: errors.New("simkl down too")}
 	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return false })
+		func() bool { return true }, func() bool { return false },
+		func() bool { return false }, nil)
 
 	_, err := fp.GetAnimeCollection(context.Background(), false)
 	require.ErrorIs(t, err, wantErr, "the original AniList error is what the caller asked for")
@@ -143,7 +148,8 @@ func TestFallbackPlatform_GetRawAnimeCollection_Unhealthy_BuildsFromSimkl(t *tes
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
 	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return false })
+		func() bool { return true }, func() bool { return false },
+		func() bool { return false }, nil)
 
 	collection, err := fp.GetRawAnimeCollection(context.Background(), false)
 	require.NoError(t, err)
@@ -164,7 +170,8 @@ func TestFallbackPlatform_GetRawAnimeCollection_Healthy_NeverCallsSimkl(t *testi
 	inner := &fakeCollectionPlatform{collection: &anilist.AnimeCollection{}}
 	simklClient := &fakeAllItemsClient{}
 	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return true })
+		func() bool { return true }, func() bool { return true },
+		func() bool { return false }, nil)
 
 	_, err := fp.GetRawAnimeCollection(context.Background(), false)
 	require.NoError(t, err)
@@ -178,7 +185,8 @@ func TestFallbackPlatform_GetAnimeCollection_CachesWithinTTL(t *testing.T) {
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
 	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return false })
+		func() bool { return true }, func() bool { return false },
+		func() bool { return false }, nil)
 
 	_, err := fp.GetAnimeCollection(context.Background(), false)
 	require.NoError(t, err)
@@ -199,7 +207,8 @@ func TestFallbackPlatform_GetAnimeCollection_RefetchesAfterTTLExpires(t *testing
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
 	fpAny := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return false })
+		func() bool { return true }, func() bool { return false },
+		func() bool { return false }, nil)
 	fp := fpAny.(*FallbackPlatform)
 
 	_, err := fp.GetAnimeCollection(context.Background(), false)
@@ -216,6 +225,112 @@ func TestFallbackPlatform_GetAnimeCollection_RefetchesAfterTTLExpires(t *testing
 	assert.Equal(t, 2, simklClient.getAllCalls, "an expired cache entry must trigger a real refetch")
 }
 
+// --- GetAnimeDetails ---
+
+// fakeDetailsSimklClient is a minimal discoverySimklClient stand-in for GetAnimeDetails tests.
+type fakeDetailsSimklClient struct {
+	simklID    int
+	found      bool
+	detail     *simkl.AnimeDetail
+	searchErr  error
+	detailsErr error
+}
+
+func (f *fakeDetailsSimklClient) SearchIDByAnilist(ctx context.Context, anilistID int) (int, bool, error) {
+	return f.simklID, f.found, f.searchErr
+}
+
+func (f *fakeDetailsSimklClient) GetAnimeDetails(ctx context.Context, simklID int) (*simkl.AnimeDetail, error) {
+	return f.detail, f.detailsErr
+}
+
+// fakeDetailsPlatform is a minimal platform.Platform stand-in for GetAnimeDetails tests, reusing
+// fakePlatform's embedding-of-nil-interface pattern (mirror_platform_test.go) so only
+// GetAnimeDetails needs overriding here.
+type fakeDetailsPlatform struct {
+	fakePlatform
+	details *anilist.AnimeDetailsById_Media
+	err     error
+	called  bool
+}
+
+func (f *fakeDetailsPlatform) GetAnimeDetails(ctx context.Context, id int) (*anilist.AnimeDetailsById_Media, error) {
+	f.called = true
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.details, nil
+}
+
+func TestFallbackPlatform_GetAnimeDetails_HealthyPassesThrough(t *testing.T) {
+	inner := &fakeDetailsPlatform{details: &anilist.AnimeDetailsById_Media{ID: 1}}
+	fp := &FallbackPlatform{
+		Platform:           inner,
+		anilistHealthy:     func() bool { return true },
+		discoveryAvailable: func() bool { return true },
+	}
+
+	details, err := fp.GetAnimeDetails(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Same(t, inner.details, details, "must pass through unchanged when AniList is healthy")
+	assert.True(t, inner.called, "the wrapped platform's GetAnimeDetails must still be called first")
+}
+
+func TestFallbackPlatform_GetAnimeDetails_FallsBackWhenUnhealthy(t *testing.T) {
+	inner := &fakeDetailsPlatform{err: errors.New("anilist down")}
+	fp := &FallbackPlatform{
+		Platform:           inner,
+		anilistHealthy:     func() bool { return false },
+		discoveryAvailable: func() bool { return true },
+	}
+	fp.discoverySimklClient = &fakeDetailsSimklClient{
+		simklID: 46994,
+		found:   true,
+		detail:  &simkl.AnimeDetail{Title: "Frieren", Ids: simkl.FullIds{Anilist: "154587"}},
+	}
+
+	details, err := fp.GetAnimeDetails(context.Background(), 154587)
+
+	require.NoError(t, err)
+	require.NotNil(t, details)
+	assert.Equal(t, 154587, details.ID)
+}
+
+func TestFallbackPlatform_GetAnimeDetails_SurfacesOriginalErrorIfSimklAlsoFails(t *testing.T) {
+	inner := &fakeDetailsPlatform{err: errors.New("anilist down")}
+	fp := &FallbackPlatform{
+		Platform:           inner,
+		anilistHealthy:     func() bool { return false },
+		discoveryAvailable: func() bool { return true },
+	}
+	fp.discoverySimklClient = &fakeDetailsSimklClient{found: false}
+
+	_, err := fp.GetAnimeDetails(context.Background(), 154587)
+
+	require.Error(t, err)
+	assert.Equal(t, "anilist down", err.Error(), "must surface the original AniList error, not a SIMKL-side one")
+}
+
+func TestFallbackPlatform_GetAnimeDetails_NotDiscoveryAvailable_ErrorSurfaces(t *testing.T) {
+	inner := &fakeDetailsPlatform{err: errors.New("anilist down")}
+	fp := &FallbackPlatform{
+		Platform:           inner,
+		anilistHealthy:     func() bool { return false },
+		discoveryAvailable: func() bool { return false }, // no client_id configured
+	}
+	fp.discoverySimklClient = &fakeDetailsSimklClient{
+		simklID: 46994,
+		found:   true,
+		detail:  &simkl.AnimeDetail{Title: "Frieren", Ids: simkl.FullIds{Anilist: "154587"}},
+	}
+
+	_, err := fp.GetAnimeDetails(context.Background(), 154587)
+
+	require.Error(t, err)
+	assert.Equal(t, "anilist down", err.Error(), "with discovery unavailable, SIMKL must never be consulted")
+}
+
 // --- RawPlatform must unwrap both wrapper layers ---
 
 func TestFallbackPlatform_RawPlatform_UnwrapsBothLayers(t *testing.T) {
@@ -225,7 +340,8 @@ func TestFallbackPlatform_RawPlatform_UnwrapsBothLayers(t *testing.T) {
 	inner := &fakePlatform{}
 	mp := NewMirroringPlatform(inner, &fakeSimklClient{}, &fakeQueue{}, "_default", func() bool { return true })
 	fp := NewFallbackPlatform(mp, &fakeAllItemsClient{}, &fakeQueue{}, "_default",
-		func() bool { return true }, func() bool { return true })
+		func() bool { return true }, func() bool { return true },
+		func() bool { return false }, nil)
 
 	assert.Same(t, inner, RawPlatform(fp), "RawPlatform must unwrap both MirroringPlatform and FallbackPlatform")
 }

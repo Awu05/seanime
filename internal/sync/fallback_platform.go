@@ -21,8 +21,11 @@ const fallbackCacheTTL = 60 * time.Second
 
 // FallbackPlatform is a READ-ONLY fallback decorator. It wraps platform.Platform (embedding it, so
 // every method not overridden below - including every write method - passes through completely
-// unchanged) and overrides exactly two collection reads, GetAnimeCollection and
-// GetRawAnimeCollection, serving a SIMKL-built collection only when the wrapped read actually
+// unchanged) and overrides three reads: the two collection reads, GetAnimeCollection and
+// GetRawAnimeCollection (Component 1, gated on simklAvailable - a completed SIMKL OAuth
+// connection, since these read the user's personal watchlist), and GetAnimeDetails (Component 4,
+// gated on the lighter discoveryAvailable - just a configured client_id, since it only reads a
+// public SIMKL endpoint). All three serve SIMKL-sourced data only when the wrapped read actually
 // failed AND AniList is known to be down (shared_platform.IsWorking, passed in as anilistHealthy
 // so tests don't need global state). It never guesses proactively - a healthy AniList is
 // byte-for-byte today's behavior.
@@ -54,19 +57,37 @@ type FallbackPlatform struct {
 	simklAvailable func() bool
 	anilistHealthy func() bool
 
+	// discoveryAvailable and discoverySimklClient back GetAnimeDetails below (Component 4). They
+	// are kept separate from simklAvailable/simklClient above: Component 1's tracking fallback
+	// needs a completed SIMKL OAuth connection (it reads the user's personal watchlist), while
+	// GetAnimeDetails only reads a public SIMKL endpoint and needs just a configured client_id -
+	// see syncpkg.DiscoveryAvailable and the spec's "revised gating" note.
+	discoveryAvailable   func() bool
+	discoverySimklClient discoverySimklClient
+
 	cacheMu  sync.Mutex
 	cached   *anilist.AnimeCollection
 	cachedAt time.Time
 }
 
-func NewFallbackPlatform(inner platform.Platform, simklClient simkl.Client, queue PendingSyncEnqueuer, profileID string, simklAvailable func() bool, anilistHealthy func() bool) platform.Platform {
+// discoverySimklClient is the narrow SIMKL surface GetAnimeDetails needs - kept separate from
+// the existing simkl.Client interface (which covers Component 1's sync operations) since these
+// two public-endpoint methods need no OAuth access token, unlike everything in simkl.Client.
+type discoverySimklClient interface {
+	SearchIDByAnilist(ctx context.Context, anilistID int) (simklID int, ok bool, err error)
+	GetAnimeDetails(ctx context.Context, simklID int) (*simkl.AnimeDetail, error)
+}
+
+func NewFallbackPlatform(inner platform.Platform, simklClient simkl.Client, queue PendingSyncEnqueuer, profileID string, simklAvailable func() bool, anilistHealthy func() bool, discoveryAvailable func() bool, discoverySimklClient discoverySimklClient) platform.Platform {
 	return &FallbackPlatform{
-		Platform:       inner,
-		simklClient:    simklClient,
-		queue:          queue,
-		profileID:      profileID,
-		simklAvailable: simklAvailable,
-		anilistHealthy: anilistHealthy,
+		Platform:             inner,
+		simklClient:          simklClient,
+		queue:                queue,
+		profileID:            profileID,
+		simklAvailable:       simklAvailable,
+		anilistHealthy:       anilistHealthy,
+		discoveryAvailable:   discoveryAvailable,
+		discoverySimklClient: discoverySimklClient,
 	}
 }
 
@@ -108,6 +129,30 @@ func (f *FallbackPlatform) GetRawAnimeCollection(ctx context.Context, bypassCach
 		return nil, err
 	}
 	return simklCollection, nil
+}
+
+// GetAnimeDetails is Component 4's fallback: unlike the tracking methods above, this one is
+// gated on discoveryAvailable (client_id present) rather than the stricter simklAvailable
+// (completed OAuth connection) - see the spec's "revised gating" note. id here is an AniList id
+// (this method's contract, inherited from platform.Platform), so SIMKL must be looked up in
+// reverse via SearchIDByAnilist before its GetAnimeDetails(simklID) call can be made.
+func (f *FallbackPlatform) GetAnimeDetails(ctx context.Context, id int) (*anilist.AnimeDetailsById_Media, error) {
+	details, err := f.Platform.GetAnimeDetails(ctx, id)
+	if err == nil || f.anilistHealthy() || !f.discoveryAvailable() || f.discoverySimklClient == nil {
+		return details, err
+	}
+
+	simklID, ok, lookupErr := f.discoverySimklClient.SearchIDByAnilist(ctx, id)
+	if lookupErr != nil || !ok {
+		return nil, err // surface the original AniList error, not a SIMKL-side one
+	}
+
+	detail, detailErr := f.discoverySimklClient.GetAnimeDetails(ctx, simklID)
+	if detailErr != nil {
+		return nil, err
+	}
+
+	return MapAnimeDetailToAnilist(id, detail), nil
 }
 
 // simklCollection returns the SIMKL-built collection, serving it from cache when the last
