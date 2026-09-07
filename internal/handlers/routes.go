@@ -7,6 +7,7 @@ import (
 	"seanime/internal/core"
 	util "seanime/internal/util/proxies"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,13 @@ import (
 
 type Handler struct {
 	App *core.App
+	// simklSeeding tracks, per profileID, whether a SIMKL "sync now" seed (seedSimklPendingSyncs)
+	// is still fetching/enqueueing rows in the background. HandleGetSimklSyncStatus exposes this
+	// so the frontend's "sync complete" detection doesn't have to guess from queue-depth polling
+	// alone - without it, a poll landing before seeding enqueues anything (a large or slow-to-fetch
+	// collection) looks identical to "there was nothing to sync", and the client-side heuristic
+	// window can run out before seeding produces a single row.
+	simklSeeding sync.Map
 }
 
 func InitRoutes(app *core.App, e *echo.Echo) {

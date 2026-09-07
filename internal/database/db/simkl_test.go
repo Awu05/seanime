@@ -67,7 +67,9 @@ func TestSimklSettingsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, defaults.Enabled, "should default to disabled when no row exists yet")
 
-	saved, err := database.UpsertSimklSettings(&models.SimklSettings{ProfileID: "_default", Enabled: true, ClientId: "abc123"})
+	enabled := true
+	clientID := "abc123"
+	saved, err := database.UpdateSimklSettings("_default", &enabled, &clientID)
 	require.NoError(t, err)
 	assert.True(t, saved.Enabled)
 	assert.Equal(t, "abc123", saved.ClientId)
@@ -77,14 +79,16 @@ func TestSimklSettingsRoundTrip(t *testing.T) {
 	assert.True(t, got.Enabled)
 	assert.Equal(t, "abc123", got.ClientId)
 
-	// A later upsert that only changes Enabled must not wipe out the previously saved ClientId -
-	// UpsertSimklSettings always writes both columns from the struct it's given, so a caller that
-	// fetches-then-modifies (as the handler does) is what actually protects against this; this
-	// case asserts the DB layer preserves a value that IS included in a subsequent upsert.
-	saved2, err := database.UpsertSimklSettings(&models.SimklSettings{ProfileID: "_default", Enabled: false, ClientId: "abc123"})
+	// A later update that only touches Enabled must not wipe out the previously saved ClientId -
+	// UpdateSimklSettings restricts its OnConflict DoUpdates to only the columns whose pointer is
+	// non-nil, so passing clientID=nil here must leave the existing "abc123" untouched instead of
+	// requiring the caller to re-read and re-supply it (the old read-then-write pattern this
+	// replaced was exactly what let two concurrent PATCHes lose one another's field).
+	disabled := false
+	saved2, err := database.UpdateSimklSettings("_default", &disabled, nil)
 	require.NoError(t, err)
 	assert.False(t, saved2.Enabled)
-	assert.Equal(t, "abc123", saved2.ClientId)
+	assert.Equal(t, "abc123", saved2.ClientId, "ClientId must survive an update that didn't touch it")
 }
 
 func TestPendingSyncQueue(t *testing.T) {

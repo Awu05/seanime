@@ -483,6 +483,22 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		ClientIdentitySecret:            util.GenerateCryptoID(),
 	}
 
+	// SIMKL backup-sync: wrap the active AniList platform so every list mutation is durably
+	// retried and mirrored to SIMKL. setDefaultAnilistPlatform is the single choke point for
+	// this — it installs the wrapper AND records the unwrapped platform in rawAnilistPlatformRef,
+	// which the worker below reads live. Retrying through the wrapped version instead would
+	// re-run interception logic on every retry and re-enqueue the same row onto itself forever.
+	//
+	// Called as early as possible - immediately once app exists, rather than after
+	// initModulesOnce() and the plugin/module registration below - because activePlatformRef was
+	// already handed to localManager, plugin.GlobalAppContext, onlinestreamRepository and
+	// extensionPlaygroundRepository earlier in this constructor (all lazy .Get() readers, not
+	// consumers of a captured snapshot). Anything invoked between here and app-construction that
+	// synchronously performs a mutating AniList call through one of those refs would otherwise
+	// bypass MirroringPlatform/FallbackPlatform for that one call - moving the wrap here shrinks
+	// that window to nothing left in this constructor that can still hit it.
+	app.setDefaultAnilistPlatform(app.AnilistPlatformRef.Get())
+
 	plugin.GlobalAppContext.SetModulesPartial(plugin.AppContextModules{
 		PromptManager: extensionRepository.PromptManager(),
 		Auth: plugin.AuthActions{
@@ -549,13 +565,6 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	if !app.IsOffline() {
 		go app.Updater.FetchAnnouncements()
 	}
-
-	// SIMKL backup-sync: wrap the active AniList platform so every list mutation is durably
-	// retried and mirrored to SIMKL. setDefaultAnilistPlatform is the single choke point for
-	// this — it installs the wrapper AND records the unwrapped platform in rawAnilistPlatformRef,
-	// which the worker below reads live. Retrying through the wrapped version instead would
-	// re-run interception logic on every retry and re-enqueue the same row onto itself forever.
-	app.setDefaultAnilistPlatform(app.AnilistPlatformRef.Get())
 
 	simklWorker := syncpkg.NewWorker(
 		app.Database,

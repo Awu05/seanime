@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
@@ -314,6 +315,60 @@ func TestMirroringPlatform_AddMediaToCollection_AnilistFails_Queued(t *testing.T
 	require.ErrorIs(t, err, wantErr)
 	require.Len(t, queue.enqueued, 1)
 	assert.Equal(t, "add_to_collection", queue.enqueued[0].Operation)
+}
+
+func TestMirroringPlatform_AddMediaToCollection_MirrorsToSimklAsOneBatchCall(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	err := mp.AddMediaToCollection(context.Background(), []int{101922, 21, 5114})
+	require.NoError(t, err)
+
+	require.Len(t, simklClient.addToListBatchCalls, 1, "must batch every id into a single AddToListBatch call, not one AddToList per id")
+	assert.Len(t, simklClient.addToListBatchCalls[0], 3)
+	assert.Empty(t, queue.enqueued)
+}
+
+func TestMirroringPlatform_AddMediaToCollection_ChunksAtMaxBatchSize(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	mIds := make([]int, simkl.MaxBatchSize+5)
+	for i := range mIds {
+		mIds[i] = i + 1
+	}
+
+	err := mp.AddMediaToCollection(context.Background(), mIds)
+	require.NoError(t, err)
+
+	require.Len(t, simklClient.addToListBatchCalls, 2, "a list longer than MaxBatchSize must be split into multiple batch calls")
+	assert.Len(t, simklClient.addToListBatchCalls[0], simkl.MaxBatchSize)
+	assert.Len(t, simklClient.addToListBatchCalls[1], 5)
+}
+
+func TestMirroringPlatform_AddMediaToCollection_SimklChunkFails_OnlyThatChunkQueued(t *testing.T) {
+	inner := &fakePlatform{}
+	simklClient := &fakeSimklClient{addToListBatchErr: errors.New("simkl down")}
+	queue := &fakeQueue{}
+	mp := NewMirroringPlatform(inner, simklClient, queue, "_default", func() bool { return true })
+
+	mIds := make([]int, simkl.MaxBatchSize+5)
+	for i := range mIds {
+		mIds[i] = i + 1
+	}
+
+	err := mp.AddMediaToCollection(context.Background(), mIds)
+	require.NoError(t, err, "a SIMKL-side failure must not surface as the AddMediaToCollection error")
+
+	require.Len(t, queue.enqueued, 1)
+	assert.Equal(t, "simkl", queue.enqueued[0].Target)
+	var payload AddToCollectionPayload
+	require.NoError(t, json.Unmarshal(queue.enqueued[0].Payload, &payload))
+	assert.Len(t, payload.MediaIDs, len(mIds), "every chunk failed here, so every id must be re-queued - but only once, not the whole list duplicated per chunk")
 }
 
 // Manga list mutations must never reach SIMKL: SIMKL only tracks anime, and

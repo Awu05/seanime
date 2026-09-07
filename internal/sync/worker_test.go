@@ -175,6 +175,28 @@ func TestWorker_UpdateEntryRow_DeletedOnlyWhenBothActionsSucceed(t *testing.T) {
 	assert.NotContains(t, store.deletedIDs, row.ID)
 }
 
+func TestWorker_UpdateEntryRow_EmptyPayload_FailsInsteadOfSilentlyDeleted(t *testing.T) {
+	store := newFakeStore()
+	// Neither Status nor ScoreRaw set - not reachable through MirroringPlatform.UpdateEntry today
+	// (it only enqueues a SIMKL retry when one of the two actually failed), but a corrupted or
+	// future-added row like this contributes to no batch below, and must not be swept up as
+	// "delivered" just because it never entered rowErr.
+	payload, err := json.Marshal(UpdateEntryPayload{MediaID: 101922})
+	require.NoError(t, err)
+	row := &models.PendingSync{ProfileID: "_default", Target: "simkl", Operation: OpUpdateEntry, Payload: payload}
+	row.ID = 1
+	store.rows["simkl"] = []*models.PendingSync{row}
+
+	simklClient := &fakeSimklClient{}
+	w := NewWorker(store, func(profileID string) (simkl.Client, bool) { return simklClient, true }, func(profileID string) platform.Platform { return &fakePlatform{} }, func() bool { return true })
+	w.FlushOnce(context.Background())
+
+	assert.Empty(t, simklClient.addToListBatchCalls, "a row with no status or score has nothing to mirror")
+	assert.Empty(t, simklClient.setRatingBatchCalls)
+	assert.Contains(t, store.incrementCalls, row.ID, "must be retried, not silently treated as delivered")
+	assert.NotContains(t, store.deletedIDs, row.ID)
+}
+
 var assertAnError = assertError("simkl still down")
 
 type assertError string
