@@ -176,6 +176,16 @@ func (w *Worker) flushSimklRows(ctx context.Context, rows []*models.PendingSync)
 					fail(row.ID, err)
 					continue
 				}
+				if p.Status == nil && p.ScoreRaw == nil {
+					// Neither field to mirror means this row contributes to no batch below, so
+					// without an explicit fail() it would never enter rowErr and the loop at the
+					// bottom of flushSimklRows would delete it as delivered despite no SIMKL call
+					// ever being made for it. Not reachable from MirroringPlatform.UpdateEntry
+					// today (it only enqueues a SIMKL retry when status or scoreRaw actually
+					// failed), but a corrupted or future-added row must not silently vanish.
+					fail(row.ID, fmt.Errorf("simkl: update_entry row %d has neither status nor score", row.ID))
+					continue
+				}
 				if p.Status != nil {
 					addItems = append(addItems, simkl.AddToListItem{AnilistID: p.MediaID, Status: MapAnilistStatusToSimkl(*p.Status)})
 					addRows = append(addRows, row.ID)

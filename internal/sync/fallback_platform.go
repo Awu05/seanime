@@ -49,12 +49,7 @@ const fallbackCacheTTL = 60 * time.Second
 // Install this wrapping OUTSIDE MirroringPlatform (raw -> MirroringPlatform -> FallbackPlatform).
 type FallbackPlatform struct {
 	platform.Platform
-	simklClient simkl.Client
-	// queue and profileID are unused by the read-only fallback path; they are retained on the
-	// struct and in NewFallbackPlatform's signature so the wiring in internal/core/simkl_wiring.go
-	// stays unchanged.
-	queue          PendingSyncEnqueuer
-	profileID      string
+	simklClient    simkl.Client
 	simklAvailable func() bool
 	anilistHealthy func() bool
 
@@ -79,12 +74,10 @@ type discoverySimklClient interface {
 	GetAnimeDetails(ctx context.Context, simklID int) (*simkl.AnimeDetail, error)
 }
 
-func NewFallbackPlatform(inner platform.Platform, simklClient simkl.Client, queue PendingSyncEnqueuer, profileID string, simklAvailable func() bool, anilistHealthy func() bool, discoveryAvailable func() bool, discoverySimklClient discoverySimklClient) platform.Platform {
+func NewFallbackPlatform(inner platform.Platform, simklClient simkl.Client, simklAvailable func() bool, anilistHealthy func() bool, discoveryAvailable func() bool, discoverySimklClient discoverySimklClient) platform.Platform {
 	return &FallbackPlatform{
 		Platform:             inner,
 		simklClient:          simklClient,
-		queue:                queue,
-		profileID:            profileID,
 		simklAvailable:       simklAvailable,
 		anilistHealthy:       anilistHealthy,
 		discoveryAvailable:   discoveryAvailable,
@@ -108,26 +101,27 @@ func (f *FallbackPlatform) canFallback() bool {
 // rather than on any tracker) do not appear in it for the duration of the outage.
 func (f *FallbackPlatform) GetAnimeCollection(ctx context.Context, bypassCache bool) (*anilist.AnimeCollection, error) {
 	collection, err := f.Platform.GetAnimeCollection(ctx, bypassCache)
-	if err == nil || !f.canFallback() {
-		return collection, err
-	}
-	simklCollection, simklErr := f.simklCollection(ctx)
-	if simklErr != nil {
-		return nil, err // surface the original AniList error, not the SIMKL one - AniList is what the caller asked for
-	}
-	return simklCollection, nil
+	return f.fallbackRead(ctx, collection, err)
 }
 
 // GetRawAnimeCollection has no "custom lists" concept on SIMKL - the fallback collection is
 // identical to GetAnimeCollection's.
 func (f *FallbackPlatform) GetRawAnimeCollection(ctx context.Context, bypassCache bool) (*anilist.AnimeCollection, error) {
 	collection, err := f.Platform.GetRawAnimeCollection(ctx, bypassCache)
+	return f.fallbackRead(ctx, collection, err)
+}
+
+// fallbackRead applies the shared "fall back to SIMKL if the underlying read failed and AniList
+// is known down" logic to an already-attempted read's result, so GetAnimeCollection and
+// GetRawAnimeCollection - identical in every way except which embedded method they call first -
+// don't each reimplement it.
+func (f *FallbackPlatform) fallbackRead(ctx context.Context, collection *anilist.AnimeCollection, err error) (*anilist.AnimeCollection, error) {
 	if err == nil || !f.canFallback() {
 		return collection, err
 	}
 	simklCollection, simklErr := f.simklCollection(ctx)
 	if simklErr != nil {
-		return nil, err
+		return nil, err // surface the original AniList error, not the SIMKL one - AniList is what the caller asked for
 	}
 	return simklCollection, nil
 }

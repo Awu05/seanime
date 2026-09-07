@@ -8,6 +8,7 @@ import (
 	"seanime/internal/extension_repo/prompt"
 	"seanime/internal/goja/goja_bindings"
 	"seanime/internal/library/anime"
+	syncpkg "seanime/internal/sync"
 	gojautil "seanime/internal/util/goja"
 
 	"github.com/dop251/goja"
@@ -52,6 +53,20 @@ func (a *AppContextImpl) BindAnilist(vm *goja.Runtime, logger *zerolog.Logger, e
 		})
 		_ = anilistObj.Set("deleteEntry", func(mediaID int, entryId int) error {
 			return anilistPlatformRef.Get().DeleteEntry(context.Background(), mediaID, entryId)
+		})
+		// The manga-scoped variants below exist because updateEntry/updateEntryProgress/deleteEntry
+		// take only a bare mediaID with no way to tell anime and manga apart - the SIMKL backup-sync
+		// mirroring layer (internal/sync.MirroringPlatform) needs that distinction to avoid mirroring
+		// manga edits to SIMKL's anime-only endpoints. Extensions that mutate manga list entries
+		// should call these instead of the anime-oriented ones above.
+		_ = anilistObj.Set("updateMangaEntry", func(mediaID int, status *anilist.MediaListStatus, scoreRaw *int, progress *int, startedAt *anilist.FuzzyDateInput, completedAt *anilist.FuzzyDateInput) error {
+			return anilistPlatformRef.Get().UpdateEntry(syncpkg.WithMangaMedia(context.Background()), mediaID, status, scoreRaw, progress, startedAt, completedAt)
+		})
+		_ = anilistObj.Set("updateMangaEntryProgress", func(mediaID int, progress int, totalEpisodes *int) error {
+			return anilistPlatformRef.Get().UpdateEntryProgress(syncpkg.WithMangaMedia(context.Background()), mediaID, progress, totalEpisodes)
+		})
+		_ = anilistObj.Set("deleteMangaEntry", func(mediaID int, entryId int) error {
+			return anilistPlatformRef.Get().DeleteEntry(syncpkg.WithMangaMedia(context.Background()), mediaID, entryId)
 		})
 		_ = anilistObj.Set("getAnimeCollection", func(bypassCache bool) (*anilist.AnimeCollection, error) {
 			return anilistPlatformRef.Get().GetAnimeCollection(context.Background(), bypassCache)

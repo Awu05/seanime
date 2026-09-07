@@ -149,20 +149,13 @@ func (h *Handler) HandleSaveSimklSettings(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	profileID := simklProfileID(c)
-	current, err := h.App.Database.GetSimklSettings(profileID)
-	if err != nil {
-		return h.RespondWithError(c, err)
-	}
-	if b.Enabled != nil {
-		current.Enabled = *b.Enabled
-	}
+	var clientID *string
 	if b.ClientId != nil {
-		current.ClientId = strings.TrimSpace(*b.ClientId)
+		trimmed := strings.TrimSpace(*b.ClientId)
+		clientID = &trimmed
 	}
-	current.ProfileID = profileID
 
-	settings, err := h.App.Database.UpsertSimklSettings(current)
+	settings, err := h.App.Database.UpdateSimklSettings(simklProfileID(c), b.Enabled, clientID)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -187,14 +180,22 @@ func (h *Handler) HandleSimklSyncNow(c echo.Context) error {
 	}
 
 	plat := h.getAnilistPlatform(c)
-	go h.seedSimklPendingSyncs(plat, profileID)
+	h.simklSeedingStart(profileID)
+	go func() {
+		defer h.simklSeedingFinish(profileID)
+		h.seedSimklPendingSyncs(plat, profileID)
+	}()
 
 	return h.RespondWithData(c, true)
 }
 
-// SimklSyncStatusResponse reports how many SIMKL sync rows are still queued for delivery.
+// SimklSyncStatusResponse reports how many SIMKL sync rows are still queued for delivery, and
+// whether a "sync now" seed is still running. Seeding is checked first by the frontend: only
+// once it's false can Pending==0 be trusted as "nothing left to do" rather than "nothing enqueued
+// yet".
 type SimklSyncStatusResponse struct {
 	Pending int64 `json:"pending"`
+	Seeding bool  `json:"seeding"`
 }
 
 // HandleGetSimklSyncStatus
@@ -211,14 +212,18 @@ func (h *Handler) HandleGetSimklSyncStatus(c echo.Context) error {
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
-	return h.RespondWithData(c, SimklSyncStatusResponse{Pending: pending})
+	return h.RespondWithData(c, SimklSyncStatusResponse{Pending: pending, Seeding: h.isSimklSeeding(profileID)})
 }
 
 // seedSimklPendingSyncs runs in the background so HandleSimklSyncNow can return immediately -
 // a multi-thousand-entry library would otherwise hold the HTTP request open for the entire
 // seed. The AniList platform must be resolved from the request (via getAnilistPlatform) before
 // the handler returns, since echo.Context is invalid once that happens; everything after that
-// uses a background context.
+// uses a background context. The caller decrements the profile's seeding counter only after this
+// returns, and this always returns after EnqueuePendingSyncBatch (its very last statement) either
+// completes or is skipped - so by the time isSimklSeeding reports false for this profile again,
+// every row every concurrent seed for it was ever going to enqueue is already durably counted by
+// CountPendingSyncs.
 func (h *Handler) seedSimklPendingSyncs(plat platform.Platform, profileID string) {
 	collection, err := plat.GetAnimeCollection(context.Background(), false)
 	if err != nil {

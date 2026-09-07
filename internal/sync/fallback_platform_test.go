@@ -55,9 +55,9 @@ func TestFallbackPlatform_Writes_PassThroughEvenWhenUnhealthy(t *testing.T) {
 	inner := &fakePlatform{}
 	simklClient := &fakeAllItemsClient{}
 	queue := &fakeQueue{}
-	fp := NewFallbackPlatform(inner, simklClient, queue, "profile-1",
-		func() bool { return true },   // simklAvailable = true
-		func() bool { return false },  // anilistHealthy = false
+	fp := NewFallbackPlatform(inner, simklClient,
+		func() bool { return true },       // simklAvailable = true
+		func() bool { return false },      // anilistHealthy = false
 		func() bool { return false }, nil) // discoveryAvailable / discoverySimklClient: unused by this test
 
 	require.NoError(t, fp.UpdateEntryProgress(context.Background(), 101922, 5, nil))
@@ -85,7 +85,7 @@ func TestFallbackPlatform_GetAnimeCollection_Unhealthy_BuildsFromSimkl(t *testin
 		{Status: "watching", WatchedEpisodesCount: 3, TotalEpisodesCount: 24,
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
-	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(inner, simklClient,
 		func() bool { return true }, func() bool { return false },
 		func() bool { return false }, nil)
 
@@ -107,7 +107,7 @@ func TestFallbackPlatform_GetAnimeCollection_Unhealthy_BuildsFromSimkl(t *testin
 func TestFallbackPlatform_GetAnimeCollection_Healthy_NeverCallsSimkl(t *testing.T) {
 	inner := &fakeCollectionPlatform{collection: &anilist.AnimeCollection{}}
 	simklClient := &fakeAllItemsClient{}
-	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(inner, simklClient,
 		func() bool { return true }, func() bool { return true },
 		func() bool { return false }, nil)
 
@@ -120,7 +120,7 @@ func TestFallbackPlatform_GetAnimeCollection_Unhealthy_NoSimkl_ErrorSurfaces(t *
 	wantErr := errors.New("anilist down")
 	inner := &fakeCollectionPlatform{err: wantErr}
 	simklClient := &fakeAllItemsClient{}
-	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(inner, simklClient,
 		func() bool { return false }, // simklAvailable = false: not connected
 		func() bool { return false }, // anilistHealthy = false
 		func() bool { return false }, nil)
@@ -134,7 +134,7 @@ func TestFallbackPlatform_GetAnimeCollection_SimklAlsoFails_SurfacesAnilistError
 	wantErr := errors.New("anilist down")
 	inner := &fakeCollectionPlatform{err: wantErr}
 	simklClient := &fakeAllItemsClient{getAllErr: errors.New("simkl down too")}
-	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(inner, simklClient,
 		func() bool { return true }, func() bool { return false },
 		func() bool { return false }, nil)
 
@@ -148,7 +148,7 @@ func TestFallbackPlatform_GetRawAnimeCollection_Unhealthy_BuildsFromSimkl(t *tes
 		{Status: "watching", WatchedEpisodesCount: 3, TotalEpisodesCount: 24,
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
-	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(inner, simklClient,
 		func() bool { return true }, func() bool { return false },
 		func() bool { return false }, nil)
 
@@ -170,7 +170,7 @@ func TestFallbackPlatform_GetRawAnimeCollection_Unhealthy_BuildsFromSimkl(t *tes
 func TestFallbackPlatform_GetRawAnimeCollection_Healthy_NeverCallsSimkl(t *testing.T) {
 	inner := &fakeCollectionPlatform{collection: &anilist.AnimeCollection{}}
 	simklClient := &fakeAllItemsClient{}
-	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(inner, simklClient,
 		func() bool { return true }, func() bool { return true },
 		func() bool { return false }, nil)
 
@@ -185,7 +185,7 @@ func TestFallbackPlatform_GetAnimeCollection_CachesWithinTTL(t *testing.T) {
 		{Status: "watching", WatchedEpisodesCount: 3, TotalEpisodesCount: 24,
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
-	fp := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(inner, simklClient,
 		func() bool { return true }, func() bool { return false },
 		func() bool { return false }, nil)
 
@@ -207,7 +207,7 @@ func TestFallbackPlatform_GetAnimeCollection_RefetchesAfterTTLExpires(t *testing
 		{Status: "watching", WatchedEpisodesCount: 3, TotalEpisodesCount: 24,
 			Show: simkl.AllItemsShow{Title: "Fallback Anime", Ids: simkl.Ids{Anilist: "101922"}}},
 	}}
-	fpAny := NewFallbackPlatform(inner, simklClient, &fakeQueue{}, "_default",
+	fpAny := NewFallbackPlatform(inner, simklClient,
 		func() bool { return true }, func() bool { return false },
 		func() bool { return false }, nil)
 	fp := fpAny.(*FallbackPlatform)
@@ -401,7 +401,7 @@ func TestFallbackPlatform_RawPlatform_UnwrapsBothLayers(t *testing.T) {
 	// interception, so RawPlatform must strip both layers, not just the outermost one.
 	inner := &fakePlatform{}
 	mp := NewMirroringPlatform(inner, &fakeSimklClient{}, &fakeQueue{}, "_default", func() bool { return true })
-	fp := NewFallbackPlatform(mp, &fakeAllItemsClient{}, &fakeQueue{}, "_default",
+	fp := NewFallbackPlatform(mp, &fakeAllItemsClient{},
 		func() bool { return true }, func() bool { return true },
 		func() bool { return false }, nil)
 

@@ -3,12 +3,18 @@ package sync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/simkl"
 	"seanime/internal/database/models"
 	"seanime/internal/platforms/platform"
 	"time"
 )
+
+// errSimklMirrorFailed is a sentinel passed through mirrorToSimkl's doSimkl closures - the enqueue
+// path only needs to know whether the mirror failed, never why, so no error detail is lost by
+// collapsing multiple possible SIMKL call failures into one signal.
+var errSimklMirrorFailed = errors.New("simkl: mirror failed")
 
 // PendingSyncEnqueuer is the subset of *db.Database this package depends on, so tests can
 // substitute a fake instead of a real database.
@@ -99,17 +105,18 @@ type UpdateProgressPayload struct {
 
 func (m *MirroringPlatform) UpdateEntryProgress(ctx context.Context, mediaID int, progress int, totalEpisodes *int) error {
 	anilistErr := m.Platform.UpdateEntryProgress(ctx, mediaID, progress, totalEpisodes)
+	payload := UpdateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes}
 	if anilistErr != nil {
-		m.enqueue(TargetAnilist, OpUpdateProgress, UpdateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
+		m.enqueue(TargetAnilist, OpUpdateProgress, payload)
 	}
 
 	// progress <= 0 is skipped on the SIMKL side: MarkProgress(0) builds an empty episode list,
 	// which is byte-identical to RemoveEntry's request body and would DELETE the backup entry.
 	// A progress reset must be a no-op on the backup, never a deletion.
-	if progress > 0 && m.simklEnabled() && !isMangaMedia(ctx) {
-		if simklErr := m.simklClient.MarkProgress(ctx, mediaID, progress); simklErr != nil {
-			m.enqueue(TargetSimkl, OpUpdateProgress, UpdateProgressPayload{MediaID: mediaID, Progress: progress, TotalEpisodes: totalEpisodes})
-		}
+	if progress > 0 {
+		m.mirrorToSimkl(ctx, OpUpdateProgress, payload, func() error {
+			return m.simklClient.MarkProgress(ctx, mediaID, progress)
+		})
 	}
 
 	return anilistErr
@@ -131,11 +138,11 @@ func (m *MirroringPlatform) UpdateEntry(ctx context.Context, mediaID int, status
 		m.enqueue(TargetAnilist, OpUpdateEntry, payload)
 	}
 
-	if m.simklEnabled() && !isMangaMedia(ctx) {
-		var simklFailed bool
+	m.mirrorToSimkl(ctx, OpUpdateEntry, payload, func() error {
+		var failed bool
 		if status != nil {
 			if err := m.simklClient.AddToList(ctx, mediaID, MapAnilistStatusToSimkl(*status)); err != nil {
-				simklFailed = true
+				failed = true
 			}
 		}
 		if scoreRaw != nil {
@@ -147,13 +154,14 @@ func (m *MirroringPlatform) UpdateEntry(ctx context.Context, mediaID int, status
 				err = m.simklClient.SetRating(ctx, mediaID, rating)
 			}
 			if err != nil {
-				simklFailed = true
+				failed = true
 			}
 		}
-		if simklFailed {
-			m.enqueue(TargetSimkl, OpUpdateEntry, payload)
+		if failed {
+			return errSimklMirrorFailed
 		}
-	}
+		return nil
+	})
 
 	return anilistErr
 }
@@ -180,15 +188,14 @@ type DeleteEntryPayload struct {
 
 func (m *MirroringPlatform) DeleteEntry(ctx context.Context, mediaID int, entryID int) error {
 	anilistErr := m.Platform.DeleteEntry(ctx, mediaID, entryID)
+	payload := DeleteEntryPayload{MediaID: mediaID, EntryID: entryID}
 	if anilistErr != nil {
-		m.enqueue(TargetAnilist, OpDeleteEntry, DeleteEntryPayload{MediaID: mediaID, EntryID: entryID})
+		m.enqueue(TargetAnilist, OpDeleteEntry, payload)
 	}
 
-	if m.simklEnabled() && !isMangaMedia(ctx) {
-		if err := m.simklClient.RemoveEntry(ctx, mediaID); err != nil {
-			m.enqueue(TargetSimkl, OpDeleteEntry, DeleteEntryPayload{MediaID: mediaID, EntryID: entryID})
-		}
-	}
+	m.mirrorToSimkl(ctx, OpDeleteEntry, payload, func() error {
+		return m.simklClient.RemoveEntry(ctx, mediaID)
+	})
 
 	return anilistErr
 }
@@ -207,18 +214,49 @@ func (m *MirroringPlatform) AddMediaToCollection(ctx context.Context, mIds []int
 	// "addMangaToCollection" - manga has no downloaded-file collection concept), but the
 	// isMangaMedia guard is kept here too for defense in depth if that ever changes.
 	if m.simklEnabled() && !isMangaMedia(ctx) {
-		var simklFailed bool
-		for _, id := range mIds {
-			if err := m.simklClient.AddToList(ctx, id, "plantowatch"); err != nil {
-				simklFailed = true
-			}
+		// Delivered via AddToListBatch in chunks of MaxBatchSize rather than one AddToList call
+		// per id: SIMKL paces POSTs to 1/1.1s process-wide (see postLimiter in api/simkl/client.go),
+		// so a per-item loop would serialize an N-item add over N*1.1s instead of one request per
+		// chunk. Reuses deliverBatched (worker.go) - the retry Worker's own batch-chunking helper -
+		// rather than a second hand-rolled loop; mIds double as deliverBatched's correlation ids
+		// (there's no PendingSync row to key on here, but the media id itself works just as well
+		// to identify which chunk a given failure belongs to).
+		items := make([]simkl.AddToListItem, len(mIds))
+		correlationIDs := make([]uint, len(mIds))
+		for i, id := range mIds {
+			items[i] = simkl.AddToListItem{AnilistID: id, Status: "plantowatch"}
+			correlationIDs[i] = uint(id)
 		}
-		if simklFailed {
-			m.enqueue(TargetSimkl, OpAddToCollection, AddToCollectionPayload{MediaIDs: mIds})
+		failed := make(map[uint]bool, len(mIds))
+		deliverBatched(ctx, items, correlationIDs, func(id uint, _ error) { failed[id] = true }, m.simklClient.AddToListBatch)
+		// Only the ids in a chunk that actually failed are re-enqueued - AddToList is idempotent
+		// so re-sending a succeeded id would be harmless, but there's no reason to widen the retry
+		// beyond the chunk that's known to have failed.
+		if len(failed) > 0 {
+			failedIDs := make([]int, 0, len(failed))
+			for _, id := range mIds {
+				if failed[uint(id)] {
+					failedIDs = append(failedIDs, id)
+				}
+			}
+			m.enqueue(TargetSimkl, OpAddToCollection, AddToCollectionPayload{MediaIDs: failedIDs})
 		}
 	}
 
 	return anilistErr
+}
+
+// mirrorToSimkl runs doSimkl if SIMKL mirroring applies to ctx (enabled, not a manga mutation -
+// see WithMangaMedia), enqueueing operation/payload for retry if it returns an error. Shared by
+// every mutating method except AddMediaToCollection, which batches and needs to enqueue only the
+// subset of ids that actually failed rather than the fixed payload passed in here.
+func (m *MirroringPlatform) mirrorToSimkl(ctx context.Context, operation string, payload interface{}, doSimkl func() error) {
+	if !m.simklEnabled() || isMangaMedia(ctx) {
+		return
+	}
+	if err := doSimkl(); err != nil {
+		m.enqueue(TargetSimkl, operation, payload)
+	}
 }
 
 // enqueue best-effort persists a pending retry row. If persisting itself fails there is

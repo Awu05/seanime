@@ -7,6 +7,8 @@ import (
 	"seanime/internal/core"
 	util "seanime/internal/util/proxies"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +20,32 @@ import (
 
 type Handler struct {
 	App *core.App
+	// simklSeeding tracks, per profileID, how many SIMKL "sync now" seeds (seedSimklPendingSyncs)
+	// are currently fetching/enqueueing rows in the background. HandleGetSimklSyncStatus exposes
+	// "seeding: count > 0" so the frontend's "sync complete" detection doesn't have to guess from
+	// queue-depth polling alone - without it, a poll landing before seeding enqueues anything (a
+	// large or slow-to-fetch collection) looks identical to "there was nothing to sync", and the
+	// client-side heuristic window can run out before seeding produces a single row. A counter
+	// rather than a presence flag: two overlapping syncs for the same profile (two tabs, a
+	// retried request) must both be accounted for, so the first one finishing doesn't clear
+	// "seeding" out from under the second, still-running one.
+	simklSeeding sync.Map // profileID -> *atomic.Int32
+}
+
+func (h *Handler) simklSeedingStart(profileID string) {
+	counter, _ := h.simklSeeding.LoadOrStore(profileID, new(atomic.Int32))
+	counter.(*atomic.Int32).Add(1)
+}
+
+func (h *Handler) simklSeedingFinish(profileID string) {
+	if counter, ok := h.simklSeeding.Load(profileID); ok {
+		counter.(*atomic.Int32).Add(-1)
+	}
+}
+
+func (h *Handler) isSimklSeeding(profileID string) bool {
+	counter, ok := h.simklSeeding.Load(profileID)
+	return ok && counter.(*atomic.Int32).Load() > 0
 }
 
 func InitRoutes(app *core.App, e *echo.Echo) {

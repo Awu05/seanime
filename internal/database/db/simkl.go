@@ -29,10 +29,19 @@ func (db *Database) GetSimklAccount(profileID string) (*models.SimklAccount, err
 // (backed by SimklAccount.ProfileID's uniqueIndex) makes this atomic under concurrent calls
 // for the same profile - e.g. two PIN-poll requests both completing at once - so they settle
 // on a single row instead of racing into duplicates.
+//
+// "username" is only included in the update when account.Username is non-empty: no current
+// caller populates it (HandleSimklConnectPoll only has an access token to save), so
+// unconditionally assigning it would blank out any previously-stored username on every
+// reconnect once something does start populating it.
 func (db *Database) UpsertSimklAccount(account *models.SimklAccount) (*models.SimklAccount, error) {
+	columns := []string{"access_token"}
+	if account.Username != "" {
+		columns = append(columns, "username")
+	}
 	err := db.gormdb.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "profile_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"username", "access_token"}),
+		DoUpdates: clause.AssignmentColumns(columns),
 	}).Create(account).Error
 	if err != nil {
 		return nil, err
@@ -55,17 +64,37 @@ func (db *Database) GetSimklSettings(profileID string) (*models.SimklSettings, e
 	return &res, nil
 }
 
-// UpsertSimklSettings inserts or updates the profile's SIMKL settings. See UpsertSimklAccount
-// for why this goes through OnConflict rather than a find-then-write.
-func (db *Database) UpsertSimklSettings(settings *models.SimklSettings) (*models.SimklSettings, error) {
+// UpdateSimklSettings atomically applies only the given fields (nil = "leave unchanged") to the
+// profile's SIMKL settings row, inserting a default row first if none exists. This replaces the
+// previous read-then-write pattern (GetSimklSettings, mutate, UpsertSimklSettings): with two
+// separate PATCH requests able to arrive close together - the enable toggle and the Client ID
+// field save are two independent UI actions - a read-then-write lets whichever write commits
+// second silently discard the other's change, since it still carries the stale copy of the field
+// it wasn't touching. Restricting the OnConflict DoUpdates to only the columns actually supplied
+// makes each PATCH a single atomic UPDATE of just its own field(s), closing that race.
+func (db *Database) UpdateSimklSettings(profileID string, enabled *bool, clientID *string) (*models.SimklSettings, error) {
+	base := &models.SimklSettings{ProfileID: profileID}
+	var columns []string
+	if enabled != nil {
+		base.Enabled = *enabled
+		columns = append(columns, "enabled")
+	}
+	if clientID != nil {
+		base.ClientId = *clientID
+		columns = append(columns, "client_id")
+	}
+	if len(columns) == 0 {
+		return db.GetSimklSettings(profileID)
+	}
+
 	err := db.gormdb.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "profile_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"enabled", "client_id"}),
-	}).Create(settings).Error
+		DoUpdates: clause.AssignmentColumns(columns),
+	}).Create(base).Error
 	if err != nil {
 		return nil, err
 	}
-	return settings, nil
+	return db.GetSimklSettings(profileID)
 }
 
 func (db *Database) EnqueuePendingSync(item *models.PendingSync) error {

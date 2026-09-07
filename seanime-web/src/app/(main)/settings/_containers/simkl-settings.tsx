@@ -16,15 +16,12 @@ type SimklSettings = {
 
 type SimklSyncStatus = {
     pending: number
+    seeding: boolean
 }
 
 // Sync now only enqueues work; actual delivery happens later on the retry worker's own tick, so
 // there's nothing synchronous to await. This polls the queue depth instead to show real progress.
 const SYNC_STATUS_POLL_INTERVAL_MS = 2000
-// A poll reporting 0 pending is only trusted as "actually done" after this many consecutive
-// zero polls in a row - otherwise the very first poll (which can land before seeding has even
-// enqueued anything yet) would flip the indicator to "done" instantly.
-const SYNC_STATUS_ZERO_GRACE_POLLS = 3
 // Stop polling after this long regardless, so a stuck/failing sync doesn't poll forever.
 const SYNC_STATUS_MAX_POLLS = 300
 
@@ -85,7 +82,6 @@ export function SimklSettingsContainer() {
 
     const [syncTracking, setSyncTracking] = React.useState(false)
     const [syncJustFinished, setSyncJustFinished] = React.useState(false)
-    const zeroPollStreakRef = React.useRef(0)
     const pollCountRef = React.useRef(0)
 
     const { mutate: syncNow, isPending: isSyncing } = useServerMutation<boolean, void>({
@@ -94,7 +90,6 @@ export function SimklSettingsContainer() {
         mutationKey: ["simkl-sync-now"],
         onSuccess: () => {
             toast.success("Full SIMKL sync started")
-            zeroPollStreakRef.current = 0
             pollCountRef.current = 0
             setSyncJustFinished(false)
             setSyncTracking(true)
@@ -114,19 +109,15 @@ export function SimklSettingsContainer() {
         if (!syncTracking || syncStatus === undefined) return
 
         // Keyed off dataUpdatedAt, not syncStatus itself: React Query's structural sharing
-        // returns the SAME object reference across polls when the content is identical (e.g.
-        // two consecutive {pending: 0} results), which would otherwise stop this effect from
-        // re-running on every poll and permanently stall the zero-streak count below the
-        // threshold - the exact "stuck at 0 items left" bug this fixes.
+        // returns the SAME object reference across polls when the content is identical, which
+        // would otherwise stop this effect from re-running on every poll.
         pollCountRef.current += 1
 
-        if (syncStatus.pending > 0) {
-            zeroPollStreakRef.current = 0
-        } else {
-            zeroPollStreakRef.current += 1
-        }
-
-        const genuinelyDone = zeroPollStreakRef.current >= SYNC_STATUS_ZERO_GRACE_POLLS
+        // The backend only clears `seeding` after every row it will ever enqueue for this run is
+        // durably counted (see seedSimklPendingSyncs's doc comment), so pending===0 is trustworthy
+        // the moment seeding flips false - no polling-count heuristic needed to guess whether a
+        // large/slow-to-fetch collection just hasn't enqueued anything yet.
+        const genuinelyDone = !syncStatus.seeding && syncStatus.pending === 0
         const gaveUp = pollCountRef.current >= SYNC_STATUS_MAX_POLLS
 
         if (genuinelyDone || gaveUp) {

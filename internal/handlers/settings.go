@@ -361,7 +361,15 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	// SIMKL fallback" on a multi-user instance would persist correctly but never actually take
 	// effect. Re-applying the just-submitted value directly here also means the status response
 	// below reflects it immediately, rather than waiting for the frontend's next status poll.
-	shared_platform.ForceSimklFallback.Store(b.Anilist.ForceSimklFallback)
+	//
+	// Gated on isAdmin (same convention as the GLOBAL secondary settings above, in
+	// HandleGettingStarted): ForceSimklFallback is a single process-wide flag, but it's stored
+	// per-profile, so without this a non-admin's save of an unrelated field would re-derive the
+	// flag from THEIR OWN stored (and likely stale/false) value and silently revert whatever an
+	// admin had just turned on to test the fallback.
+	if core.GetIsAdminFromContext(c) {
+		shared_platform.ForceSimklFallback.Store(b.Anilist.ForceSimklFallback)
+	}
 
 	status := h.NewStatus(c)
 
@@ -428,8 +436,10 @@ func (h *Handler) HandlePatchSetting(c echo.Context) error {
 	h.App.InitOrRefreshModules(profileID)
 
 	// See the matching comment in HandleSaveSettings: InitOrRefreshModules reads the global
-	// settings row, which a per-profile patch (multi-user mode) never touches.
-	if nextSettings.Anilist != nil {
+	// settings row, which a per-profile patch (multi-user mode) never touches. Gated on isAdmin
+	// for the same reason too - otherwise any non-admin's unrelated patch would re-derive the
+	// process-wide flag from their own stored (and likely stale/false) value.
+	if nextSettings.Anilist != nil && core.GetIsAdminFromContext(c) {
 		shared_platform.ForceSimklFallback.Store(nextSettings.Anilist.ForceSimklFallback)
 	}
 

@@ -13,6 +13,7 @@ import (
 	"seanime/internal/library/anime"
 	"seanime/internal/manga"
 	"seanime/internal/platforms/platform"
+	syncpkg "seanime/internal/sync"
 	"seanime/internal/util"
 
 	"github.com/rs/zerolog"
@@ -750,7 +751,7 @@ func (m *ManagerImpl) SynchronizeAnilist() error {
 				}
 
 				_ = m.anilistPlatformRef.Get().UpdateEntry(
-					context.Background(),
+					syncpkg.WithMangaMedia(context.Background()),
 					entry.GetMedia().GetID(),
 					entry.GetStatus(),
 					score,
@@ -1029,7 +1030,7 @@ func (m *ManagerImpl) SynchronizeSimulatedCollectionToAnilist() error {
 				}
 
 				_ = m.anilistPlatformRef.Get().UpdateEntry(
-					context.Background(),
+					syncpkg.WithMangaMedia(context.Background()),
 					entry.GetMedia().GetID(),
 					entry.GetStatus(),
 					score,

@@ -1,6 +1,7 @@
 import { useGetAnilistCacheLayerStatus, useToggleAnilistCacheLayerStatus } from "@/api/hooks/anilist.hooks"
 import { useListAnimeEntryEpisodeTabExtensions } from "@/api/hooks/extensions.hooks"
 import { useLocalSyncSimulatedDataToAnilist } from "@/api/hooks/local.hooks"
+import { currentProfileAtom } from "@/app/(main)/_atoms/profile.atoms"
 import { __seaCommand_shortcuts } from "@/app/(main)/_features/sea-command/sea-command"
 import { SettingsCard } from "@/app/(main)/settings/_components/settings-card"
 import { SettingsSubmitButton } from "@/app/(main)/settings/_components/settings-submit-button"
@@ -11,7 +12,7 @@ import { cn } from "@/components/ui/core/styling"
 import { Field } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
 import { __isElectronDesktop__ } from "@/types/constants"
-import { useAtom } from "jotai/react"
+import { useAtom, useAtomValue } from "jotai/react"
 import React from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 import { FaRedo } from "react-icons/fa"
@@ -34,6 +35,16 @@ export function ServerSettings(props: ServerSettingsProps) {
 
     const serverStatus = useServerStatus()
     const { data: episodeTabExtensions } = useListAnimeEntryEpisodeTabExtensions()
+    // "Force SIMKL fallback" affects the whole server, not just the saving profile's own
+    // settings, on multi-user instances - restricting it to admins there matches how the backend
+    // gates it (HandleSaveSettings/HandlePatchSetting only apply it to shared_platform's global
+    // flag for an admin request) so a non-admin can't even see a control that wouldn't take
+    // effect. In single-user mode currentProfileAtom is never populated (only multi-user's
+    // authMe flow sets it - see server-data-wrapper.tsx), so gating on isAdmin unconditionally
+    // would hide this from every single-user install; there every profile IS the whole server,
+    // so the toggle is always shown.
+    const currentProfile = useAtomValue(currentProfileAtom)
+    const canForceSimklFallback = !serverStatus?.multiUserEnabled || (currentProfile?.isAdmin ?? false)
 
     const [shortcuts, setShortcuts] = useAtom(__seaCommand_shortcuts)
     const f = useFormContext()
@@ -299,14 +310,16 @@ export function ServerSettings(props: ServerSettingsProps) {
                     help="If enabled, Seanime will use an alternative source to fetch episode metadata."
                     icon={<LuImages className="" />}
                 />
-                <Field.Switch
-                    side="right"
-                    name="forceSimklFallback"
-                    label="Force SIMKL fallback"
-                    help="If enabled, Discover, Search, Schedule, and anime details will always use SIMKL instead of AniList, even while AniList is healthy."
-                    moreHelp="For manually testing the SIMKL fallback (Settings > Anime Tracker > SIMKL must have a client ID saved). Unlike 'Enable cache-only mode' above, this only affects these four surfaces - it does not touch AniList caching, mutations, or your collection. This affects the whole server, not just your profile, on multi-user instances."
-                    icon={<TbFlask className="" />}
-                />
+                {canForceSimklFallback && (
+                    <Field.Switch
+                        side="right"
+                        name="forceSimklFallback"
+                        label="Force SIMKL fallback"
+                        help="If enabled, Discover, Search, Schedule, and anime details will always use SIMKL instead of AniList, even while AniList is healthy."
+                        moreHelp="For manually testing the SIMKL fallback (Settings > Anime Tracker > SIMKL must have a client ID saved). Unlike 'Enable cache-only mode' above, this only affects these four surfaces - it does not touch AniList caching, mutations, or your collection. This affects the whole server, not just your profile, on multi-user instances."
+                        icon={<TbFlask className="" />}
+                    />
+                )}
             </SettingsCard>
 
             <SettingsCard title="Updates">
