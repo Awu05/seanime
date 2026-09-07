@@ -199,27 +199,33 @@ func (h *Handler) HandleGetAnilistAnimeDetails(c echo.Context) error {
 	// AND write: otherwise a previously-cached real AniList result would keep being served (never
 	// even calling the platform again) for the whole TTL, defeating the point of forcing a fresh
 	// SIMKL-fallback attempt - see FallbackPlatform.GetAnimeDetails for where the force actually
-	// engages the SIMKL call. Gated on DiscoveryAvailable too (checked only if the cheap atomic is
-	// already true, same as forcedSimklClient) - with the override on but no client_id configured,
-	// FallbackPlatform can't do anything with it anyway, so there's no reason to also disable
-	// caching in that state.
-	forced := shared_platform.ForceSimklFallback.Load()
-	if forced {
-		if simklClient, ok := h.simklClientForProfile(c); !ok || !syncpkg.DiscoveryAvailable(simklClient.ClientID()) {
-			forced = false
-		}
-	}
+	// engages the SIMKL call. forcedSimklClient covers the same "override on AND profile has a
+	// usable client_id" gate already reused by the list handlers below - the client itself isn't
+	// needed here, only whether it's usable, since the actual SIMKL engagement happens inside
+	// FallbackPlatform via its own wired client, not this one.
+	_, forced := h.forcedSimklClient(c)
 
 	if !forced {
 		if details, ok := detailsCache.Get(mId); ok {
 			return h.RespondWithData(c, details)
 		}
 	}
+	// Snapshotted immediately before the call, not after: platform.Platform's interface carries
+	// no signal for whether a (details, nil) result actually came from AniList or was substituted
+	// by FallbackPlatform's SIMKL fallback (which only engages when the real call itself fails and
+	// this same flag was false at that moment - see FallbackPlatform.GetAnimeDetails). Reading it
+	// after the call, as before, checks the flag's value at a point in time that has nothing to do
+	// with whether IT was what the fallback decision inside the call actually used - a partial or
+	// recovering AniList degradation could flip the flag in between, making a genuine successful
+	// response wrongly skip the cache. Reading it right before still isn't perfectly atomic with
+	// the fallback's own read, but narrows the race from "the rest of this whole request" to just
+	// the duration of the call itself.
+	wasHealthyBeforeCall := shared_platform.IsWorking.Load()
 	details, err := h.getAnilistPlatform(c).GetAnimeDetails(c.Request().Context(), mId)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
-	if shared_platform.IsWorking.Load() && !forced {
+	if wasHealthyBeforeCall && !forced {
 		detailsCache.Set(mId, details)
 	}
 

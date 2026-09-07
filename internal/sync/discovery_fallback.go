@@ -54,16 +54,19 @@ func mapDiscoveryEntry(anilistID int, title string, year int, poster string) *an
 	}
 }
 
-// MapSearchResultsToBaseAnime converts SIMKL search results into AniList-shaped BaseAnime, using
-// each result's own Title/Year/Poster (search results already carry these) but sourcing the
-// AniList id from `resolved` (simklID -> AnimeDetail, from IDResolutionCache - see Task 4).
-// Entries with no resolved AniList id, or with an unparseable one, are dropped: nothing in
-// Seanime's AniList-ID-keyed data model can represent them, matching BuildAnimeCollectionFromSimkl's
-// existing rule for Component 1.
-func MapSearchResultsToBaseAnime(results []simkl.SearchResult, resolved map[int]*simkl.AnimeDetail) []*anilist.BaseAnime {
-	mapped := make([]*anilist.BaseAnime, 0, len(results))
-	for _, r := range results {
-		detail, ok := resolved[r.Ids.SimklID]
+// mapDiscoveryEntries converts a slice of SIMKL list results (search/trending/premieres - each a
+// different concrete type, but all carrying the same title/year/poster/simkl-id shape) into
+// AniList-shaped BaseAnime, applying the shared drop-if-unresolved rule: an entry with no
+// resolved AniList id, or an unparseable one, is dropped, since nothing in Seanime's
+// AniList-ID-keyed data model can represent it (matches BuildAnimeCollectionFromSimkl's existing
+// rule for Component 1). extract pulls the four fields mapDiscoveryEntry needs out of T, so this
+// one function backs every Map*ToBaseAnime variant below instead of each reimplementing the same
+// lookup/parse/drop/map loop.
+func mapDiscoveryEntries[T any](entries []T, resolved map[int]*simkl.AnimeDetail, extract func(T) (title string, year int, poster string, simklID int)) []*anilist.BaseAnime {
+	mapped := make([]*anilist.BaseAnime, 0, len(entries))
+	for _, e := range entries {
+		title, year, poster, simklID := extract(e)
+		detail, ok := resolved[simklID]
 		if !ok {
 			continue
 		}
@@ -71,27 +74,25 @@ func MapSearchResultsToBaseAnime(results []simkl.SearchResult, resolved map[int]
 		if err != nil {
 			continue
 		}
-		mapped = append(mapped, mapDiscoveryEntry(anilistID, r.Title, r.Year, r.Poster))
+		mapped = append(mapped, mapDiscoveryEntry(anilistID, title, year, poster))
 	}
 	return mapped
 }
 
+// MapSearchResultsToBaseAnime converts SIMKL search results into AniList-shaped BaseAnime, using
+// each result's own Title/Year/Poster (search results already carry these) but sourcing the
+// AniList id from `resolved` (simklID -> AnimeDetail, from IDResolutionCache - see Task 4).
+func MapSearchResultsToBaseAnime(results []simkl.SearchResult, resolved map[int]*simkl.AnimeDetail) []*anilist.BaseAnime {
+	return mapDiscoveryEntries(results, resolved, func(r simkl.SearchResult) (string, int, string, int) {
+		return r.Title, r.Year, r.Poster, r.Ids.SimklID
+	})
+}
+
 // MapTrendingToBaseAnime converts SIMKL trending/best entries into AniList-shaped BaseAnime.
-// Same drop-if-unresolved rule as MapSearchResultsToBaseAnime.
 func MapTrendingToBaseAnime(entries []simkl.TrendingEntry, resolved map[int]*simkl.AnimeDetail) []*anilist.BaseAnime {
-	mapped := make([]*anilist.BaseAnime, 0, len(entries))
-	for _, e := range entries {
-		detail, ok := resolved[e.Ids.SimklID]
-		if !ok {
-			continue
-		}
-		anilistID, err := strconv.Atoi(detail.Ids.Anilist)
-		if err != nil {
-			continue
-		}
-		mapped = append(mapped, mapDiscoveryEntry(anilistID, e.Title, e.Year, e.Poster))
-	}
-	return mapped
+	return mapDiscoveryEntries(entries, resolved, func(e simkl.TrendingEntry) (string, int, string, int) {
+		return e.Title, e.Year, e.Poster, e.Ids.SimklID
+	})
 }
 
 // FilterAndSortUpcoming drops premiere entries that have already aired (or whose date SIMKL
@@ -124,22 +125,11 @@ func FilterAndSortUpcoming(entries []simkl.PremiereEntry, now time.Time) []simkl
 }
 
 // MapUpcomingToBaseAnime converts SIMKL premiere entries into AniList-shaped BaseAnime, for
-// Discover's "Coming Soon" fallback. Same drop-if-unresolved rule as the other Map*ToBaseAnime
-// functions.
+// Discover's "Coming Soon" fallback.
 func MapUpcomingToBaseAnime(entries []simkl.PremiereEntry, resolved map[int]*simkl.AnimeDetail) []*anilist.BaseAnime {
-	mapped := make([]*anilist.BaseAnime, 0, len(entries))
-	for _, e := range entries {
-		detail, ok := resolved[e.Ids.SimklID]
-		if !ok {
-			continue
-		}
-		anilistID, err := strconv.Atoi(detail.Ids.Anilist)
-		if err != nil {
-			continue
-		}
-		mapped = append(mapped, mapDiscoveryEntry(anilistID, e.Title, e.Year, e.Poster))
-	}
-	return mapped
+	return mapDiscoveryEntries(entries, resolved, func(e simkl.PremiereEntry) (string, int, string, int) {
+		return e.Title, e.Year, e.Poster, e.Ids.SimklID
+	})
 }
 
 // MapCalendarToBaseAnime converts SIMKL airing-calendar entries into AniList-shaped BaseAnime,

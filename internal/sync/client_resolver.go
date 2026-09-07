@@ -37,6 +37,37 @@ func (r *resolvingClient) client() (simkl.Client, bool) {
 	return simkl.NewAPIClient(r.httpClient, token, r.clientIDFor(r.profileID)), true
 }
 
+// resolvingDiscoveryClient mirrors resolvingClient's "re-resolve on every call" guarantee for
+// Component 4's public-endpoint fallback (GetAnimeDetails). It needs no access token - only the
+// client_id - but must see a client_id change take effect immediately too, same as every other
+// SIMKL client built in wrapAnilistPlatform; a client_id captured once at construction time and
+// baked into a plain *simkl.APIClient would keep using a stale (or empty) value indefinitely,
+// since the wrapped platform that owns it is cached per-profile and never rebuilt on a settings
+// save alone.
+type resolvingDiscoveryClient struct {
+	httpClient  *http.Client
+	profileID   string
+	clientIDFor ClientIdLookup
+}
+
+// NewResolvingDiscoverySimklClient returns a discoverySimklClient backed by a fresh
+// simkl.APIClient (client_id only, no access token) on every call.
+func NewResolvingDiscoverySimklClient(httpClient *http.Client, profileID string, clientIDFor ClientIdLookup) discoverySimklClient {
+	return &resolvingDiscoveryClient{httpClient: httpClient, profileID: profileID, clientIDFor: clientIDFor}
+}
+
+func (r *resolvingDiscoveryClient) client() *simkl.APIClient {
+	return simkl.NewAPIClient(r.httpClient, "", r.clientIDFor(r.profileID))
+}
+
+func (r *resolvingDiscoveryClient) SearchIDByAnilist(ctx context.Context, anilistID int) (int, bool, error) {
+	return r.client().SearchIDByAnilist(ctx, anilistID)
+}
+
+func (r *resolvingDiscoveryClient) GetAnimeDetails(ctx context.Context, simklID int) (*simkl.AnimeDetail, error) {
+	return r.client().GetAnimeDetails(ctx, simklID)
+}
+
 func (r *resolvingClient) AddToList(ctx context.Context, anilistID int, status string) error {
 	c, ok := r.client()
 	if !ok {

@@ -217,25 +217,28 @@ func (m *MirroringPlatform) AddMediaToCollection(ctx context.Context, mIds []int
 		// Delivered via AddToListBatch in chunks of MaxBatchSize rather than one AddToList call
 		// per id: SIMKL paces POSTs to 1/1.1s process-wide (see postLimiter in api/simkl/client.go),
 		// so a per-item loop would serialize an N-item add over N*1.1s instead of one request per
-		// chunk. Only the ids in a chunk that actually failed are re-enqueued - AddToList is
-		// idempotent so re-sending a succeeded id would be harmless, but there's no reason to
-		// widen the retry beyond the chunk that's known to have failed.
-		var failedIDs []int
-		for start := 0; start < len(mIds); start += simkl.MaxBatchSize {
-			end := start + simkl.MaxBatchSize
-			if end > len(mIds) {
-				end = len(mIds)
-			}
-			chunk := mIds[start:end]
-			items := make([]simkl.AddToListItem, len(chunk))
-			for i, id := range chunk {
-				items[i] = simkl.AddToListItem{AnilistID: id, Status: "plantowatch"}
-			}
-			if err := m.simklClient.AddToListBatch(ctx, items); err != nil {
-				failedIDs = append(failedIDs, chunk...)
-			}
+		// chunk. Reuses deliverBatched (worker.go) - the retry Worker's own batch-chunking helper -
+		// rather than a second hand-rolled loop; mIds double as deliverBatched's correlation ids
+		// (there's no PendingSync row to key on here, but the media id itself works just as well
+		// to identify which chunk a given failure belongs to).
+		items := make([]simkl.AddToListItem, len(mIds))
+		correlationIDs := make([]uint, len(mIds))
+		for i, id := range mIds {
+			items[i] = simkl.AddToListItem{AnilistID: id, Status: "plantowatch"}
+			correlationIDs[i] = uint(id)
 		}
-		if len(failedIDs) > 0 {
+		failed := make(map[uint]bool, len(mIds))
+		deliverBatched(ctx, items, correlationIDs, func(id uint, _ error) { failed[id] = true }, m.simklClient.AddToListBatch)
+		// Only the ids in a chunk that actually failed are re-enqueued - AddToList is idempotent
+		// so re-sending a succeeded id would be harmless, but there's no reason to widen the retry
+		// beyond the chunk that's known to have failed.
+		if len(failed) > 0 {
+			failedIDs := make([]int, 0, len(failed))
+			for _, id := range mIds {
+				if failed[uint(id)] {
+					failedIDs = append(failedIDs, id)
+				}
+			}
 			m.enqueue(TargetSimkl, OpAddToCollection, AddToCollectionPayload{MediaIDs: failedIDs})
 		}
 	}

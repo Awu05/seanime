@@ -71,7 +71,7 @@ func (a *App) wrapAnilistPlatform(raw platform.Platform, profileID string) platf
 	simklClient := syncpkg.NewResolvingSimklClient(simkl.DefaultHTTPClient, profileID, a.simklTokenLookup, a.simklClientIdFor)
 	simklEnabled := a.simklEnabledFor(profileID)
 	mirrored := syncpkg.NewMirroringPlatform(raw, simklClient, a.Database, profileID, simklEnabled)
-	discoverySimklClient := simkl.NewAPIClient(simkl.DefaultHTTPClient, "", a.simklClientIdFor(profileID))
+	discoverySimklClient := syncpkg.NewResolvingDiscoverySimklClient(simkl.DefaultHTTPClient, profileID, a.simklClientIdFor)
 	return syncpkg.NewFallbackPlatform(mirrored, simklClient, simklEnabled, func() bool {
 		return shared_platform.IsWorking.Load()
 	}, a.discoveryAvailableFor(profileID), discoverySimklClient)

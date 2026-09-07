@@ -180,9 +180,9 @@ func (h *Handler) HandleSimklSyncNow(c echo.Context) error {
 	}
 
 	plat := h.getAnilistPlatform(c)
-	h.simklSeeding.Store(profileID, struct{}{})
+	h.simklSeedingStart(profileID)
 	go func() {
-		defer h.simklSeeding.Delete(profileID)
+		defer h.simklSeedingFinish(profileID)
 		h.seedSimklPendingSyncs(plat, profileID)
 	}()
 
@@ -212,18 +212,18 @@ func (h *Handler) HandleGetSimklSyncStatus(c echo.Context) error {
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
-	_, seeding := h.simklSeeding.Load(profileID)
-	return h.RespondWithData(c, SimklSyncStatusResponse{Pending: pending, Seeding: seeding})
+	return h.RespondWithData(c, SimklSyncStatusResponse{Pending: pending, Seeding: h.isSimklSeeding(profileID)})
 }
 
 // seedSimklPendingSyncs runs in the background so HandleSimklSyncNow can return immediately -
 // a multi-thousand-entry library would otherwise hold the HTTP request open for the entire
 // seed. The AniList platform must be resolved from the request (via getAnilistPlatform) before
 // the handler returns, since echo.Context is invalid once that happens; everything after that
-// uses a background context. The caller clears h.simklSeeding only after this returns, and this
-// always returns after EnqueuePendingSyncBatch (its very last statement) either completes or is
-// skipped - so by the time simklSeeding reports "not seeding" for this profile again, every row
-// this seed is ever going to enqueue is already durably counted by CountPendingSyncs.
+// uses a background context. The caller decrements the profile's seeding counter only after this
+// returns, and this always returns after EnqueuePendingSyncBatch (its very last statement) either
+// completes or is skipped - so by the time isSimklSeeding reports false for this profile again,
+// every row every concurrent seed for it was ever going to enqueue is already durably counted by
+// CountPendingSyncs.
 func (h *Handler) seedSimklPendingSyncs(plat platform.Platform, profileID string) {
 	collection, err := plat.GetAnimeCollection(context.Background(), false)
 	if err != nil {
