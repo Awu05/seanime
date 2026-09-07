@@ -21,6 +21,9 @@ export function useGetStatus() {
         retry: 6,
         // Mute error if the platform is desktop
         muteError: __isDesktop__,
+        // Poll so the AniList-health-driven banner and disabled controls react within ~60s of a
+        // real state change instead of only on page load (status is a light local endpoint).
+        refetchInterval: 60_000,
     })
 }
 

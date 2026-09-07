@@ -51,6 +51,11 @@ func NewAPIClient(httpClient *http.Client, accessToken string, clientID string) 
 	return &APIClient{httpClient: httpClient, accessToken: accessToken, clientID: clientID, baseURL: defaultBaseURL}
 }
 
+// ClientID returns the client id this APIClient was constructed with.
+func (c *APIClient) ClientID() string {
+	return c.clientID
+}
+
 // appName/appVersion are sent on every request per SIMKL's required query parameters - see
 // https://simkl.docs.apiary.io. app-version tracks Seanime's own release version rather than a
 // separate SIMKL-integration version, since there's no meaningful distinction to track here.

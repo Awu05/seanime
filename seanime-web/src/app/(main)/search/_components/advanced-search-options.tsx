@@ -1,3 +1,4 @@
+import { useAnilistHealthy } from "@/app/(main)/_hooks/use-anilist-healthy"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import {
     ADVANCED_SEARCH_COUNTRIES_MANGA,
@@ -36,6 +37,7 @@ import { useUpdateEffect } from "react-use"
 export function AdvancedSearchOptions() {
 
     const serverStatus = useServerStatus()
+    const anilistHealthy = useAnilistHealthy()
     const [params, setParams] = useAtom(__advancedSearch_paramsAtom)
 
     const highlightTrash = React.useMemo(() => {
@@ -63,6 +65,7 @@ export function AdvancedSearchOptions() {
                 />
                 <Select
                     // label="Sorting"
+                    disabled={!anilistHealthy}
                     leftAddon={
                         <FaSortAmountDown className={cn((params.sorting !== null && params.sorting?.[0] !== "SCORE_DESC") && "text-indigo-300 font-bold text-xl")} />}
                     className="w-full"
@@ -80,6 +83,7 @@ export function AdvancedSearchOptions() {
             >
                 <Combobox
                     multiple
+                    disabled={!anilistHealthy}
                     leftAddon={<TbSwords className={cn((params.genre !== null && !!params.genre.length) && "text-indigo-300 font-bold text-xl")} />}
                     emptyMessage="No options found"
                     label="Genre" placeholder="All genres" className="w-full"
@@ -93,6 +97,7 @@ export function AdvancedSearchOptions() {
                 />
                 <Combobox
                     multiple
+                    disabled={!anilistHealthy}
                     leftAddon={<TbTagsFilled className={cn((params.tags !== null && !!params.tags.length) && "text-indigo-300 font-bold text-xl")} />}
                     emptyMessage="No options found"
                     label="Tags" placeholder="All tags" className="w-full"
@@ -113,6 +118,7 @@ export function AdvancedSearchOptions() {
                     data-advanced-search-options-tags
                 />
                 {params.type === "anime" && <Select
+                    disabled={!anilistHealthy}
                     leftAddon={<MdPersonalVideo className={cn((params.format !== null && !!params.format) && "text-indigo-300 font-bold text-xl")} />}
                     label="Format" placeholder="All formats" className="w-full"
                     options={ADVANCED_SEARCH_FORMATS}
@@ -124,6 +130,7 @@ export function AdvancedSearchOptions() {
                     fieldLabelClass="hidden"
                 />}
                 {params.type === "manga" && <Select
+                    disabled={!anilistHealthy}
                     leftAddon={
                         <BiWorld className={cn((params.countryOfOrigin !== null && !!params.countryOfOrigin) && "text-indigo-300 font-bold text-xl")} />}
                     label="Format" placeholder="All countries" className="w-full"
@@ -136,6 +143,7 @@ export function AdvancedSearchOptions() {
                     fieldLabelClass="hidden"
                 />}
                 {params.type === "manga" && <Select
+                    disabled={!anilistHealthy}
                     leftAddon={<MdOutlineBook className={cn((params.format !== null && !!params.format) && "text-indigo-300 font-bold text-xl")} />}
                     label="Format" placeholder="All formats" className="w-full"
                     options={ADVANCED_SEARCH_FORMATS_MANGA}
@@ -147,6 +155,7 @@ export function AdvancedSearchOptions() {
                     fieldLabelClass="hidden"
                 />}
                 {params.type === "anime" && <Select
+                    disabled={!anilistHealthy}
                     leftAddon={<LuLeaf className={cn((params.season !== null && !!params.season) && "text-indigo-300 font-bold text-xl")} />}
                     placeholder="All seasons" className="w-full"
                     options={ADVANCED_SEARCH_SEASONS.map(season => ({ value: season.toUpperCase(), label: season }))}
@@ -158,6 +167,7 @@ export function AdvancedSearchOptions() {
                     fieldLabelClass="hidden"
                 />}
                 <Select
+                    disabled={!anilistHealthy}
                     leftAddon={<LuCalendar className={cn((params.year !== null && !!params.year) && "text-indigo-300 font-bold text-xl")} />}
                     label="Year" placeholder="Timeless" className="w-full"
                     options={[...Array(70)].map((v, idx) => getYear(new Date()) - idx + 2).map(year => ({
@@ -172,6 +182,7 @@ export function AdvancedSearchOptions() {
                     fieldLabelClass="hidden"
                 />
                 <Select
+                    disabled={!anilistHealthy}
                     leftAddon={
                         <RiSignalTowerLine className={cn((params.status !== null && !!params.status.length) && "text-indigo-300 font-bold text-xl")} />}
                     label="Status" placeholder="All statuses" className="w-full"
@@ -184,6 +195,7 @@ export function AdvancedSearchOptions() {
                     fieldLabelClass="hidden"
                 />
                 <Select
+                    disabled={!anilistHealthy}
                     leftAddon={<FaRegStar className={cn((params.minScore !== null && !!params.minScore) && "text-indigo-300 font-bold text-xl")} />}
                     placeholder="All scores" className="w-full"
                     options={[...Array(9)].map((v, idx) => 9 - idx).map(score => ({
@@ -197,6 +209,7 @@ export function AdvancedSearchOptions() {
                     })}
                 />
                 {serverStatus?.settings?.anilist?.enableAdultContent && <Switch
+                    disabled={!anilistHealthy}
                     label="Adult"
                     value={params.isAdult}
                     onValueChange={v => setParams(draft => {

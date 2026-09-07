@@ -1,5 +1,6 @@
 import { AL_MediaFormat, AL_MediaSeason, AL_MediaSort, AL_MediaStatus } from "@/api/generated/types"
 import { useListCustomSourceExtensions } from "@/api/hooks/extensions.hooks.ts"
+import { AnilistFallbackBanner } from "@/app/(main)/_components/anilist-fallback-banner"
 import { CustomLibraryBanner } from "@/app/(main)/_features/anime-library/_containers/custom-library-banner"
 import { AdvancedSearchList } from "@/app/(main)/search/_components/advanced-search-list"
 import { AdvancedSearchOptions } from "@/app/(main)/search/_components/advanced-search-options"
@@ -58,6 +59,7 @@ export default function Page() {
         <>
             <CustomLibraryBanner discrete />
             <PageWrapper data-search-page-container className="space-y-6 px-4 md:p-8 pt-0 pb-10">
+                <AnilistFallbackBanner />
                 <div className="flex items-center gap-3">
                     <SeaLink href={`/discover`}>
                         <Button leftIcon={<LuCompass className="text-xl" />} rounded intent="gray-outline" size="md">

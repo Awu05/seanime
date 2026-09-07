@@ -47,6 +47,15 @@ func (a *App) simklEnabledFor(profileID string) func() bool {
 	}
 }
 
+// discoveryAvailableFor returns whether Components 2-4's lighter SIMKL fallback gate is open for
+// profileID: just a configured client_id, no OAuth/AccessToken/Enabled requirement (contrast
+// with simklEnabledFor, Component 1's stricter gate).
+func (a *App) discoveryAvailableFor(profileID string) func() bool {
+	return func() bool {
+		return syncpkg.DiscoveryAvailable(a.simklClientIdFor(profileID))
+	}
+}
+
 // wrapAnilistPlatform wraps raw with MirroringPlatform, then FallbackPlatform, for the given
 // profile. This is the ONLY place that should ever construct either wrapper - every code path
 // that installs or hands out an AniList platform for a profile must go through this, or SIMKL
@@ -62,9 +71,10 @@ func (a *App) wrapAnilistPlatform(raw platform.Platform, profileID string) platf
 	simklClient := syncpkg.NewResolvingSimklClient(simkl.DefaultHTTPClient, profileID, a.simklTokenLookup, a.simklClientIdFor)
 	simklEnabled := a.simklEnabledFor(profileID)
 	mirrored := syncpkg.NewMirroringPlatform(raw, simklClient, a.Database, profileID, simklEnabled)
+	discoverySimklClient := simkl.NewAPIClient(simkl.DefaultHTTPClient, "", a.simklClientIdFor(profileID))
 	return syncpkg.NewFallbackPlatform(mirrored, simklClient, a.Database, profileID, simklEnabled, func() bool {
 		return shared_platform.IsWorking.Load()
-	})
+	}, a.discoveryAvailableFor(profileID), discoverySimklClient)
 }
 
 // setDefaultAnilistPlatform is the ONLY place that should call a.AnilistPlatformRef.Set(...)

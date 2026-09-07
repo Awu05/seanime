@@ -10,6 +10,7 @@ import (
 	"seanime/internal/constants"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
+	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/report"
 	"seanime/internal/user"
 	"seanime/internal/util"
@@ -37,6 +38,7 @@ type Status struct {
 	VersionName           string                        `json:"versionName"`
 	ThemeSettings         *models.Theme                 `json:"themeSettings"`
 	IsOffline             bool                          `json:"isOffline"`
+	AnilistHealthy        bool                          `json:"anilistHealthy"`
 	MediastreamSettings   *models.MediastreamSettings   `json:"mediastreamSettings"`
 	TorrentstreamSettings *models.TorrentstreamSettings `json:"torrentstreamSettings"`
 	DebridSettings        *models.DebridSettings        `json:"debridSettings"`
@@ -59,6 +61,7 @@ func (h *Handler) newRestrictedStatus() *Status {
 		ServerReady:       h.App.ServerReady,
 		ServerHasPassword: h.App.Config.Server.Password != "",
 		MultiUserEnabled:  h.App.MultiUserEnabled,
+		AnilistHealthy:    shared_platform.EffectiveAnilistHealthy(),
 	}
 }
 
@@ -140,6 +143,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		VersionName:           constants.VersionName,
 		ThemeSettings:         theme,
 		IsOffline:             h.App.Config.Server.Offline,
+		AnilistHealthy:        shared_platform.EffectiveAnilistHealthy(),
 		MediastreamSettings:   h.getMediastreamSettings(c),
 		TorrentstreamSettings: h.getTorrentstreamSettings(c),
 		DebridSettings:        h.getDebridSettings(c),

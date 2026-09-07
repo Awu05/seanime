@@ -1,7 +1,8 @@
 import { useGetMissingEpisodes } from "@/api/hooks/anime_entries.hooks"
-import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
+import { AnilistFallbackBanner } from "@/app/(main)/_components/anilist-fallback-banner"
 import { CustomLibraryBanner } from "@/app/(main)/_features/anime-library/_containers/custom-library-banner"
 import { PluginWebviewSlot } from "@/app/(main)/_features/plugin/webview/plugin-webviews"
+import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { MissingEpisodes } from "@/app/(main)/schedule/_components/missing-episodes"
 import { ThisSeasonView } from "@/app/(main)/schedule/_components/this-season-view"
 import { UpcomingEpisodes } from "@/app/(main)/schedule/_containers/upcoming-episodes.tsx"
@@ -38,6 +39,7 @@ export default function Page() {
             <PageWrapper
                 className="p-4 sm:p-8 space-y-10 pb-10"
             >
+                <AnilistFallbackBanner />
                 <Tabs value={tab} onValueChange={setTab}>
                     <TabsList>
                         <TabsTrigger value="calendar">Calendar</TabsTrigger>

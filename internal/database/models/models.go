@@ -76,6 +76,9 @@ type AnilistSettings struct {
 	EnableAdultContent bool `gorm:"column:enable_adult_content" json:"enableAdultContent"`
 	BlurAdultContent   bool `gorm:"column:blur_adult_content" json:"blurAdultContent"`
 	DisableCacheLayer  bool `gorm:"column:disable_cache_layer" json:"disableCacheLayer"`
+	// v4.4+ - manual testing override: forces the Discover/Search/Schedule/Details SIMKL fallback
+	// to engage even while AniList is healthy, so it can be verified without a real outage.
+	ForceSimklFallback bool `gorm:"column:force_simkl_fallback" json:"forceSimklFallback"`
 }
 
 type LibrarySettings struct {
