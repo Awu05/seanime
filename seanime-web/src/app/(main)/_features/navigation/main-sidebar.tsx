@@ -169,6 +169,7 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
     const router = useRouter()
     const pathname = usePathname()
     const serverStatus = useServerStatus()
+    const currentProfile = useAtomValue(currentProfileAtom)
 
     // Commands
     const { setSeaCommandOpen } = useSeaCommand()
@@ -293,6 +294,13 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
                 intent="alert-solid"
             >{autoDownloaderQueueCount}</Badge> : undefined,
         }] : [],
+        ...(currentProfile?.isAdmin) ? [{
+            id: "activity",
+            iconType: MdOutlineConnectWithoutContact,
+            name: "Activity",
+            href: "/activity",
+            isCurrent: pathname === "/activity",
+        }] : [],
     ], [
         pathname,
         missingEpisodeCount,
@@ -307,6 +315,7 @@ function SidebarNavigation({ isCollapsed, containerRef }: { isCollapsed: boolean
         activeTorrentCount.downloading,
         activeTorrentCount.paused,
         autoDownloaderQueueCount,
+        currentProfile?.isAdmin,
     ])
 
     // Plugins
