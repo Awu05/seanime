@@ -2689,6 +2689,46 @@ export type ExtensionRepo_UpdateData = {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * - Filepath: internal/handlers/admin_activity.go
+ * - Filename: admin_activity.go
+ * - Package: handlers
+ */
+export type AdminActivityConnection = {
+    profileId: string
+    profileName: string
+    platform: string
+    connectedAt?: string
+}
+
+/**
+ * - Filepath: internal/handlers/admin_activity.go
+ * - Filename: admin_activity.go
+ * - Package: handlers
+ */
+export type AdminActivitySnapshot = {
+    connections?: Array<AdminActivityConnection>
+    streams?: Array<AdminActivityStream>
+}
+
+/**
+ * - Filepath: internal/handlers/admin_activity.go
+ * - Filename: admin_activity.go
+ * - Package: handlers
+ */
+export type AdminActivityStream = {
+    profileId: string
+    profileName: string
+    mediaId: number
+    episodeNumber: number
+    title: string
+    progressPercentage: number
+    downloadSpeed: string
+    uploadSpeed: string
+    size: string
+    seeders: number
+}
+
+/**
  * - Filepath: internal/handlers/docs.go
  * - Filename: docs.go
  * - Package: handlers
@@ -2950,10 +2990,14 @@ export type SimklSettingsResponse = {
  * - Filename: simkl.go
  * - Package: handlers
  * @description
- *  SimklSyncStatusResponse reports how many SIMKL sync rows are still queued for delivery.
+ *  SimklSyncStatusResponse reports how many SIMKL sync rows are still queued for delivery, and
+ *  whether a "sync now" seed is still running. Seeding is checked first by the frontend: only
+ *  once it's false can Pending==0 be trusted as "nothing left to do" rather than "nothing enqueued
+ *  yet".
  */
 export type SimklSyncStatusResponse = {
     pending: number
+    seeding: boolean
 }
 
 /**

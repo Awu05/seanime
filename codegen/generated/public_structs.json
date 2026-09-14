@@ -27900,6 +27900,902 @@
     "comments": []
   },
   {
+    "filepath": "../internal/api/simkl/all_items.go",
+    "filename": "all_items.go",
+    "name": "AllItemsShow",
+    "formattedName": "AllItemsShow",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Title",
+        "jsonName": "title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Poster",
+        "jsonName": "poster",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Year",
+        "jsonName": "year",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AnimeType",
+        "jsonName": "anime_type",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Ids",
+        "jsonName": "ids",
+        "goType": "Ids",
+        "typescriptType": "Ids",
+        "usedTypescriptType": "Ids",
+        "usedStructName": "simkl.Ids",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " AllItemsShow is the show-metadata block nested in AllItemsEntry - named (not an anonymous",
+      " inline struct) specifically so test files across multiple tasks in this plan can construct it",
+      " as `simkl.AllItemsShow{...}` without each having to retype an identical anonymous struct shape",
+      " (anonymous struct literals must match field-for-field including tags to compile, which is",
+      " fragile to duplicate by hand across files)."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/all_items.go",
+    "filename": "all_items.go",
+    "name": "AllItemsEntry",
+    "formattedName": "AllItemsEntry",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Status",
+        "jsonName": "status",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "WatchedEpisodesCount",
+        "jsonName": "watched_episodes_count",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TotalEpisodesCount",
+        "jsonName": "total_episodes_count",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AddedToWatchlistAt",
+        "jsonName": "added_to_watchlist_at",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "LastWatchedAt",
+        "jsonName": "last_watched_at",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "UserRatedAt",
+        "jsonName": "user_rated_at",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "UserRating",
+        "jsonName": "user_rating",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Show",
+        "jsonName": "show",
+        "goType": "AllItemsShow",
+        "typescriptType": "AllItemsShow",
+        "usedTypescriptType": "AllItemsShow",
+        "usedStructName": "simkl.AllItemsShow",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " AllItemsEntry is one item from GET /sync/all-items/anime - the profile's current SIMKL",
+      " watchlist entry for a single anime, used to build a fallback collection when AniList is",
+      " unreachable. Field names match SIMKL's documented response schema (api.simkl.org)."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/client.go",
+    "filename": "client.go",
+    "name": "APIClient",
+    "formattedName": "APIClient",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "httpClient",
+        "jsonName": "httpClient",
+        "goType": "http.Client",
+        "typescriptType": "Client",
+        "usedTypescriptType": "Client",
+        "usedStructName": "http.Client",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "accessToken",
+        "jsonName": "accessToken",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "clientID",
+        "jsonName": "clientID",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "baseURL",
+        "jsonName": "baseURL",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/api/simkl/client.go",
+    "filename": "client.go",
+    "name": "AddToListItem",
+    "formattedName": "AddToListItem",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "AnilistID",
+        "jsonName": "AnilistID",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Status",
+        "jsonName": "Status",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " AddToListItem, ProgressItem and RatingItem are the batch-call equivalents of",
+      " AddToList/MarkProgress/SetRating's single-item parameters."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/client.go",
+    "filename": "client.go",
+    "name": "ProgressItem",
+    "formattedName": "ProgressItem",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "AnilistID",
+        "jsonName": "AnilistID",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Episode",
+        "jsonName": "Episode",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/api/simkl/client.go",
+    "filename": "client.go",
+    "name": "RatingItem",
+    "formattedName": "RatingItem",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "AnilistID",
+        "jsonName": "AnilistID",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Rating",
+        "jsonName": "Rating",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "DiscoveryIds",
+    "formattedName": "DiscoveryIds",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "SimklID",
+        "jsonName": "simkl_id",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Slug",
+        "jsonName": "slug",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " DiscoveryIds is the ids shape returned by SIMKL's public list endpoints (search, trending,",
+      " calendar) - unlike the authenticated sync endpoints, these do NOT include an \"anilist\" field;",
+      " only the single-item /anime/{id}?extended=full details endpoint does (see AnimeDetail below).",
+      " Resolving an AniList id from a DiscoveryIds requires the enrichment step in",
+      " internal/sync/discovery_fallback.go."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "SearchResult",
+    "formattedName": "SearchResult",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Title",
+        "jsonName": "title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Year",
+        "jsonName": "year",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Poster",
+        "jsonName": "poster",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Ids",
+        "jsonName": "ids",
+        "goType": "DiscoveryIds",
+        "typescriptType": "DiscoveryIds",
+        "usedTypescriptType": "DiscoveryIds",
+        "usedStructName": "simkl.DiscoveryIds",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " SearchResult is one item from GET /search/anime."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "TrendingEntry",
+    "formattedName": "TrendingEntry",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Title",
+        "jsonName": "title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Year",
+        "jsonName": "year",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Poster",
+        "jsonName": "poster",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Ids",
+        "jsonName": "ids",
+        "goType": "DiscoveryIds",
+        "typescriptType": "DiscoveryIds",
+        "usedTypescriptType": "DiscoveryIds",
+        "usedStructName": "simkl.DiscoveryIds",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " TrendingEntry is one item from GET /anime/best/{filter}."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "PremiereEntry",
+    "formattedName": "PremiereEntry",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Title",
+        "jsonName": "title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Year",
+        "jsonName": "year",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Poster",
+        "jsonName": "poster",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Date",
+        "jsonName": "date",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Ids",
+        "jsonName": "ids",
+        "goType": "DiscoveryIds",
+        "typescriptType": "DiscoveryIds",
+        "usedTypescriptType": "DiscoveryIds",
+        "usedStructName": "simkl.DiscoveryIds",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " PremiereEntry is one item from GET /anime/premieres. Live-verified",
+      " (docs/superpowers/plans/simkl-endpoint-findings.md, \"Step 3b: Premieres\"): same shape as",
+      " TrendingEntry (title/year/poster/ids) plus a premiere Date - like every other list endpoint, no",
+      " ids.anilist, so it still needs the same enrichment step as trending/search before it can be",
+      " mapped. The bare path (no filter segment) was confirmed to return exclusively future-dated,",
+      " already-ascending-by-date results, but internal/sync.FilterAndSortUpcoming still filters/sorts",
+      " explicitly rather than trusting that as a permanent guarantee of an undocumented endpoint."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "CalendarEpisode",
+    "formattedName": "CalendarEpisode",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Episode",
+        "jsonName": "episode",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Title",
+        "jsonName": "title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "URL",
+        "jsonName": "url",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " CalendarEpisode is the nested episode info in a CalendarEntry."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "CalendarEntry",
+    "formattedName": "CalendarEntry",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "SimklID",
+        "jsonName": "simkl_id",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Date",
+        "jsonName": "date",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": [
+          " ISO-8601"
+        ]
+      },
+      {
+        "name": "FinaleType",
+        "jsonName": "finale_type",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Episode",
+        "jsonName": "episode",
+        "goType": "CalendarEpisode",
+        "typescriptType": "CalendarEpisode",
+        "usedTypescriptType": "CalendarEpisode",
+        "usedStructName": "simkl.CalendarEpisode",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " CalendarEntry is one item from the anime airing calendar feed. Live-verified: unlike every",
+      " other endpoint in this file, SimklID is a bare top-level field, not nested under \"ids\" - and",
+      " there is no title/poster here at all, only date + episode number/title. Component 3's mapping",
+      " (Task 6/9) must get title/poster/AniList id from the same per-item enrichment call",
+      " (GetAnimeDetails) used for id resolution - it cannot read a title off this struct because",
+      " there isn't one."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "FullIds",
+    "formattedName": "FullIds",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Simkl",
+        "jsonName": "simkl",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Anilist",
+        "jsonName": "anilist",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Mal",
+        "jsonName": "mal",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " FullIds is the complete cross-service id crosswalk, only returned by the single-item",
+      " /anime/{id}?extended=full endpoint (never by the list endpoints above). Live-verified",
+      " (docs/superpowers/plans/simkl-endpoint-findings.md): every foreign id EXCEPT \"simkl\" itself",
+      " comes back as a quoted JSON string, not a number (e.g. \"anilist\":\"154587\") - only Simkl is a",
+      " bare int. Anilist/Mal are declared as string here to match the wire format; callers needing an",
+      " int must strconv.Atoi, treating \"\" or a parse error as \"no mapping\" (not an error) - a title",
+      " with no AniList crosswalk simply omits or empties the field rather than erroring."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/discovery.go",
+    "filename": "discovery.go",
+    "name": "AnimeDetail",
+    "formattedName": "AnimeDetail",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Title",
+        "jsonName": "title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Year",
+        "jsonName": "year",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Overview",
+        "jsonName": "overview",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Genres",
+        "jsonName": "genres",
+        "goType": "[]string",
+        "typescriptType": "Array\u003cstring\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TotalEpisodes",
+        "jsonName": "total_episodes",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Poster",
+        "jsonName": "poster",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Ids",
+        "jsonName": "ids",
+        "goType": "FullIds",
+        "typescriptType": "FullIds",
+        "usedTypescriptType": "FullIds",
+        "usedStructName": "simkl.FullIds",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " AnimeDetail is the response from GET /anime/{simklID}?extended=full."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/types.go",
+    "filename": "types.go",
+    "name": "Ids",
+    "formattedName": "Ids",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Simkl",
+        "jsonName": "simkl",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Anilist",
+        "jsonName": "anilist",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " Ids identifies a media item to SIMKL. Anilist is always set by this client since every",
+      " SIMKL sync write endpoint accepts an AniList ID directly - no separate lookup call needed."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/types.go",
+    "filename": "types.go",
+    "name": "Episode",
+    "formattedName": "Episode",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Number",
+        "jsonName": "number",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/api/simkl/types.go",
+    "filename": "types.go",
+    "name": "Season",
+    "formattedName": "Season",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Number",
+        "jsonName": "number",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Episodes",
+        "jsonName": "episodes",
+        "goType": "[]Episode",
+        "typescriptType": "Array\u003cEpisode\u003e",
+        "usedTypescriptType": "Episode",
+        "usedStructName": "simkl.Episode",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/api/simkl/types.go",
+    "filename": "types.go",
+    "name": "ShowEntry",
+    "formattedName": "ShowEntry",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "Ids",
+        "jsonName": "ids",
+        "goType": "Ids",
+        "typescriptType": "Ids",
+        "usedTypescriptType": "Ids",
+        "usedStructName": "simkl.Ids",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "To",
+        "jsonName": "to",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Episodes",
+        "jsonName": "episodes",
+        "goType": "[]Episode",
+        "typescriptType": "Array\u003cEpisode\u003e",
+        "usedTypescriptType": "Episode",
+        "usedStructName": "simkl.Episode",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Seasons",
+        "jsonName": "seasons",
+        "goType": "[]Season",
+        "typescriptType": "Array\u003cSeason\u003e",
+        "usedTypescriptType": "Season",
+        "usedStructName": "simkl.Season",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Rating",
+        "jsonName": "rating",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " ShowEntry is the per-item shape used across SIMKL's anime sync endpoints. Which fields",
+      " are set depends on the operation: To for /sync/add-to-list, Episodes for /sync/history,",
+      " Rating for /sync/ratings. Anime entries always go under the top-level \"anime\" array key."
+    ]
+  },
+  {
+    "filepath": "../internal/api/simkl/types.go",
+    "filename": "types.go",
+    "name": "PinResponse",
+    "formattedName": "PinResponse",
+    "package": "simkl",
+    "fields": [
+      {
+        "name": "UserCode",
+        "jsonName": "userCode",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "VerificationURI",
+        "jsonName": "verificationUri",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ExpiresIn",
+        "jsonName": "expiresIn",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Interval",
+        "jsonName": "interval",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " PinResponse is the response from GET /oauth/pin (step 1 of SIMKL's PIN/device flow)."
+    ]
+  },
+  {
     "filepath": "..\\internal\\continuity\\history.go",
     "filename": "history.go",
     "name": "WatchHistory",
@@ -28595,6 +29491,26 @@
         "typescriptType": "any",
         "required": false,
         "public": true,
+        "comments": []
+      },
+      {
+        "name": "rawAnilistPlatformRef",
+        "jsonName": "rawAnilistPlatformRef",
+        "goType": "",
+        "typescriptType": "any",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "platformSwitchMu",
+        "jsonName": "platformSwitchMu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
         "comments": []
       },
       {
@@ -30293,6 +31209,15 @@
     "package": "core",
     "fields": [
       {
+        "name": "ProfileID",
+        "jsonName": "ProfileID",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
         "name": "LastActive",
         "jsonName": "LastActive",
         "goType": "time.Time",
@@ -31186,6 +32111,15 @@
       {
         "name": "DisableCacheLayer",
         "jsonName": "disableCacheLayer",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ForceSimklFallback",
+        "jsonName": "forceSimklFallback",
         "goType": "bool",
         "typescriptType": "boolean",
         "required": true,
@@ -32344,6 +33278,172 @@
       }
     ],
     "comments": [],
+    "embeddedStructNames": [
+      "models.BaseModel"
+    ]
+  },
+  {
+    "filepath": "../internal/database/models/models.go",
+    "filename": "models.go",
+    "name": "SimklAccount",
+    "formattedName": "Models_SimklAccount",
+    "package": "models",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Username",
+        "jsonName": "username",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AccessToken",
+        "jsonName": "",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " SimklAccount stores the per-profile SIMKL OAuth connection, mirroring how AniList's",
+      " own per-profile account (see Account) is stored - not the single-row Mal pattern."
+    ],
+    "embeddedStructNames": [
+      "models.BaseModel"
+    ]
+  },
+  {
+    "filepath": "../internal/database/models/models.go",
+    "filename": "models.go",
+    "name": "SimklSettings",
+    "formattedName": "Models_SimklSettings",
+    "package": "models",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Enabled",
+        "jsonName": "enabled",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ClientId",
+        "jsonName": "clientId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " SimklSettings stores per-profile SIMKL sync configuration."
+    ],
+    "embeddedStructNames": [
+      "models.BaseModel"
+    ]
+  },
+  {
+    "filepath": "../internal/database/models/models.go",
+    "filename": "models.go",
+    "name": "PendingSync",
+    "formattedName": "Models_PendingSync",
+    "package": "models",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Target",
+        "jsonName": "target",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Operation",
+        "jsonName": "operation",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Payload",
+        "jsonName": "",
+        "goType": "string",
+        "typescriptType": "Array\u003cstring\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Attempts",
+        "jsonName": "attempts",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "LastError",
+        "jsonName": "lastError",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "NextAttemptAt",
+        "jsonName": "nextAttemptAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " PendingSync is a durably-queued list mutation awaiting delivery to a target service",
+      " (\"anilist\" or \"simkl\"). Rows are created when a mutation fails immediately, and deleted",
+      " once the background worker successfully delivers them."
+    ],
     "embeddedStructNames": [
       "models.BaseModel"
     ]
@@ -41447,6 +42547,63 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "ConnectedAt",
+        "jsonName": "ConnectedAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/events/websocket.go",
+    "filename": "websocket.go",
+    "name": "WSConnDTO",
+    "formattedName": "Events_WSConnDTO",
+    "package": "events",
+    "fields": [
+      {
+        "name": "ID",
+        "jsonName": "id",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Platform",
+        "jsonName": "platform",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ConnectedAt",
+        "jsonName": "connectedAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
@@ -46750,6 +47907,185 @@
     "comments": []
   },
   {
+    "filepath": "../internal/handlers/admin_activity.go",
+    "filename": "admin_activity.go",
+    "name": "AdminActivityConnection",
+    "formattedName": "AdminActivityConnection",
+    "package": "handlers",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ProfileName",
+        "jsonName": "profileName",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Platform",
+        "jsonName": "platform",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ConnectedAt",
+        "jsonName": "connectedAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/handlers/admin_activity.go",
+    "filename": "admin_activity.go",
+    "name": "AdminActivityStream",
+    "formattedName": "AdminActivityStream",
+    "package": "handlers",
+    "fields": [
+      {
+        "name": "ProfileID",
+        "jsonName": "profileId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ProfileName",
+        "jsonName": "profileName",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "MediaID",
+        "jsonName": "mediaId",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EpisodeNumber",
+        "jsonName": "episodeNumber",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Title",
+        "jsonName": "title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ProgressPercentage",
+        "jsonName": "progressPercentage",
+        "goType": "float64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "DownloadSpeed",
+        "jsonName": "downloadSpeed",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "UploadSpeed",
+        "jsonName": "uploadSpeed",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Size",
+        "jsonName": "size",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Seeders",
+        "jsonName": "seeders",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/handlers/admin_activity.go",
+    "filename": "admin_activity.go",
+    "name": "AdminActivitySnapshot",
+    "formattedName": "AdminActivitySnapshot",
+    "package": "handlers",
+    "fields": [
+      {
+        "name": "Connections",
+        "jsonName": "connections",
+        "goType": "[]AdminActivityConnection",
+        "typescriptType": "Array\u003cAdminActivityConnection\u003e",
+        "usedTypescriptType": "AdminActivityConnection",
+        "usedStructName": "handlers.AdminActivityConnection",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Streams",
+        "jsonName": "streams",
+        "goType": "[]AdminActivityStream",
+        "typescriptType": "Array\u003cAdminActivityStream\u003e",
+        "usedTypescriptType": "AdminActivityStream",
+        "usedStructName": "handlers.AdminActivityStream",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
     "filepath": "../internal/handlers/directory_selector.go",
     "filename": "directory_selector.go",
     "name": "DirectoryInfo",
@@ -47267,9 +48603,95 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "simklSeeding",
+        "jsonName": "simklSeeding",
+        "goType": "sync.Map",
+        "typescriptType": "Map",
+        "usedTypescriptType": "Map",
+        "usedStructName": "sync.Map",
+        "required": false,
+        "public": false,
+        "comments": [
+          " profileID -\u003e *atomic.Int32"
+        ]
       }
     ],
     "comments": []
+  },
+  {
+    "filepath": "../internal/handlers/simkl.go",
+    "filename": "simkl.go",
+    "name": "SimklSettingsResponse",
+    "formattedName": "SimklSettingsResponse",
+    "package": "handlers",
+    "fields": [
+      {
+        "name": "Enabled",
+        "jsonName": "enabled",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Connected",
+        "jsonName": "connected",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ClientId",
+        "jsonName": "clientId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " SimklSettingsResponse is what the settings endpoint returns. Connected is separate from",
+      " Enabled so the UI can distinguish \"no account linked yet\" from \"linked but mirroring off\"."
+    ]
+  },
+  {
+    "filepath": "../internal/handlers/simkl.go",
+    "filename": "simkl.go",
+    "name": "SimklSyncStatusResponse",
+    "formattedName": "SimklSyncStatusResponse",
+    "package": "handlers",
+    "fields": [
+      {
+        "name": "Pending",
+        "jsonName": "pending",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Seeding",
+        "jsonName": "seeding",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " SimklSyncStatusResponse reports how many SIMKL sync rows are still queued for delivery, and",
+      " whether a \"sync now\" seed is still running. Seeding is checked first by the frontend: only",
+      " once it's false can Pending==0 be trusted as \"nothing left to do\" rather than \"nothing enqueued",
+      " yet\"."
+    ]
   },
   {
     "filepath": "../internal/handlers/status.go",
@@ -47377,6 +48799,15 @@
       {
         "name": "IsOffline",
         "jsonName": "isOffline",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AnilistHealthy",
+        "jsonName": "anilistHealthy",
         "goType": "bool",
         "typescriptType": "boolean",
         "required": true,
@@ -71626,6 +73057,39 @@
         "required": false,
         "public": false,
         "comments": []
+      },
+      {
+        "name": "attachmentsOnce",
+        "jsonName": "attachmentsOnce",
+        "goType": "sync.Once",
+        "typescriptType": "Once",
+        "usedTypescriptType": "Once",
+        "usedStructName": "sync.Once",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "attachmentsErr",
+        "jsonName": "attachmentsErr",
+        "goType": "error",
+        "typescriptType": "MKVParser_error",
+        "usedTypescriptType": "MKVParser_error",
+        "usedStructName": "mkvparser.error",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "attachments",
+        "jsonName": "attachments",
+        "goType": "[]AttachmentInfo",
+        "typescriptType": "Array\u003cMKVParser_AttachmentInfo\u003e",
+        "usedTypescriptType": "MKVParser_AttachmentInfo",
+        "usedStructName": "mkvparser.AttachmentInfo",
+        "required": false,
+        "public": false,
+        "comments": []
       }
     ],
     "comments": [
@@ -78474,6 +79938,17 @@
         "jsonName": "extensionBankRef",
         "goType": "",
         "typescriptType": "any",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "refreshGroup",
+        "jsonName": "refreshGroup",
+        "goType": "singleflight.Group",
+        "typescriptType": "Group",
+        "usedTypescriptType": "Group",
+        "usedStructName": "singleflight.Group",
         "required": false,
         "public": false,
         "comments": []
@@ -90025,6 +91500,487 @@
     "comments": []
   },
   {
+    "filepath": "../internal/sync/fallback_platform.go",
+    "filename": "fallback_platform.go",
+    "name": "FallbackPlatform",
+    "formattedName": "FallbackPlatform",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "simklClient",
+        "jsonName": "simklClient",
+        "goType": "simkl.Client",
+        "typescriptType": "Client",
+        "usedTypescriptType": "Client",
+        "usedStructName": "simkl.Client",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "simklAvailable",
+        "jsonName": "simklAvailable",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "anilistHealthy",
+        "jsonName": "anilistHealthy",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "discoveryAvailable",
+        "jsonName": "discoveryAvailable",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "discoverySimklClient",
+        "jsonName": "discoverySimklClient",
+        "goType": "discoverySimklClient",
+        "typescriptType": "discoverySimklClient",
+        "usedTypescriptType": "discoverySimklClient",
+        "usedStructName": "sync.discoverySimklClient",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "cacheMu",
+        "jsonName": "cacheMu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "cached",
+        "jsonName": "cached",
+        "goType": "anilist.AnimeCollection",
+        "typescriptType": "AL_AnimeCollection",
+        "usedTypescriptType": "AL_AnimeCollection",
+        "usedStructName": "anilist.AnimeCollection",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "cachedAt",
+        "jsonName": "cachedAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " FallbackPlatform is a READ-ONLY fallback decorator. It wraps platform.Platform (embedding it, so",
+      " every method not overridden below - including every write method - passes through completely",
+      " unchanged) and overrides three reads: the two collection reads, GetAnimeCollection and",
+      " GetRawAnimeCollection (Component 1, gated on simklAvailable - a completed SIMKL OAuth",
+      " connection, since these read the user's personal watchlist), and GetAnimeDetails (Component 4,",
+      " gated on the lighter discoveryAvailable - just a configured client_id, since it only reads a",
+      " public SIMKL endpoint). All three serve SIMKL-sourced data only when the wrapped read actually",
+      " failed AND AniList is known to be down (shared_platform.IsWorking, passed in as anilistHealthy",
+      " so tests don't need global state). It never guesses proactively - a healthy AniList is",
+      " byte-for-byte today's behavior.",
+      "",
+      " It deliberately does NOT override the write path (UpdateEntryProgress / UpdateEntry /",
+      " DeleteEntry). Those are already handled correctly, end to end, one and two layers below:",
+      "   - shared_platform.CacheLayer, when IsWorking is false, does not error on a write - it queues",
+      "     the write locally (a retry row replayed by its own ticker), patches the cached",
+      "     AnimeCollection in place so the user's own UI reflects the edit immediately, and returns a",
+      "     synthetic nil.",
+      "   - MirroringPlatform sees that nil, correctly skips its own AniList-retry enqueue (CacheLayer's",
+      "     queue already owns that write), and then unconditionally attempts its best-effort SIMKL",
+      "     mirror - which IS the \"write live to SIMKL during an outage\" behavior.",
+      "",
+      " So during an AniList outage a write already reaches SIMKL live and AniList locally-queued, with",
+      " the user's own UI patched. Intercepting writes here would bypass CacheLayer's queue-and-patch",
+      " (making the user's edit invisible for the whole outage) and would open a second, independent",
+      " retry queue that can race CacheLayer's and replay AniList writes out of order.",
+      "",
+      " Install this wrapping OUTSIDE MirroringPlatform (raw -\u003e MirroringPlatform -\u003e FallbackPlatform)."
+    ],
+    "embeddedStructNames": [
+      "platform.Platform"
+    ]
+  },
+  {
+    "filepath": "../internal/sync/id_resolution_cache.go",
+    "filename": "id_resolution_cache.go",
+    "name": "IDResolutionCache",
+    "formattedName": "IDResolutionCache",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "maxConcurrency",
+        "jsonName": "maxConcurrency",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "ttl",
+        "jsonName": "ttl",
+        "goType": "time.Duration",
+        "typescriptType": "Duration",
+        "usedTypescriptType": "Duration",
+        "usedStructName": "time.Duration",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "mu",
+        "jsonName": "mu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "entries",
+        "jsonName": "entries",
+        "goType": "map[int]idResolutionEntry",
+        "typescriptType": "Record\u003cnumber, idResolutionEntry\u003e",
+        "usedTypescriptType": "idResolutionEntry",
+        "usedStructName": "sync.idResolutionEntry",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " IDResolutionCache resolves SIMKL ids to full AnimeDetail records (only entries with a valid",
+      " numeric ids.anilist survive - see ResolveMany), bounded to maxConcurrency in-flight resolver",
+      " calls at a time and caching successful resolutions for ttl (this crosswalk is static, so a long",
+      " ttl - e.g. 24h - is appropriate, independent of any short list-freshness cache the caller",
+      " applies separately). Failed/unresolved lookups are never cached, so a title that gains an",
+      " AniList mapping later, or a transient SIMKL error, is retried next call.",
+      "",
+      " The resolver function is deliberately NOT stored on this struct - it is passed fresh to each",
+      " ResolveMany call. This cache is shared process-wide (one instance serves every profile's",
+      " requests), but the resolver a caller needs is request-scoped (bound to that profile's SIMKL",
+      " client/client_id). Storing a mutable \"current resolver\" field would let one profile's",
+      " in-flight resolution race onto a different profile's client the moment a second request swapped",
+      " it mid-call. Only the cache entries are safe to share (that crosswalk isn't profile-specific)."
+    ]
+  },
+  {
+    "filepath": "../internal/sync/mirror_platform.go",
+    "filename": "mirror_platform.go",
+    "name": "MirroringPlatform",
+    "formattedName": "MirroringPlatform",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "simklClient",
+        "jsonName": "simklClient",
+        "goType": "simkl.Client",
+        "typescriptType": "Client",
+        "usedTypescriptType": "Client",
+        "usedStructName": "simkl.Client",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "queue",
+        "jsonName": "queue",
+        "goType": "PendingSyncEnqueuer",
+        "typescriptType": "PendingSyncEnqueuer",
+        "usedTypescriptType": "PendingSyncEnqueuer",
+        "usedStructName": "sync.PendingSyncEnqueuer",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "profileID",
+        "jsonName": "profileID",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "simklEnabled",
+        "jsonName": "simklEnabled",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " MirroringPlatform wraps a real platform.Platform, delegating every read method unchanged",
+      " (via interface embedding) and intercepting only the mutating methods to: (1) always",
+      " attempt the real AniList call and queue it for retry if it fails, and (2) always attempt",
+      " a best-effort SIMKL mirror afterward, regardless of whether the AniList call succeeded."
+    ],
+    "embeddedStructNames": [
+      "platform.Platform"
+    ]
+  },
+  {
+    "filepath": "../internal/sync/mirror_platform.go",
+    "filename": "mirror_platform.go",
+    "name": "UpdateProgressPayload",
+    "formattedName": "UpdateProgressPayload",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "MediaID",
+        "jsonName": "mediaId",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Progress",
+        "jsonName": "progress",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TotalEpisodes",
+        "jsonName": "totalEpisodes",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/sync/mirror_platform.go",
+    "filename": "mirror_platform.go",
+    "name": "UpdateEntryPayload",
+    "formattedName": "UpdateEntryPayload",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "MediaID",
+        "jsonName": "mediaId",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Status",
+        "jsonName": "status",
+        "goType": "anilist.MediaListStatus",
+        "typescriptType": "AL_MediaListStatus",
+        "usedTypescriptType": "AL_MediaListStatus",
+        "usedStructName": "anilist.MediaListStatus",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ScoreRaw",
+        "jsonName": "scoreRaw",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Progress",
+        "jsonName": "progress",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "StartedAt",
+        "jsonName": "startedAt",
+        "goType": "anilist.FuzzyDateInput",
+        "typescriptType": "AL_FuzzyDateInput",
+        "usedTypescriptType": "AL_FuzzyDateInput",
+        "usedStructName": "anilist.FuzzyDateInput",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "CompletedAt",
+        "jsonName": "completedAt",
+        "goType": "anilist.FuzzyDateInput",
+        "typescriptType": "AL_FuzzyDateInput",
+        "usedTypescriptType": "AL_FuzzyDateInput",
+        "usedStructName": "anilist.FuzzyDateInput",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/sync/mirror_platform.go",
+    "filename": "mirror_platform.go",
+    "name": "UpdateRepeatPayload",
+    "formattedName": "UpdateRepeatPayload",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "MediaID",
+        "jsonName": "mediaId",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Repeat",
+        "jsonName": "repeat",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/sync/mirror_platform.go",
+    "filename": "mirror_platform.go",
+    "name": "DeleteEntryPayload",
+    "formattedName": "DeleteEntryPayload",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "MediaID",
+        "jsonName": "mediaId",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EntryID",
+        "jsonName": "entryId",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/sync/mirror_platform.go",
+    "filename": "mirror_platform.go",
+    "name": "AddToCollectionPayload",
+    "formattedName": "AddToCollectionPayload",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "MediaIDs",
+        "jsonName": "mediaIds",
+        "goType": "[]int",
+        "typescriptType": "Array\u003cnumber\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/sync/worker.go",
+    "filename": "worker.go",
+    "name": "Worker",
+    "formattedName": "Worker",
+    "package": "sync",
+    "fields": [
+      {
+        "name": "store",
+        "jsonName": "store",
+        "goType": "PendingSyncStore",
+        "typescriptType": "PendingSyncStore",
+        "usedTypescriptType": "PendingSyncStore",
+        "usedStructName": "sync.PendingSyncStore",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "simklClientFor",
+        "jsonName": "simklClientFor",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "anilistPlatformFor",
+        "jsonName": "anilistPlatformFor",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "anilistHealthy",
+        "jsonName": "anilistHealthy",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " Worker flushes the PendingSync queue. simklClientFor and anilistPlatformFor resolve the",
+      " correct per-profile client/platform for each row's ProfileID at delivery time — never a",
+      " single fixed client/platform — so a multi-user deployment's retries are never delivered",
+      " through the wrong profile's AniList/SIMKL account."
+    ]
+  },
+  {
     "filepath": "../internal/testmocks/fake_manga_provider.go",
     "filename": "fake_manga_provider.go",
     "name": "FakeMangaProvider",
@@ -98650,6 +100606,69 @@
       }
     ],
     "comments": []
+  },
+  {
+    "filepath": "../internal/torrentstream/repository.go",
+    "filename": "repository.go",
+    "name": "ActiveStreamInfo",
+    "formattedName": "Torrentstream_ActiveStreamInfo",
+    "package": "torrentstream",
+    "fields": [
+      {
+        "name": "MediaID",
+        "jsonName": "MediaID",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EpisodeNumber",
+        "jsonName": "EpisodeNumber",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TorrentName",
+        "jsonName": "TorrentName",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Title",
+        "jsonName": "Title",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Status",
+        "jsonName": "Status",
+        "goType": "TorrentStatus",
+        "typescriptType": "Torrentstream_TorrentStatus",
+        "usedTypescriptType": "Torrentstream_TorrentStatus",
+        "usedStructName": "torrentstream.TorrentStatus",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " ActiveStreamInfo is a snapshot of the torrent currently streaming for a profile's",
+      " session, used by the admin activity view. MediaID/EpisodeNumber/Title are best-effort:",
+      " they come from the most recently started stream's options and the in-memory anime",
+      " cache, not a fresh lookup — a cache miss just leaves Title empty (TorrentName still",
+      " identifies the stream)."
+    ]
   },
   {
     "filepath": "../internal/torrentstream/stream.go",
