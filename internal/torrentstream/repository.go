@@ -214,6 +214,40 @@ func (r *Repository) GetPreviousStreamOptions() (*StartStreamOptions, bool) {
 	return r.previousStreamOptions.OrElse(nil), r.previousStreamOptions.IsPresent()
 }
 
+// ActiveStreamInfo is a snapshot of the torrent currently streaming for a profile's
+// session, used by the admin activity view. MediaID/EpisodeNumber/Title are best-effort:
+// they come from the most recently started stream's options and the in-memory anime
+// cache, not a fresh lookup — a cache miss just leaves Title empty (TorrentName still
+// identifies the stream).
+type ActiveStreamInfo struct {
+	MediaID       int
+	EpisodeNumber int
+	TorrentName   string
+	Title         string
+	Status        TorrentStatus
+}
+
+// GetActiveStreamInfo returns a snapshot of the torrent this repository's client is
+// currently streaming, or ok=false if nothing is actively streaming.
+func (r *Repository) GetActiveStreamInfo() (ActiveStreamInfo, bool) {
+	torrentName, status, ok := r.client.GetActiveStreamInfo()
+	if !ok {
+		return ActiveStreamInfo{}, false
+	}
+
+	info := ActiveStreamInfo{TorrentName: torrentName, Status: status}
+	if opts, hasOpts := r.GetPreviousStreamOptions(); hasOpts && opts != nil {
+		info.MediaID = opts.MediaId
+		info.EpisodeNumber = opts.EpisodeNumber
+		if r.baseAnimeCache != nil {
+			if anime, found := r.baseAnimeCache.Get(opts.MediaId); found && anime != nil {
+				info.Title = anime.GetTitleSafe()
+			}
+		}
+	}
+	return info, true
+}
+
 // SetMediaPlayerRepository sets the mediaplayer repository and listens to events.
 // This MUST be called after instantiating the repository and will run even if the module is disabled.
 //

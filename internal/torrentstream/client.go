@@ -167,6 +167,21 @@ func (c *Client) currentTorrentAndFile() (mo.Option[*torrent.Torrent], mo.Option
 	return c.currentTorrent, c.currentFile
 }
 
+// GetActiveStreamInfo returns the name and live status of the torrent currently streaming
+// for this client, or ok=false if nothing is actively streaming right now. Used by the
+// admin activity view — deliberately reads the legacy currentTorrent/currentTorrentStatus
+// pair (the "one active stream per profile session" view), not the newer activeStreams map,
+// since the admin view shows one row per profile regardless of how many tabs that profile
+// has open.
+func (c *Client) GetActiveStreamInfo() (name string, status TorrentStatus, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.currentTorrent.IsAbsent() {
+		return "", TorrentStatus{}, false
+	}
+	return c.currentTorrent.MustGet().Name(), c.currentTorrentStatus, true
+}
+
 // claimedHashes returns the infohashes any live wrapper still uses:
 // per-client active streams, the legacy current torrent, and preloaded streams.
 //
