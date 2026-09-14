@@ -61,6 +61,7 @@ const MainDebridIndexLazyRouteImport = createFileRoute('/_main/debrid/')()
 const MainAutoDownloaderIndexLazyRouteImport = createFileRoute(
   '/_main/auto-downloader/',
 )()
+const MainActivityIndexLazyRouteImport = createFileRoute('/_main/activity/')()
 const MainOfflineMangaIndexLazyRouteImport = createFileRoute(
   '/_main/offline/manga/',
 )()
@@ -217,6 +218,13 @@ const MainAutoDownloaderIndexLazyRoute =
   } as any).lazy(() =>
     import('./routes/_main/auto-downloader/index.lazy').then((d) => d.Route),
   )
+const MainActivityIndexLazyRoute = MainActivityIndexLazyRouteImport.update({
+  id: '/activity/',
+  path: '/activity/',
+  getParentRoute: () => MainRoute,
+} as any).lazy(() =>
+  import('./routes/_main/activity/index.lazy').then((d) => d.Route),
+)
 const SplashscreenCrashIndexRoute = SplashscreenCrashIndexRouteImport.update({
   id: '/splashscreen/crash/',
   path: '/splashscreen/crash/',
@@ -362,6 +370,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof MainSettingsIndexRoute
   '/public/auth/': typeof PublicAuthIndexRoute
   '/splashscreen/crash/': typeof SplashscreenCrashIndexRoute
+  '/activity/': typeof MainActivityIndexLazyRoute
   '/auto-downloader/': typeof MainAutoDownloaderIndexLazyRoute
   '/debrid/': typeof MainDebridIndexLazyRoute
   '/lists/': typeof MainListsIndexLazyRoute
@@ -403,6 +412,7 @@ export interface FileRoutesByTo {
   '/settings': typeof MainSettingsIndexRoute
   '/public/auth': typeof PublicAuthIndexRoute
   '/splashscreen/crash': typeof SplashscreenCrashIndexRoute
+  '/activity': typeof MainActivityIndexLazyRoute
   '/auto-downloader': typeof MainAutoDownloaderIndexLazyRoute
   '/debrid': typeof MainDebridIndexLazyRoute
   '/lists': typeof MainListsIndexLazyRoute
@@ -447,6 +457,7 @@ export interface FileRoutesById {
   '/_main/settings/': typeof MainSettingsIndexRoute
   '/public/auth/': typeof PublicAuthIndexRoute
   '/splashscreen/crash/': typeof SplashscreenCrashIndexRoute
+  '/_main/activity/': typeof MainActivityIndexLazyRoute
   '/_main/auto-downloader/': typeof MainAutoDownloaderIndexLazyRoute
   '/_main/debrid/': typeof MainDebridIndexLazyRoute
   '/_main/lists/': typeof MainListsIndexLazyRoute
@@ -490,6 +501,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/public/auth/'
     | '/splashscreen/crash/'
+    | '/activity/'
     | '/auto-downloader/'
     | '/debrid/'
     | '/lists/'
@@ -531,6 +543,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/public/auth'
     | '/splashscreen/crash'
+    | '/activity'
     | '/auto-downloader'
     | '/debrid'
     | '/lists'
@@ -574,6 +587,7 @@ export interface FileRouteTypes {
     | '/_main/settings/'
     | '/public/auth/'
     | '/splashscreen/crash/'
+    | '/_main/activity/'
     | '/_main/auto-downloader/'
     | '/_main/debrid/'
     | '/_main/lists/'
@@ -774,6 +788,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MainAutoDownloaderIndexLazyRouteImport
       parentRoute: typeof MainRoute
     }
+    '/_main/activity/': {
+      id: '/_main/activity/'
+      path: '/activity'
+      fullPath: '/activity/'
+      preLoaderRoute: typeof MainActivityIndexLazyRouteImport
+      parentRoute: typeof MainRoute
+    }
     '/splashscreen/crash/': {
       id: '/splashscreen/crash/'
       path: '/splashscreen/crash'
@@ -925,6 +946,7 @@ interface MainRouteChildren {
   MainOfflineIndexRoute: typeof MainOfflineIndexRoute
   MainSearchIndexRoute: typeof MainSearchIndexRoute
   MainSettingsIndexRoute: typeof MainSettingsIndexRoute
+  MainActivityIndexLazyRoute: typeof MainActivityIndexLazyRoute
   MainAutoDownloaderIndexLazyRoute: typeof MainAutoDownloaderIndexLazyRoute
   MainDebridIndexLazyRoute: typeof MainDebridIndexLazyRoute
   MainListsIndexLazyRoute: typeof MainListsIndexLazyRoute
@@ -957,6 +979,7 @@ const MainRouteChildren: MainRouteChildren = {
   MainOfflineIndexRoute: MainOfflineIndexRoute,
   MainSearchIndexRoute: MainSearchIndexRoute,
   MainSettingsIndexRoute: MainSettingsIndexRoute,
+  MainActivityIndexLazyRoute: MainActivityIndexLazyRoute,
   MainAutoDownloaderIndexLazyRoute: MainAutoDownloaderIndexLazyRoute,
   MainDebridIndexLazyRoute: MainDebridIndexLazyRoute,
   MainListsIndexLazyRoute: MainListsIndexLazyRoute,

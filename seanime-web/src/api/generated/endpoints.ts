@@ -7,6 +7,24 @@ export type ApiEndpoints = Record<string, Record<string, {
 }>>
 
 export const API_ENDPOINTS = {
+    ADMIN_ACTIVITY: {
+        GetAdminActivity: {
+            key: "ADMIN-ACTIVITY-get-admin-activity",
+            methods: ["GET"],
+            endpoint: "/api/v1/admin/activity",
+        },
+        /**
+         *  @description
+         *  Route hard-stops a profile's active torrent stream (admin only).
+         *  Idempotent: if the profile has no active stream, this still returns success, since
+         *  the desired end state (profile has no active stream) already holds.
+         */
+        TerminateProfileStream: {
+            key: "ADMIN-ACTIVITY-terminate-profile-stream",
+            methods: ["POST"],
+            endpoint: "/api/v1/admin/activity/terminate",
+        },
+    },
     ADMIN_PROFILES: {
         CreateProfile: {
             key: "ADMIN-PROFILES-create-profile",

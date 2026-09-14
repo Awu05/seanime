@@ -10,6 +10,7 @@ import (
 )
 
 type ProfileStreamSession struct {
+	ProfileID           string
 	LastActive          time.Time
 	VideoCore           *videocore.VideoCore
 	PlaybackManager     *playbackmanager.PlaybackManager
@@ -50,11 +51,26 @@ func (sm *StreamSessionManager) GetOrCreateSession(profileID string, factory fun
 	session, exists := sm.sessions[profileID]
 	if !exists {
 		session = factory(profileID)
+		session.ProfileID = profileID
 		sm.sessions[profileID] = session
 		return session, true
 	}
 	session.LastActive = time.Now()
 	return session, false
+}
+
+// PeekSession returns the profile's session without creating one if absent, unlike
+// GetOrCreateSession. Used by admin actions that must never spin up a session for a
+// profile that doesn't have one.
+func (sm *StreamSessionManager) PeekSession(profileID string) (*ProfileStreamSession, bool) {
+	if profileID == "" {
+		profileID = DefaultProfileID
+	}
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	session, exists := sm.sessions[profileID]
+	return session, exists
 }
 
 // WithSessionsLocked runs fn while holding the write lock, passing in a snapshot of
