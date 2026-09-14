@@ -65,7 +65,7 @@ func TestGetActiveStreamInfoResolvesTitleFromCache(t *testing.T) {
 	cache.Set(123, &anilist.BaseAnime{ID: 123, Title: &anilist.BaseAnime_Title{Romaji: &romaji}})
 
 	repo := &Repository{logger: util.NewLogger(), baseAnimeCache: cache}
-	repo.previousStreamOptions = mo.Some(&StartStreamOptions{MediaId: 123, EpisodeNumber: 4})
+	repo.setPreviousStreamOptions(&StartStreamOptions{MediaId: 123, EpisodeNumber: 4})
 
 	c := NewClient(repo)
 	repo.client = c

@@ -58,8 +58,13 @@ type (
 
 		onEpisodeCollectionChanged func(ec *anime.EpisodeCollection)
 
-		previousStreamOptions mo.Option[*StartStreamOptions]
-		preloadedStream       mo.Option[*preloadedStream]
+		// previousStreamOptionsMu guards previousStreamOptions. StartStream writes it and
+		// GetPreviousStreamOptions/GetActiveStreamInfo read it, from different goroutines (the
+		// latter now polled every few seconds by the admin activity endpoint) - every access must
+		// go through the getter/setter below rather than touching the field directly.
+		previousStreamOptionsMu sync.RWMutex
+		previousStreamOptions   mo.Option[*StartStreamOptions]
+		preloadedStream         mo.Option[*preloadedStream]
 		// preloadedStreamMu guards preloadedStream. PreloadStream/StartStream/StopStream/
 		// CancelPreparedStream/CleanupSession can all read or clear it from different
 		// goroutines, and claimedHashes (client.go) reads it from yet another goroutine (another
@@ -211,7 +216,17 @@ func (r *Repository) SetSettings(settings *models.TorrentstreamSettings, host st
 }
 
 func (r *Repository) GetPreviousStreamOptions() (*StartStreamOptions, bool) {
+	r.previousStreamOptionsMu.RLock()
+	defer r.previousStreamOptionsMu.RUnlock()
 	return r.previousStreamOptions.OrElse(nil), r.previousStreamOptions.IsPresent()
+}
+
+// setPreviousStreamOptions is the only writer of previousStreamOptions - see
+// previousStreamOptionsMu's doc comment on the field.
+func (r *Repository) setPreviousStreamOptions(opts *StartStreamOptions) {
+	r.previousStreamOptionsMu.Lock()
+	defer r.previousStreamOptionsMu.Unlock()
+	r.previousStreamOptions = mo.Some(opts)
 }
 
 // ActiveStreamInfo is a snapshot of the torrent currently streaming for a profile's
@@ -219,6 +234,15 @@ func (r *Repository) GetPreviousStreamOptions() (*StartStreamOptions, bool) {
 // they come from the most recently started stream's options and the in-memory anime
 // cache, not a fresh lookup — a cache miss just leaves Title empty (TorrentName still
 // identifies the stream).
+//
+// Known limitation: StartStream sets previousStreamOptions immediately (so watch-party sync
+// can see the new episode right away), but currentTorrent/currentTorrentStatus on Client
+// aren't updated until torrent selection finishes, which can take seconds. A poll landing in
+// that window pairs the new episode's title with the previous episode's progress/speed/seeders.
+// This is a narrow, self-correcting display quirk (resolves on the next poll once selection
+// completes), not a functional or data-safety issue, and isn't eliminated here since the two
+// fields live on different structs (Repository vs Client) updated by design at different points
+// in StartStream for reasons unrelated to this admin view.
 type ActiveStreamInfo struct {
 	MediaID       int
 	EpisodeNumber int

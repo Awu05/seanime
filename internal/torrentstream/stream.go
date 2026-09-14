@@ -100,7 +100,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	// DEVNOTE: Do not
 	//r.Shutdown()
 
-	r.previousStreamOptions = mo.Some(opts)
+	r.setPreviousStreamOptions(opts)
 
 	// Bumped so the readiness-polling goroutines below abort once a newer StartStream call
 	// (e.g. rapid episode switching) supersedes this one, instead of running to completion
