@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"seanime/internal/core"
-	"seanime/internal/torrentstream"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -68,54 +67,65 @@ func (h *Handler) HandleGetAdminActivity(c echo.Context) error {
 		Streams:     make([]AdminActivityStream, 0),
 	}
 
+	// Memoizes resolveProfileName within this single snapshot build, since a profile with
+	// several open tabs/streams would otherwise trigger the same DB lookup repeatedly.
+	profileNames := make(map[string]string)
+	resolveProfileName := func(profileID string) string {
+		if name, ok := profileNames[profileID]; ok {
+			return name
+		}
+		name := h.resolveProfileName(profileID)
+		profileNames[profileID] = name
+		return name
+	}
+
 	if h.App.WSEventManager != nil {
 		for _, conn := range h.App.WSEventManager.GetConnections() {
 			snapshot.Connections = append(snapshot.Connections, AdminActivityConnection{
 				ProfileID:   conn.ProfileID,
-				ProfileName: h.resolveProfileName(conn.ProfileID),
+				ProfileName: resolveProfileName(conn.ProfileID),
 				Platform:    conn.Platform,
 				ConnectedAt: conn.ConnectedAt,
 			})
 		}
 	}
 
-	type streamEntry struct {
-		profileID string
-		info      torrentstream.ActiveStreamInfo
-	}
-
-	var entries []streamEntry
+	// Only collect session pointers while the manager's lock is held - GetActiveStreamInfo
+	// below takes the client's own mutex, which a stalled websocket write can pin for an
+	// unbounded time (see client.go's monitor loop). Calling it here, instead of inside
+	// WithSessionsLocked, keeps that possible stall from also blocking session creation and
+	// settings refreshes server-wide (see WithSessionsLocked's doc comment).
+	var sessions []*core.ProfileStreamSession
 	if h.App.StreamSessionManager != nil {
-		h.App.StreamSessionManager.WithSessionsLocked(func(sessions []*core.ProfileStreamSession) {
-			for _, session := range sessions {
-				if session == nil || session.TorrentStream == nil {
-					continue
-				}
-				info, ok := session.TorrentStream.GetActiveStreamInfo()
-				if !ok {
-					continue
-				}
-				entries = append(entries, streamEntry{profileID: session.ProfileID, info: info})
-			}
+		h.App.StreamSessionManager.WithSessionsLocked(func(s []*core.ProfileStreamSession) {
+			sessions = append(sessions, s...)
 		})
 	}
 
-	for _, entry := range entries {
-		title := entry.info.Title
+	for _, session := range sessions {
+		if session == nil || session.TorrentStream == nil {
+			continue
+		}
+		info, ok := session.TorrentStream.GetActiveStreamInfo()
+		if !ok {
+			continue
+		}
+
+		title := info.Title
 		if title == "" {
-			title = entry.info.TorrentName
+			title = info.TorrentName
 		}
 		snapshot.Streams = append(snapshot.Streams, AdminActivityStream{
-			ProfileID:          entry.profileID,
-			ProfileName:        h.resolveProfileName(entry.profileID),
-			MediaID:            entry.info.MediaID,
-			EpisodeNumber:      entry.info.EpisodeNumber,
+			ProfileID:          session.ProfileID,
+			ProfileName:        resolveProfileName(session.ProfileID),
+			MediaID:            info.MediaID,
+			EpisodeNumber:      info.EpisodeNumber,
 			Title:              title,
-			ProgressPercentage: entry.info.Status.ProgressPercentage,
-			DownloadSpeed:      entry.info.Status.DownloadSpeed,
-			UploadSpeed:        entry.info.Status.UploadSpeed,
-			Size:               entry.info.Status.Size,
-			Seeders:            entry.info.Status.Seeders,
+			ProgressPercentage: info.Status.ProgressPercentage,
+			DownloadSpeed:      info.Status.DownloadSpeed,
+			UploadSpeed:        info.Status.UploadSpeed,
+			Size:               info.Status.Size,
+			Seeders:            info.Status.Seeders,
 		})
 	}
 
@@ -129,6 +139,12 @@ func (h *Handler) HandleGetAdminActivity(c echo.Context) error {
 //	@desc the desired end state (profile has no active stream) already holds.
 //	@route /api/v1/admin/activity/terminate [POST]
 //	@returns bool
+//
+// Known limitation (pre-existing in StopStream, not introduced here): StopStream stops the
+// app-level (not per-profile) mediaPlayerRepository, so on a deployment where multiple profiles
+// concurrently use an *external* media player (mpv/iina — the native browser player doesn't go
+// through this path), terminating one profile's stream could stop a different profile's external
+// player window. This is a property of the shared mediaPlayerRepository and out of scope here.
 func (h *Handler) HandleTerminateProfileStream(c echo.Context) error {
 	if !core.GetIsAdminFromContext(c) {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})
@@ -155,7 +171,13 @@ func (h *Handler) HandleTerminateProfileStream(c echo.Context) error {
 		return h.RespondWithData(c, true)
 	}
 
-	if err := session.TorrentStream.DropTorrent(); err != nil {
+	// StopStream, not DropTorrent: DropTorrent only drops torrents no session still claims, and
+	// this session's own activeStreams/currentTorrent claim is still held at this point (nothing
+	// released it), so the target torrent would never actually be dropped, currentTorrent would
+	// never clear (the row would linger in the admin table), and playback would never stop.
+	// StopStream releases this session's claim first, then drops the torrent, clears
+	// currentTorrent, and stops the native player.
+	if err := session.TorrentStream.StopStream(); err != nil {
 		return h.RespondWithError(c, err)
 	}
 
