@@ -92,10 +92,20 @@ type (
 	}
 
 	WSConn struct {
-		ID        string
-		ProfileID string
-		Platform  string
-		Conn      *websocket.Conn
+		ID          string
+		ProfileID   string
+		Platform    string
+		Conn        *websocket.Conn
+		ConnectedAt time.Time
+	}
+
+	// WSConnDTO is a safe, serializable snapshot of a WSConn — never exposes the raw
+	// *websocket.Conn.
+	WSConnDTO struct {
+		ID          string    `json:"id"`
+		ProfileID   string    `json:"profileId"`
+		Platform    string    `json:"platform"`
+		ConnectedAt time.Time `json:"connectedAt"`
 	}
 
 	WSEvent struct {
@@ -169,7 +179,7 @@ func (m *WSEventManager) AddConn(id string, profileID string, conn *websocket.Co
 		clientPlatform = platform[0]
 	}
 
-	m.Conns = append(m.Conns, &WSConn{ID: id, ProfileID: profileID, Platform: clientPlatform, Conn: conn})
+	m.Conns = append(m.Conns, &WSConn{ID: id, ProfileID: profileID, Platform: clientPlatform, Conn: conn, ConnectedAt: time.Now()})
 	m.hasHadConnection = true
 }
 
@@ -299,6 +309,27 @@ func (m *WSEventManager) GetClientPlatform(clientId string) string {
 	}
 
 	return ""
+}
+
+// GetConnections returns a safe snapshot of every live connection, for admin-facing views.
+func (m *WSEventManager) GetConnections() []WSConnDTO {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ret := make([]WSConnDTO, 0, len(m.Conns))
+	for _, conn := range m.Conns {
+		if conn == nil {
+			continue
+		}
+		ret = append(ret, WSConnDTO{
+			ID:          conn.ID,
+			ProfileID:   conn.ProfileID,
+			Platform:    conn.Platform,
+			ConnectedAt: conn.ConnectedAt,
+		})
+	}
+
+	return ret
 }
 
 func (m *WSEventManager) OnClientEvent(event *WebsocketClientEvent) {
