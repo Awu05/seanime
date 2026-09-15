@@ -58,6 +58,7 @@ export function useVideoCoreHls({
     onFatalError,
     onStalled,
     onMediaDetached,
+    onUnsupported,
 }: {
     videoElement: HTMLVideoElement | null
     streamUrl: string | undefined
@@ -66,6 +67,14 @@ export function useVideoCoreHls({
     onMediaDetached?: () => void
     onFatalError?: (error: ErrorData) => void
     onStalled?: (error: ErrorData) => void
+    // Called when neither MSE (Hls.isSupported()) nor native HLS (canPlayType) is available -
+    // e.g. older Android WebView-based TV browsers. Unlike onFatalError, there's no ErrorData to
+    // report (hls.js never initializes), so this is a separate, message-only callback. Without a
+    // caller wiring this to something that sets a persistent, guaranteed-visible error state (not
+    // just a toast - toasts are easy to miss and don't explain why the player is stuck), the video
+    // element's src is simply never set and the player is left on its loading/buffering state
+    // forever with no visible indication anything went wrong.
+    onUnsupported?: (message: string) => void
 }) {
     const hlsRef = useRef<Hls | null>(null)
     const hlsAutoPlayTriggered = useRef(false)
@@ -450,8 +459,10 @@ export function useVideoCoreHls({
             setCurrentAudioTrack(-1)
             setSetAudioTrack(() => {})
         } else {
-            hlsLog.error("HLS not supported on this browser")
-            toast.error("HLS playback not supported on this browser")
+            const message = "HLS playback is not supported on this browser."
+            hlsLog.error(message)
+            toast.error(message)
+            onUnsupported?.(message)
         }
     }, [streamUrl, videoElement, streamType])
 

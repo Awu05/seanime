@@ -1079,6 +1079,10 @@ export function VideoCore(props: VideoCoreProps) {
         onMediaDetached: onHlsMediaDetached,
         onFatalError: onHlsFatalError,
         onStalled: err => onStalled?.(`HLS stalled: ${err.error?.message || err.details}`),
+        // Routes through the same guaranteed-visible error overlay as every other fatal
+        // playback failure (see onUnsupported's doc comment in useVideoCoreHls) instead of
+        // relying solely on the transient toast fired alongside it.
+        onUnsupported: message => onError?.(message),
     })
 
     React.useEffect(() => {
