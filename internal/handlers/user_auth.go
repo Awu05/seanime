@@ -205,8 +205,9 @@ func (h *Handler) HandleChangeAdminPassword(c echo.Context) error {
 //	@returns map[string]interface{}
 func (h *Handler) HandleAdminLogin(c echo.Context) error {
 	type body struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username   string `json:"username"`
+		Password   string `json:"password"`
+		RememberMe bool   `json:"rememberMe"`
 	}
 
 	var b body
@@ -233,7 +234,8 @@ func (h *Handler) HandleAdminLogin(c echo.Context) error {
 
 	authLimiter.success(c.RealIP())
 
-	token, err := core.GenerateToken(h.App.JWTSecret, admin.ProfileID, true, "admin", 24*time.Hour)
+	lifetime := sessionLifetime(b.RememberMe)
+	token, err := core.GenerateTokenWithRemember(h.App.JWTSecret, admin.ProfileID, true, "admin", lifetime, b.RememberMe)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -244,7 +246,7 @@ func (h *Handler) HandleAdminLogin(c echo.Context) error {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
+		MaxAge:   int(lifetime.Seconds()),
 	})
 
 	return h.RespondWithData(c, map[string]interface{}{
@@ -261,6 +263,7 @@ func (h *Handler) HandleAdminLogin(c echo.Context) error {
 func (h *Handler) HandleAccessCode(c echo.Context) error {
 	type body struct {
 		AccessCode string `json:"accessCode"`
+		RememberMe bool   `json:"rememberMe"`
 	}
 
 	var b body
@@ -284,7 +287,8 @@ func (h *Handler) HandleAccessCode(c echo.Context) error {
 
 	authLimiter.success(c.RealIP())
 
-	token, err := core.GenerateToken(h.App.JWTSecret, "", false, "access", 24*time.Hour)
+	lifetime := sessionLifetime(b.RememberMe)
+	token, err := core.GenerateTokenWithRemember(h.App.JWTSecret, "", false, "access", lifetime, b.RememberMe)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -295,7 +299,7 @@ func (h *Handler) HandleAccessCode(c echo.Context) error {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
+		MaxAge:   int(lifetime.Seconds()),
 	})
 
 	return h.RespondWithData(c, map[string]interface{}{"token": token})
@@ -350,11 +354,16 @@ func (h *Handler) HandleSelectProfile(c echo.Context) error {
 	// Selecting the admin's profile with an access-code token must not grant admin scope.
 	isAdmin := core.GetIsAdminFromContext(c)
 
+	// Carry the "remember me" choice made at login (admin-login/access-code) forward into the
+	// profile-scoped token, so picking a profile doesn't silently drop back to a 24h session.
+	remember := core.GetAuthRememberFromContext(c)
+
 	scope := "profile"
 	if isAdmin {
 		scope = "admin"
 	}
-	token, err := core.GenerateToken(h.App.JWTSecret, profile.ID, isAdmin, scope, 24*time.Hour)
+	lifetime := sessionLifetime(remember)
+	token, err := core.GenerateTokenWithRemember(h.App.JWTSecret, profile.ID, isAdmin, scope, lifetime, remember)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -365,7 +374,7 @@ func (h *Handler) HandleSelectProfile(c echo.Context) error {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
+		MaxAge:   int(lifetime.Seconds()),
 	})
 
 	return h.RespondWithData(c, map[string]interface{}{

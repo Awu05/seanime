@@ -13,6 +13,10 @@ type AuthClaims struct {
 	ProfileID string `json:"profileId,omitempty"`
 	IsAdmin   bool   `json:"isAdmin"`
 	Scope     string `json:"scope"`
+	// Remember marks a token issued from a "remember me" login so renewal (see
+	// renewAuthCookieIfNeeded) keeps reissuing it with the longer remembered lifetime instead of
+	// silently dropping back to the default one.
+	Remember bool `json:"remember,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -26,10 +30,15 @@ func GenerateJWTSecret() (string, error) {
 }
 
 func GenerateToken(secret string, profileID string, isAdmin bool, scope string, duration time.Duration) (string, error) {
+	return GenerateTokenWithRemember(secret, profileID, isAdmin, scope, duration, false)
+}
+
+func GenerateTokenWithRemember(secret string, profileID string, isAdmin bool, scope string, duration time.Duration, remember bool) (string, error) {
 	claims := AuthClaims{
 		ProfileID: profileID,
 		IsAdmin:   isAdmin,
 		Scope:     scope,
+		Remember:  remember,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

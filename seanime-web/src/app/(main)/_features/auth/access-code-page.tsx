@@ -4,12 +4,13 @@ import React from "react"
 export function AccessCodePage() {
     const { mutate: submitCode, isPending } = useAuthAccessCode()
     const [accessCode, setAccessCode] = React.useState("")
+    const [rememberMe, setRememberMe] = React.useState(false)
     const [error, setError] = React.useState("")
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         setError("")
-        submitCode({ accessCode }, {
+        submitCode({ accessCode, rememberMe }, {
             onSuccess: () => {
                 window.location.href = "/profiles"
             },
@@ -36,6 +37,15 @@ export function AccessCodePage() {
                         required
                     />
                 </div>
+                <label className="flex items-center justify-center gap-2 text-sm text-gray-300">
+                    <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        className="rounded border-gray-700 bg-gray-900 text-brand-500 focus:ring-brand-500"
+                    />
+                    Remember me for 30 days
+                </label>
                 {error && <p className="text-red-400 text-sm text-center">{error}</p>}
                 <button
                     type="submit"

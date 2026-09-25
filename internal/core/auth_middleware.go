@@ -34,3 +34,11 @@ func GetAuthScopeFromContext(c interface{ Get(string) interface{} }) string {
 	}
 	return v.(string)
 }
+
+func GetAuthRememberFromContext(c interface{ Get(string) interface{} }) bool {
+	v := c.Get("authRemember")
+	if v == nil {
+		return false
+	}
+	return v.(bool)
+}

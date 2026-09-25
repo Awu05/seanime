@@ -8,12 +8,13 @@ export function LoginPage() {
     const setProfile = useSetAtom(currentProfileAtom)
     const [username, setUsername] = React.useState("")
     const [password, setPassword] = React.useState("")
+    const [rememberMe, setRememberMe] = React.useState(false)
     const [error, setError] = React.useState("")
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         setError("")
-        login({ username, password }, {
+        login({ username, password, rememberMe }, {
             onSuccess: (data) => {
                 if (data?.profile) {
                     setProfile({
@@ -58,6 +59,15 @@ export function LoginPage() {
                         required
                     />
                 </div>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        className="rounded border-gray-700 bg-gray-900 text-brand-500 focus:ring-brand-500"
+                    />
+                    Remember me for 30 days
+                </label>
                 {error && <p className="text-red-400 text-sm">{error}</p>}
                 <button
                     type="submit"

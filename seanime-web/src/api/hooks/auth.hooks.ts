@@ -108,7 +108,7 @@ export function useAuthAdminLogin() {
     const queryClient = useQueryClient()
     return useServerMutation<
         { token: string; profile: any },
-        { username: string; password: string }
+        { username: string; password: string; rememberMe?: boolean }
     >({
         endpoint: API_ENDPOINTS.USER_AUTH.AdminLogin.endpoint,
         method: API_ENDPOINTS.USER_AUTH.AdminLogin.methods[0],
@@ -126,7 +126,7 @@ export function useAuthAdminLogin() {
 export function useAuthAccessCode() {
     return useServerMutation<
         { token: string },
-        { accessCode: string }
+        { accessCode: string; rememberMe?: boolean }
     >({
         endpoint: API_ENDPOINTS.USER_AUTH.AccessCode.endpoint,
         method: API_ENDPOINTS.USER_AUTH.AccessCode.methods[0],

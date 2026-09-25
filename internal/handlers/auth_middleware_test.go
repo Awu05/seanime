@@ -110,4 +110,49 @@ func TestRenewAuthCookieIfNeeded(t *testing.T) {
 
 		assert.Empty(t, rec.Result().Cookies())
 	})
+
+	t.Run("remembered session renews at the 30-day scale, not the default one", func(t *testing.T) {
+		claims := &core.AuthClaims{
+			ProfileID: "profile-1",
+			Scope:     "profile",
+			Remember:  true,
+			RegisteredClaims: jwt.RegisteredClaims{
+				// Well past the default 12h threshold, but still under the remembered 15-day one.
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			},
+		}
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		h.renewAuthCookieIfNeeded(c, claims)
+
+		cookies := rec.Result().Cookies()
+		require.Len(t, cookies, 1, "expected renewal: 24h remaining is under the remembered 15-day threshold")
+		renewedClaims, err := core.ParseToken(secret, cookies[0].Value)
+		require.NoError(t, err)
+		assert.True(t, renewedClaims.Remember, "renewal must preserve the remember flag")
+		assert.WithinDuration(t, time.Now().Add(rememberedTokenLifetime), renewedClaims.ExpiresAt.Time, time.Minute,
+			"the reissued token should carry a fresh 30-day expiry")
+	})
+
+	t.Run("remembered session does not renew far from its own threshold", func(t *testing.T) {
+		claims := &core.AuthClaims{
+			ProfileID: "profile-1",
+			Scope:     "profile",
+			Remember:  true,
+			RegisteredClaims: jwt.RegisteredClaims{
+				// Under the default 12h threshold, but well over the remembered 15-day one -
+				// must not renew, since claims.Remember should select the remembered threshold.
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(20 * 24 * time.Hour)),
+			},
+		}
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		h.renewAuthCookieIfNeeded(c, claims)
+
+		assert.Empty(t, rec.Result().Cookies())
+	})
 }

@@ -27,15 +27,41 @@ var authTokenLifetime = 24 * time.Hour
 // full authTokenLifetime ever needs to re-login.
 var authTokenRenewalThreshold = 12 * time.Hour
 
-// renewAuthCookieIfNeeded reissues the seanime-auth cookie with a fresh authTokenLifetime if the
-// current token is within authTokenRenewalThreshold of expiring. Called after claims have already
-// been validated (and, where applicable, the profile confirmed to still exist) by the caller.
+// rememberedTokenLifetime/rememberedTokenRenewalThreshold are the "remember me" equivalents of
+// authTokenLifetime/authTokenRenewalThreshold - same sliding-renewal behavior, just scaled to a
+// 30-day session instead of 24h.
+var rememberedTokenLifetime = 30 * 24 * time.Hour
+var rememberedTokenRenewalThreshold = 15 * 24 * time.Hour
+
+// sessionLifetime is the single source of truth for the remembered-vs-default session duration -
+// every call site that mints or renews a seanime-auth token (login, access-code, select-profile,
+// renewal) goes through this instead of re-deriving the choice, so the two durations can't drift
+// out of sync between them.
+func sessionLifetime(remember bool) time.Duration {
+	if remember {
+		return rememberedTokenLifetime
+	}
+	return authTokenLifetime
+}
+
+// renewAuthCookieIfNeeded reissues the seanime-auth cookie with a fresh lifetime if the current
+// token is within its renewal threshold of expiring - authTokenLifetime/authTokenRenewalThreshold
+// normally, or the longer rememberedTokenLifetime/rememberedTokenRenewalThreshold when the token
+// carries claims.Remember, so a "remember me" session keeps renewing at its own 30-day scale
+// instead of silently dropping back to a 24h one. Called after claims have already been validated
+// (and, where applicable, the profile confirmed to still exist) by the caller.
 func (h *Handler) renewAuthCookieIfNeeded(c echo.Context, claims *core.AuthClaims) {
-	if claims.ExpiresAt == nil || time.Until(claims.ExpiresAt.Time) >= authTokenRenewalThreshold {
+	lifetime := sessionLifetime(claims.Remember)
+	threshold := authTokenRenewalThreshold
+	if claims.Remember {
+		threshold = rememberedTokenRenewalThreshold
+	}
+
+	if claims.ExpiresAt == nil || time.Until(claims.ExpiresAt.Time) >= threshold {
 		return
 	}
 
-	newToken, err := core.GenerateToken(h.App.JWTSecret, claims.ProfileID, claims.IsAdmin, claims.Scope, authTokenLifetime)
+	newToken, err := core.GenerateTokenWithRemember(h.App.JWTSecret, claims.ProfileID, claims.IsAdmin, claims.Scope, lifetime, claims.Remember)
 	if err != nil {
 		return
 	}
@@ -46,7 +72,7 @@ func (h *Handler) renewAuthCookieIfNeeded(c echo.Context, claims *core.AuthClaim
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(authTokenLifetime.Seconds()),
+		MaxAge:   int(lifetime.Seconds()),
 	})
 }
 
@@ -140,6 +166,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 				c.Set("profileId", claims.ProfileID)
 				c.Set("isAdmin", claims.IsAdmin)
 				c.Set("authScope", claims.Scope)
+				c.Set("authRemember", claims.Remember)
 				c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
 				return next(c)
 			}
@@ -153,6 +180,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 		c.Set("profileId", claims.ProfileID)
 		c.Set("isAdmin", claims.IsAdmin)
 		c.Set("authScope", claims.Scope)
+		c.Set("authRemember", claims.Remember)
 		c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
 
 		return next(c)
@@ -184,6 +212,7 @@ func (h *Handler) tryExtractProfile(c echo.Context) bool {
 		c.Set("profileId", claims.ProfileID)
 		c.Set("isAdmin", claims.IsAdmin)
 		c.Set("authScope", claims.Scope)
+		c.Set("authRemember", claims.Remember)
 		c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
 		return true
 	}
