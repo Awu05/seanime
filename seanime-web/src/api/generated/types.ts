@@ -5655,6 +5655,18 @@ export type Torrentstream_FilePreview = {
  * - Filepath: internal/torrentstream/stream.go
  * - Filename: stream.go
  * - Package: torrentstream
+ * @description
+ *  PlaybackFailureResponse is RetryAfterPlaybackFailure's result.
+ */
+export type Torrentstream_PlaybackFailureResponse = {
+    unsupportedVideoCodecs?: Array<string>
+    retrying: boolean
+}
+
+/**
+ * - Filepath: internal/torrentstream/stream.go
+ * - Filename: stream.go
+ * - Package: torrentstream
  */
 export type Torrentstream_PlaybackType = "default" | "externalPlayerLink" | "nativeplayer" | "none" | "noneAndAwait"
 
@@ -5690,6 +5702,7 @@ export type Torrentstream_StartStreamOptions = {
     PlaybackType: Torrentstream_PlaybackType
     BatchEpisodeFiles?: HibikeTorrent_BatchEpisodeFiles
     UnsupportedVideoCodecs?: Array<string>
+    ExcludedReleases?: Array<string>
 }
 
 /**

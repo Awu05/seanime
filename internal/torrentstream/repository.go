@@ -64,7 +64,10 @@ type (
 		// go through the getter/setter below rather than touching the field directly.
 		previousStreamOptionsMu sync.RWMutex
 		previousStreamOptions   mo.Option[*StartStreamOptions]
-		preloadedStream         mo.Option[*preloadedStream]
+		// autoSelectedRelease is the release name auto-select picked for the current stream ("" if
+		// it was picked manually), guarded by previousStreamOptionsMu.
+		autoSelectedRelease string
+		preloadedStream     mo.Option[*preloadedStream]
 		// preloadedStreamMu guards preloadedStream. PreloadStream/StartStream/StopStream/
 		// CancelPreparedStream/CleanupSession can all read or clear it from different
 		// goroutines, and claimedHashes (client.go) reads it from yet another goroutine (another
@@ -94,6 +97,7 @@ type (
 		File       *itorrent.File
 		Options    *StartStreamOptions
 		CancelFunc context.CancelFunc
+		Release    string
 	}
 
 	NewRepositoryOptions struct {
@@ -222,11 +226,34 @@ func (r *Repository) GetPreviousStreamOptions() (*StartStreamOptions, bool) {
 }
 
 // setPreviousStreamOptions is the only writer of previousStreamOptions - see
-// previousStreamOptionsMu's doc comment on the field.
+// previousStreamOptionsMu's doc comment on the field. It also clears autoSelectedRelease, which
+// belongs to the previous stream until the new one's selection finishes.
 func (r *Repository) setPreviousStreamOptions(opts *StartStreamOptions) {
 	r.previousStreamOptionsMu.Lock()
 	defer r.previousStreamOptionsMu.Unlock()
 	r.previousStreamOptions = mo.Some(opts)
+	r.autoSelectedRelease = ""
+}
+
+// setAutoSelectedRelease records the release picked for opts, unless a newer StartStream has
+// replaced opts meanwhile - selection is slow, so a superseded call can finish after the new one.
+func (r *Repository) setAutoSelectedRelease(opts *StartStreamOptions, release string) {
+	r.previousStreamOptionsMu.Lock()
+	defer r.previousStreamOptionsMu.Unlock()
+	if r.previousStreamOptions.OrElse(nil) == opts {
+		r.autoSelectedRelease = release
+	}
+}
+
+// takeAutoSelectedRelease returns the current stream's auto-selected release together with the
+// options it was started with, and clears the release so a duplicate failure report for the same
+// stream can't trigger a second retry.
+func (r *Repository) takeAutoSelectedRelease() (string, *StartStreamOptions) {
+	r.previousStreamOptionsMu.Lock()
+	defer r.previousStreamOptionsMu.Unlock()
+	release := r.autoSelectedRelease
+	r.autoSelectedRelease = ""
+	return release, r.previousStreamOptions.OrElse(nil)
 }
 
 // ActiveStreamInfo is a snapshot of the torrent currently streaming for a profile's

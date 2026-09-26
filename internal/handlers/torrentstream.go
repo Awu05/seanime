@@ -215,6 +215,26 @@ func (h *Handler) HandleTorrentstreamStopStream(c echo.Context) error {
 	return h.RespondWithData(c, true)
 }
 
+// HandleTorrentstreamPlaybackFailed
+//
+//	@summary reports that the client's browser couldn't decode the current torrent stream.
+//	@desc Retries auto-select once with the failed release excluded, and returns the codecs that release uses so the client can remember them as unsupported.
+//	@returns torrentstream.PlaybackFailureResponse
+//	@route /api/v1/torrentstream/playback-failed [POST]
+func (h *Handler) HandleTorrentstreamPlaybackFailed(c echo.Context) error {
+	type body struct {
+		ClientId string `json:"clientId"`
+	}
+
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+
+	session := h.getStreamSession(c)
+	return h.RespondWithData(c, session.TorrentStream.RetryAfterPlaybackFailure(getRequestClientId(c, b.ClientId)))
+}
+
 // HandleTorrentstreamDropTorrent
 //
 //	@summary drops a torrent stream.

@@ -1,4 +1,6 @@
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
+import { useTorrentstreamPlaybackFailed } from "@/api/hooks/torrentstream.hooks"
+import { learnUnsupportedVideoCodecs } from "@/app/(main)/_features/video-core/_lib/codec-utils"
 import {
     MKVParser_SubtitleEvent,
     NativePlayer_PlaybackInfo,
@@ -39,6 +41,7 @@ export function NativePlayer() {
     const [miniPlayer, setMiniPlayer] = useAtom(vc_miniPlayer)
     const subtitleManager = useAtomValue(vc_subtitleManager)
     const _preserveMiniPlayerRef = React.useRef(false)
+    const { mutate: reportTorrentPlaybackFailure } = useTorrentstreamPlaybackFailed()
 
     // AniSkip
     const { data: aniSkipData } = useSkipData(state?.playbackInfo?.media?.idMal, state?.playbackInfo?.episode?.progressNumber ?? -1)
@@ -311,6 +314,31 @@ export function NativePlayer() {
     // spinner forever with no indication anything was wrong.
     function handleFatalPlaybackError(reason: string) {
         log.error("Fatal playback error", reason)
+
+        // The browser couldn't decode this torrent release: let the server remember its codecs for
+        // this device and retry auto-select with another release. If it retries, its
+        // "open-and-await" event puts the player back into a loading state on its own.
+        const errorCode = videoElement?.error?.code
+        const isDecodeFailure = errorCode === MediaError.MEDIA_ERR_DECODE || errorCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+        if (isDecodeFailure && lastPlaybackTypeRef.current === "torrent") {
+            reportTorrentPlaybackFailure({ clientId: clientId || "" }, {
+                onSuccess: data => {
+                    learnUnsupportedVideoCodecs(data?.unsupportedVideoCodecs ?? [])
+                    if (data?.retrying) {
+                        toast.info("This release can't be played on this device, trying another one...")
+                    } else {
+                        showFatalPlaybackError(reason)
+                    }
+                },
+                onError: () => showFatalPlaybackError(reason),
+            })
+            return
+        }
+
+        showFatalPlaybackError(reason)
+    }
+
+    function showFatalPlaybackError(reason: string) {
         toast.error("An error occurred while playing the stream. " + reason)
         setState(draft => {
             draft.playbackError = reason

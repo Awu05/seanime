@@ -4,8 +4,10 @@ import (
 	"context"
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
 	"seanime/internal/library/anime"
+	"strings"
 	"testing"
 
+	"github.com/5rahim/habari"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
@@ -280,6 +282,61 @@ func TestAutoSelect_SortDeprioritizesUnsupportedVideoCodecs(t *testing.T) {
 		s.sort(torrents, profile)
 		assert.Equal(t, []string{hevc.Name, h264.Name}, []string{torrents[0].Name, torrents[1].Name})
 	})
+}
+
+// TestAutoSelect_UnsupportedCodecMatchesReleaseTags verifies that an unsupported codec is detected
+// under the tags releases actually use for it, not just its canonical name - e.g. an HEVC release
+// tagged only "x265" must still be penalized when the client reports HEVC as unsupported.
+func TestAutoSelect_UnsupportedCodecMatchesReleaseTags(t *testing.T) {
+	s := newTestAutoSelect()
+
+	tests := []struct {
+		name      string
+		codec     string
+		penalized bool
+	}{
+		{"[SubsPlease] Show - 01 (1080p) [x265].mkv", "HEVC", true},
+		{"[Erai-raws] Show - 01 [1080p][H.265][Multiple Subtitle].mkv", "HEVC", true},
+		{"[Group] Show - 01 [1080p][H265 AAC].mkv", "HEVC", true},
+		{"[Group] Show - 01 [1080p][Hi10P].mkv", "Hi10P", true},
+		{"[Group] Show - 01 [1080p][x264 10bit].mkv", "Hi10P", true},
+		{"[Group] Show - 01 [1080p 10-bit].mkv", "Hi10P", true},
+		{"[Judas] Show - 01 [1080p][HEVC x265 10bit].mkv", "Hi10P", false},
+		{"[Group] Show - 01 [1080p AV1 10bit].mkv", "Hi10P", false},
+		{"[Group] Show - 01 [1080p AV1 OPUS].mkv", "AV1", true},
+		{"[SubsPlease] Show - 01 (1080p) [ABCD1234].mkv", "HEVC", false},
+		{"[SubsPlease] Show - 01 (1080p) [ABCD1234].mkv", "Hi10P", false},
+		{"[SubsPlease] Show - 01 (1080p) [ABCD1234].mkv", "AV1", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.codec+" "+tt.name, func(t *testing.T) {
+			c := &candidate{
+				torrent:   &hibiketorrent.AnimeTorrent{Name: tt.name},
+				parsed:    habari.Parse(tt.name),
+				lowerName: strings.ToLower(tt.name),
+			}
+			_, bonus := s.calculateScoreBreakdown(c, nil, tt.codec)
+			assert.Equal(t, tt.penalized, bonus < 0)
+		})
+	}
+}
+
+func TestDetectVideoCodecs(t *testing.T) {
+	assert.Equal(t, []string{"HEVC"}, DetectVideoCodecs("[Judas] Show - 01 [1080p][HEVC x265 10bit].mkv"))
+	assert.Equal(t, []string{"Hi10P"}, DetectVideoCodecs("[Group] Show - 01 [1080p][x264 10bit].mkv"))
+	assert.Equal(t, []string{"AV1"}, DetectVideoCodecs("[Group] Show - 01 [1080p AV1 OPUS].mkv"))
+	assert.Empty(t, DetectVideoCodecs("[SubsPlease] Show - 01 (1080p) [ABCD1234].mkv"))
+}
+
+// TestExcludeReleases guards the playback-failure retry: a release that already failed to play
+// on the client must never be auto-selected again for that retry, matched case-insensitively.
+func TestExcludeReleases(t *testing.T) {
+	a := &hibiketorrent.AnimeTorrent{Name: "[Group] Show - 01 [1080p][Hi10P].mkv"}
+	b := &hibiketorrent.AnimeTorrent{Name: "[SubsPlease] Show - 01 (1080p).mkv"}
+
+	assert.Equal(t, []*hibiketorrent.AnimeTorrent{b}, excludeReleases([]*hibiketorrent.AnimeTorrent{a, b}, []string{strings.ToUpper(a.Name)}))
+	assert.Equal(t, []*hibiketorrent.AnimeTorrent{a, b}, excludeReleases([]*hibiketorrent.AnimeTorrent{a, b}, nil))
 }
 
 func TestAutoSelect_Filter_SourceTokenDoesNotMatchInsideWord(t *testing.T) {

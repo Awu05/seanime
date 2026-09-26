@@ -24,19 +24,58 @@ export function checkCodecSupport(
     return false
 }
 
-// KNOWN_PROBLEM_CODECS lists codecs known to commonly lack browser support (e.g. HEVC requires a
-// license most browsers don't ship), each paired with a representative MIME codec string to probe
-// via HTMLMediaElement.canPlayType. Only flagged as unsupported on a definite "no" (empty string)
-// - "maybe" is treated as playable to avoid wrongly penalizing browsers with real support
-// (e.g. Safari, or Chromium with OS/hardware HEVC decode) during torrent auto-select.
+// KNOWN_PROBLEM_CODECS lists codecs common in anime releases that many browsers/devices can't
+// decode (HEVC needs a license most browsers don't ship; 10-bit H.264 and AV1 lack hardware
+// decoders on many TV devices), each paired with a representative MIME codec string to probe via
+// HTMLMediaElement.canPlayType. Names must match the server's knownProblemVideoCodecs
+// (internal/torrents/autoselect/comparison.go). Only flagged as unsupported on a definite "no"
+// (empty string) - "maybe" is treated as playable to avoid wrongly penalizing browsers with real
+// support (e.g. Safari, or Chromium with OS/hardware HEVC decode) during torrent auto-select.
 const KNOWN_PROBLEM_CODECS: { name: string, mimeCodec: string }[] = [
     { name: "HEVC", mimeCodec: "video/mp4; codecs=\"hvc1.1.6.L93.B0\"" },
+    { name: "Hi10P", mimeCodec: "video/mp4; codecs=\"avc1.6E0028\"" },
+    { name: "AV1", mimeCodec: "video/mp4; codecs=\"av01.0.08M.10\"" },
 ]
 
 export function getUnsupportedVideoCodecs(canPlayType: (codec: string) => "probably" | "maybe" | ""): string[] {
     return KNOWN_PROBLEM_CODECS
         .filter(({ mimeCodec }) => canPlayType(mimeCodec) === "")
         .map(({ name }) => name)
+}
+
+const LEARNED_UNSUPPORTED_CODECS_KEY = "sea-learned-unsupported-video-codecs"
+// A learned codec can be a false positive (the same load error also covers non-codec failures like
+// a broken stream response), so it expires instead of penalizing the codec on this device forever.
+const LEARNED_CODEC_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+function readLearnedCodecs(): Record<string, number> {
+    try {
+        const parsed: unknown = JSON.parse(localStorage.getItem(LEARNED_UNSUPPORTED_CODECS_KEY) ?? "{}")
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, number> : {}
+    }
+    catch {
+        return {}
+    }
+}
+
+// Codecs this device actually failed to decode during playback. canPlayType alone isn't reliable:
+// Android WebView, for instance, can report 10-bit H.264 as playable when the TV's hardware
+// decoder can't handle it.
+export function getLearnedUnsupportedVideoCodecs(now = Date.now()): string[] {
+    return Object.entries(readLearnedCodecs())
+        .filter(([, learnedAt]) => typeof learnedAt === "number" && now - learnedAt < LEARNED_CODEC_TTL_MS)
+        .map(([codec]) => codec)
+}
+
+export function learnUnsupportedVideoCodecs(codecs: string[], now = Date.now()) {
+    if (!codecs.length) return
+    try {
+        const learned = readLearnedCodecs()
+        for (const codec of codecs) learned[codec] = now
+        localStorage.setItem(LEARNED_UNSUPPORTED_CODECS_KEY, JSON.stringify(learned))
+    }
+    catch {
+    }
 }
 
 function replaceMimeContainer(codec: string, from: string, to: string): string {

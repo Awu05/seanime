@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
-import { checkCodecSupport, getUnsupportedVideoCodecs } from "./codec-utils"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { checkCodecSupport, getLearnedUnsupportedVideoCodecs, getUnsupportedVideoCodecs, learnUnsupportedVideoCodecs } from "./codec-utils"
 
 describe("checkCodecSupport", () => {
     const defaultOptions = {
@@ -69,15 +69,59 @@ describe("checkCodecSupport", () => {
 })
 
 describe("getUnsupportedVideoCodecs", () => {
-    it("flags HEVC when the browser reports no support at all", () => {
-        expect(getUnsupportedVideoCodecs(() => "")).toEqual(["HEVC"])
+    it("flags every known problem codec when the browser reports no support at all", () => {
+        expect(getUnsupportedVideoCodecs(() => "")).toEqual(["HEVC", "Hi10P", "AV1"])
     })
 
-    it("does not flag HEVC when the browser probably supports it", () => {
+    it("flags only the codecs the browser rejects", () => {
+        const canPlayType = (codec: string) => codec.includes("avc1.6E") ? "" as const : "probably" as const
+        expect(getUnsupportedVideoCodecs(canPlayType)).toEqual(["Hi10P"])
+    })
+
+    it("does not flag codecs the browser probably supports", () => {
         expect(getUnsupportedVideoCodecs(() => "probably")).toEqual([])
     })
 
-    it("does not flag HEVC when the browser maybe supports it (avoid false positives)", () => {
+    it("does not flag codecs the browser maybe supports (avoid false positives)", () => {
         expect(getUnsupportedVideoCodecs(() => "maybe")).toEqual([])
+    })
+})
+
+describe("learned unsupported video codecs", () => {
+    beforeEach(() => {
+        const store = new Map<string, string>()
+        vi.stubGlobal("localStorage", {
+            getItem: (key: string) => store.get(key) ?? null,
+            setItem: (key: string, value: string) => void store.set(key, value),
+        })
+    })
+
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it("remembers codecs across calls without duplicates", () => {
+        learnUnsupportedVideoCodecs(["Hi10P"])
+        learnUnsupportedVideoCodecs(["Hi10P", "AV1"])
+        expect(getLearnedUnsupportedVideoCodecs()).toEqual(["Hi10P", "AV1"])
+    })
+
+    it("forgets a codec 30 days after it was last learned", () => {
+        const day = 24 * 60 * 60 * 1000
+        learnUnsupportedVideoCodecs(["Hi10P"], 0)
+        learnUnsupportedVideoCodecs(["AV1"], 20 * day)
+        expect(getLearnedUnsupportedVideoCodecs(31 * day)).toEqual(["AV1"])
+    })
+
+    it("ignores corrupted storage", () => {
+        localStorage.setItem("sea-learned-unsupported-video-codecs", "{not json")
+        expect(getLearnedUnsupportedVideoCodecs()).toEqual([])
+    })
+
+    it("works without storage access", () => {
+        vi.unstubAllGlobals()
+        vi.stubGlobal("localStorage", undefined)
+        learnUnsupportedVideoCodecs(["HEVC"])
+        expect(getLearnedUnsupportedVideoCodecs()).toEqual([])
     })
 })

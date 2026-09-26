@@ -2344,6 +2344,17 @@ export type TorrentstreamStartStream_Variables = {
 /**
  * - Filepath: internal/handlers/torrentstream.go
  * - Filename: torrentstream.go
+ * - Endpoint: /api/v1/torrentstream/playback-failed
+ * @description
+ * Route reports that the client's browser couldn't decode the current torrent stream.
+ */
+export type TorrentstreamPlaybackFailed_Variables = {
+    clientId: string
+}
+
+/**
+ * - Filepath: internal/handlers/torrentstream.go
+ * - Filename: torrentstream.go
  * - Endpoint: /api/v1/torrentstream/batch-history
  * @description
  * Route returns the most recent batch selected.
@@ -2404,6 +2415,7 @@ export type ChangeAdminPassword_Variables = {
 export type AdminLogin_Variables = {
     username: string
     password: string
+    rememberMe: boolean
 }
 
 /**
@@ -2415,6 +2427,7 @@ export type AdminLogin_Variables = {
  */
 export type AccessCode_Variables = {
     accessCode: string
+    rememberMe: boolean
 }
 
 /**

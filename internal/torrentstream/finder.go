@@ -25,6 +25,8 @@ type (
 	playbackTorrent struct {
 		Torrent *torrent.Torrent
 		File    *torrent.File
+		// Release is the provider's release name, set only when auto-selected.
+		Release string
 	}
 )
 
@@ -34,7 +36,7 @@ func (r *Repository) setPriorityDownloadStrategy(t *torrent.Torrent, file *torre
 	torrentutil.PrioritizeDownloadPieces(t, file, r.logger)
 }
 
-func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode string, episodeNumber int, unsupportedVideoCodecs ...string) (ret *playbackTorrent, err error) {
+func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode string, episodeNumber int, constraints autoselect.ClientConstraints) (ret *playbackTorrent, err error) {
 	defer util.HandlePanicInModuleWithError("torrentstream/findBestTorrent", &err)
 
 	r.logger.Debug().Msgf("torrentstream: Finding best torrent for %s, Episode %d", media.GetTitleSafe(), episodeNumber)
@@ -66,7 +68,7 @@ func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode 
 		nil,
 		r.client,
 		nil,
-		unsupportedVideoCodecs...,
+		constraints,
 	)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("torrentstream: Auto-select failed")
@@ -89,6 +91,9 @@ func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode 
 	ret = &playbackTorrent{
 		Torrent: result.Torrent,
 		File:    result.File,
+	}
+	if result.OriginalTorrent != nil {
+		ret.Release = result.OriginalTorrent.Name
 	}
 
 	return ret, nil

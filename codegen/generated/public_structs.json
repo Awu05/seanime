@@ -30281,6 +30281,15 @@
         "required": true,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "Remember",
+        "jsonName": "remember",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": [],
@@ -98722,6 +98731,34 @@
   {
     "filepath": "../internal/torrents/autoselect/autoselect.go",
     "filename": "autoselect.go",
+    "name": "ClientConstraints",
+    "formattedName": "ClientConstraints",
+    "package": "autoselect",
+    "fields": [
+      {
+        "name": "UnsupportedVideoCodecs",
+        "jsonName": "UnsupportedVideoCodecs",
+        "goType": "[]string",
+        "typescriptType": "Array\u003cstring\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ExcludedReleases",
+        "jsonName": "ExcludedReleases",
+        "goType": "[]string",
+        "typescriptType": "Array\u003cstring\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/torrents/autoselect/autoselect.go",
+    "filename": "autoselect.go",
     "name": "StreamAutoSelectStatusPayload",
     "formattedName": "StreamAutoSelectStatusPayload",
     "package": "autoselect",
@@ -100372,10 +100409,30 @@
         "comments": []
       },
       {
+        "name": "previousStreamOptionsMu",
+        "jsonName": "previousStreamOptionsMu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
         "name": "previousStreamOptions",
         "jsonName": "previousStreamOptions",
         "goType": "",
         "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "autoSelectedRelease",
+        "jsonName": "autoSelectedRelease",
+        "goType": "string",
+        "typescriptType": "string",
         "required": true,
         "public": false,
         "comments": []
@@ -100667,7 +100724,16 @@
       " session, used by the admin activity view. MediaID/EpisodeNumber/Title are best-effort:",
       " they come from the most recently started stream's options and the in-memory anime",
       " cache, not a fresh lookup — a cache miss just leaves Title empty (TorrentName still",
-      " identifies the stream)."
+      " identifies the stream).",
+      "",
+      " Known limitation: StartStream sets previousStreamOptions immediately (so watch-party sync",
+      " can see the new episode right away), but currentTorrent/currentTorrentStatus on Client",
+      " aren't updated until torrent selection finishes, which can take seconds. A poll landing in",
+      " that window pairs the new episode's title with the previous episode's progress/speed/seeders.",
+      " This is a narrow, self-correcting display quirk (resolves on the next poll once selection",
+      " completes), not a functional or data-safety issue, and isn't eliminated here since the two",
+      " fields live on different structs (Repository vs Client) updated by design at different points",
+      " in StartStream for reasons unrelated to this admin view."
     ]
   },
   {
@@ -100811,9 +100877,48 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "ExcludedReleases",
+        "jsonName": "ExcludedReleases",
+        "goType": "[]string",
+        "typescriptType": "Array\u003cstring\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
+  },
+  {
+    "filepath": "../internal/torrentstream/stream.go",
+    "filename": "stream.go",
+    "name": "PlaybackFailureResponse",
+    "formattedName": "Torrentstream_PlaybackFailureResponse",
+    "package": "torrentstream",
+    "fields": [
+      {
+        "name": "UnsupportedVideoCodecs",
+        "jsonName": "unsupportedVideoCodecs",
+        "goType": "[]string",
+        "typescriptType": "Array\u003cstring\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Retrying",
+        "jsonName": "retrying",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " PlaybackFailureResponse is RetryAfterPlaybackFailure's result."
+    ]
   },
   {
     "filepath": "../internal/torrentstream/stream.go",

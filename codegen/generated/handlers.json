@@ -59,6 +59,12 @@
       "\t@desc the desired end state (profile has no active stream) already holds.",
       "\t@route /api/v1/admin/activity/terminate [POST]",
       "\t@returns bool",
+      "",
+      "Known limitation (pre-existing in StopStream, not introduced here): StopStream stops the",
+      "app-level (not per-profile) mediaPlayerRepository, so on a deployment where multiple profiles",
+      "concurrently use an *external* media player (mpv/iina — the native browser player doesn't go",
+      "through this path), terminating one profile's stream could stop a different profile's external",
+      "player window. This is a property of the shared mediaPlayerRepository and out of scope here.",
       ""
     ],
     "filepath": "internal/handlers/admin_activity.go",
@@ -2234,12 +2240,39 @@
     }
   },
   {
+    "name": "sessionLifetime",
+    "trimmedName": "sessionLifetime",
+    "comments": [
+      "sessionLifetime is the single source of truth for the remembered-vs-default session duration -",
+      "every call site that mints or renews a seanime-auth token (login, access-code, select-profile,",
+      "renewal) goes through this instead of re-deriving the choice, so the two durations can't drift",
+      "out of sync between them.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_middleware.go",
+    "filename": "auth_middleware.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "renewAuthCookieIfNeeded",
     "trimmedName": "renewAuthCookieIfNeeded",
     "comments": [
-      "renewAuthCookieIfNeeded reissues the seanime-auth cookie with a fresh authTokenLifetime if the",
-      "current token is within authTokenRenewalThreshold of expiring. Called after claims have already",
-      "been validated (and, where applicable, the profile confirmed to still exist) by the caller.",
+      "renewAuthCookieIfNeeded reissues the seanime-auth cookie with a fresh lifetime if the current",
+      "token is within its renewal threshold of expiring - authTokenLifetime/authTokenRenewalThreshold",
+      "normally, or the longer rememberedTokenLifetime/rememberedTokenRenewalThreshold when the token",
+      "carries claims.Remember, so a \"remember me\" session keeps renewing at its own 30-day scale",
+      "instead of silently dropping back to a 24h one. Called after claims have already been validated",
+      "(and, where applicable, the profile confirmed to still exist) by the caller.",
       ""
     ],
     "filepath": "internal/handlers/auth_middleware.go",
@@ -14102,6 +14135,46 @@
     }
   },
   {
+    "name": "HandleTorrentstreamPlaybackFailed",
+    "trimmedName": "TorrentstreamPlaybackFailed",
+    "comments": [
+      "HandleTorrentstreamPlaybackFailed",
+      "",
+      "\t@summary reports that the client's browser couldn't decode the current torrent stream.",
+      "\t@desc Retries auto-select once with the failed release excluded, and returns the codecs that release uses so the client can remember them as unsupported.",
+      "\t@returns torrentstream.PlaybackFailureResponse",
+      "\t@route /api/v1/torrentstream/playback-failed [POST]",
+      ""
+    ],
+    "filepath": "internal/handlers/torrentstream.go",
+    "filename": "torrentstream.go",
+    "api": {
+      "summary": "reports that the client's browser couldn't decode the current torrent stream.",
+      "descriptions": [
+        "Retries auto-select once with the failed release excluded, and returns the codecs that release uses so the client can remember them as unsupported."
+      ],
+      "endpoint": "/api/v1/torrentstream/playback-failed",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "ClientId",
+          "jsonName": "clientId",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "torrentstream.PlaybackFailureResponse",
+      "returnGoType": "torrentstream.PlaybackFailureResponse",
+      "returnTypescriptType": "Torrentstream_PlaybackFailureResponse"
+    }
+  },
+  {
     "name": "HandleTorrentstreamDropTorrent",
     "trimmedName": "TorrentstreamDropTorrent",
     "comments": [
@@ -14419,6 +14492,15 @@
           "typescriptType": "string",
           "required": true,
           "descriptions": []
+        },
+        {
+          "name": "RememberMe",
+          "jsonName": "rememberMe",
+          "goType": "bool",
+          "usedStructType": "",
+          "typescriptType": "boolean",
+          "required": true,
+          "descriptions": []
         }
       ],
       "returns": "map[string]interface{}",
@@ -14454,6 +14536,15 @@
           "goType": "string",
           "usedStructType": "",
           "typescriptType": "string",
+          "required": true,
+          "descriptions": []
+        },
+        {
+          "name": "RememberMe",
+          "jsonName": "rememberMe",
+          "goType": "bool",
+          "usedStructType": "",
+          "typescriptType": "boolean",
           "required": true,
           "descriptions": []
         }

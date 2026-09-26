@@ -4,10 +4,17 @@ import {
     GetTorrentstreamBatchHistory_Variables,
     GetTorrentstreamTorrentFilePreviews_Variables,
     SaveTorrentstreamSettings_Variables,
+    TorrentstreamPlaybackFailed_Variables,
     TorrentstreamStartStream_Variables,
 } from "@/api/generated/endpoint.types"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
-import { Models_TorrentstreamSettings, Nullish, Torrentstream_BatchHistoryResponse, Torrentstream_FilePreview } from "@/api/generated/types"
+import {
+    Models_TorrentstreamSettings,
+    Nullish,
+    Torrentstream_BatchHistoryResponse,
+    Torrentstream_FilePreview,
+    Torrentstream_PlaybackFailureResponse,
+} from "@/api/generated/types"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -62,6 +69,16 @@ export function useTorrentstreamDropTorrent() {
         onSuccess: async () => {
             toast.success("Torrent dropped")
         },
+    })
+}
+
+export function useTorrentstreamPlaybackFailed() {
+    return useServerMutation<Torrentstream_PlaybackFailureResponse, TorrentstreamPlaybackFailed_Variables>({
+        endpoint: API_ENDPOINTS.TORRENTSTREAM.TorrentstreamPlaybackFailed.endpoint,
+        method: API_ENDPOINTS.TORRENTSTREAM.TorrentstreamPlaybackFailed.methods[0],
+        mutationKey: [API_ENDPOINTS.TORRENTSTREAM.TorrentstreamPlaybackFailed.key],
+        // The caller falls back to showing the original playback error instead.
+        onError: () => {},
     })
 }
 

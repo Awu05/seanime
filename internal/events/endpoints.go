@@ -281,6 +281,7 @@ const (
 	TorrentClientDownloadEndpoint                      = "TORRENT-CLIENT-torrent-client-download"
 	TorrentClientGetFilesEndpoint                      = "TORRENT-CLIENT-torrent-client-get-files"
 	TorrentstreamDropTorrentEndpoint                   = "TORRENTSTREAM-torrentstream-drop-torrent"
+	TorrentstreamPlaybackFailedEndpoint                = "TORRENTSTREAM-torrentstream-playback-failed"
 	TorrentstreamStartStreamEndpoint                   = "TORRENTSTREAM-torrentstream-start-stream"
 	TorrentstreamStopStreamEndpoint                    = "TORRENTSTREAM-torrentstream-stop-stream"
 	UninstallExternalExtensionEndpoint                 = "EXTENSIONS-uninstall-external-extension"

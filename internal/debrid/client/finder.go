@@ -79,6 +79,7 @@ func (r *Repository) findBestTorrent(ctx context.Context, provider debrid.Provid
 		postSearchSort,
 		nil,
 		provider,
+		autoselect.ClientConstraints{},
 	)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("debridstream: Auto-select failed")

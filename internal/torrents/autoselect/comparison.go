@@ -190,6 +190,75 @@ func isTokenChar(char byte) bool {
 	return (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9')
 }
 
+// knownProblemVideoCodecs lists the codecs a client can report as unsupported (KNOWN_PROBLEM_CODECS
+// in the web client's codec-utils.ts), each with the tags release names actually use for it.
+var knownProblemVideoCodecs = []struct {
+	name string
+	tags []string
+}{
+	{"HEVC", []string{"hevc", "x265", "h265", "h.265"}},
+	{"Hi10P", []string{"hi10p", "hi10"}},
+	{"AV1", []string{"av1"}},
+}
+
+func videoCodecTags(codec string) []string {
+	for _, known := range knownProblemVideoCodecs {
+		if strings.EqualFold(known.name, codec) {
+			return known.tags
+		}
+	}
+	return []string{codec}
+}
+
+func (c *candidate) hasAnyTerm(terms ...string) bool {
+	for _, term := range terms {
+		if slices.ContainsFunc(c.parsed.VideoTerm, func(vt string) bool {
+			return strings.EqualFold(vt, term)
+		}) || containsBoundedTerm(c.lowerName, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func releaseUsesVideoCodec(c *candidate, codec string) bool {
+	if c.hasAnyTerm(videoCodecTags(codec)...) {
+		return true
+	}
+	// Hi10P is rarely tagged by name: a bare "10bit" on a release that isn't HEVC or AV1 is
+	// 10-bit H.264, which most hardware decoders can't play.
+	return strings.EqualFold(codec, "Hi10P") &&
+		c.hasAnyTerm("10bit", "10-bit") &&
+		!c.hasAnyTerm(videoCodecTags("HEVC")...) &&
+		!c.hasAnyTerm(videoCodecTags("AV1")...)
+}
+
+// DetectVideoCodecs returns the known problem codecs (see knownProblemVideoCodecs) a release's
+// name says it uses.
+func DetectVideoCodecs(releaseName string) []string {
+	c := &candidate{parsed: habari.Parse(releaseName), lowerName: strings.ToLower(releaseName)}
+	var ret []string
+	for _, known := range knownProblemVideoCodecs {
+		if releaseUsesVideoCodec(c, known.name) {
+			ret = append(ret, known.name)
+		}
+	}
+	return ret
+}
+
+func excludeReleases(torrents []*hibiketorrent.AnimeTorrent, names []string) []*hibiketorrent.AnimeTorrent {
+	if len(names) == 0 {
+		return torrents
+	}
+	ret := make([]*hibiketorrent.AnimeTorrent, 0, len(torrents))
+	for _, t := range torrents {
+		if !slices.ContainsFunc(names, func(name string) bool { return strings.EqualFold(name, t.Name) }) {
+			ret = append(ret, t)
+		}
+	}
+	return ret
+}
+
 func containsBoundedTerm(lowerValue string, term string) bool {
 	lowerTerm := strings.ToLower(strings.TrimSpace(term))
 	if lowerTerm == "" {
@@ -478,9 +547,7 @@ func (s *AutoSelect) calculateScoreBreakdown(c *candidate, profile *anime.AutoSe
 		if codec == "" {
 			continue
 		}
-		if slices.ContainsFunc(parsed.VideoTerm, func(vt string) bool {
-			return strings.EqualFold(vt, codec)
-		}) || containsBoundedTerm(c.lowerName, codec) {
+		if releaseUsesVideoCodec(c, codec) {
 			bonus -= scoreUnsupportedCodecPenalty
 			break
 		}

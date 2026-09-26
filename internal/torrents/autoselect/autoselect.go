@@ -59,6 +59,14 @@ type (
 		OriginalTorrent *hibiketorrent.AnimeTorrent // The original torrent object
 	}
 
+	// ClientConstraints describes what the requesting client can't play.
+	ClientConstraints struct {
+		// UnsupportedVideoCodecs (e.g. "HEVC") are deprioritized, not filtered out.
+		UnsupportedVideoCodecs []string
+		// ExcludedReleases are release names that already failed to play; they're never selected.
+		ExcludedReleases []string
+	}
+
 	StreamAutoSelectStatusPayload struct {
 		Active       bool                  `json:"active"`
 		MediaTitle   string                `json:"mediaTitle"`
@@ -165,7 +173,7 @@ func (s *AutoSelect) FindBestTorrent(
 	postSearchSort func([]*hibiketorrent.AnimeTorrent) []*TorrentWithCacheStatus,
 	torrentClient TorrentClient,
 	debridClient debrid.Provider,
-	unsupportedVideoCodecs ...string,
+	constraints ClientConstraints,
 ) (res *Result, err error) {
 
 	resolutions := []string{"1080p"}
@@ -202,11 +210,12 @@ func (s *AutoSelect) FindBestTorrent(
 		s.log(fmt.Sprintf("Search failed: %v", err))
 		return nil, err
 	}
+	torrents = excludeReleases(torrents, constraints.ExcludedReleases)
 
 	// 2. Filter & sort
 	s.log("Filtering and sorting candidates")
 	s.updateStep(ctx, "ranking", "Filtering and sorting candidates...")
-	torrents = s.filterAndSort(ctx, torrents, profile, postSearchSort, unsupportedVideoCodecs...)
+	torrents = s.filterAndSort(ctx, torrents, profile, postSearchSort, constraints.UnsupportedVideoCodecs...)
 
 	// 3. Select file (iterate top 3)
 	s.log("Selecting best file from top candidates")

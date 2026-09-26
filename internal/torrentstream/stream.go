@@ -11,11 +11,14 @@ import (
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
 	"seanime/internal/hook"
 	"seanime/internal/library/playbackmanager"
+	"seanime/internal/torrents/autoselect"
 	"seanime/internal/util"
 	"seanime/internal/videocore"
+	"slices"
 	"time"
 
 	"github.com/anacrolix/torrent"
+	"github.com/samber/lo"
 	"github.com/samber/mo"
 )
 
@@ -92,6 +95,57 @@ type StartStreamOptions struct {
 	// PlaybackTypeNativePlayer - other playback types don't go through the browser's video
 	// element, so codec compatibility isn't a constraint there.
 	UnsupportedVideoCodecs []string
+	// ExcludedReleases are auto-selected releases that already failed to play on the client
+	// (see RetryAfterPlaybackFailure); auto-select never picks them again.
+	ExcludedReleases []string
+}
+
+func (o *StartStreamOptions) clientConstraints() autoselect.ClientConstraints {
+	return autoselect.ClientConstraints{
+		UnsupportedVideoCodecs: o.UnsupportedVideoCodecs,
+		ExcludedReleases:       o.ExcludedReleases,
+	}
+}
+
+// PlaybackFailureResponse is RetryAfterPlaybackFailure's result.
+type PlaybackFailureResponse struct {
+	// UnsupportedVideoCodecs are the known problem codecs the failed release uses, for the client
+	// to remember as unplayable on this device.
+	UnsupportedVideoCodecs []string `json:"unsupportedVideoCodecs"`
+	Retrying               bool     `json:"retrying"`
+}
+
+// maxPlaybackFailureRetries bounds consecutive retries for one episode, so a device that can't
+// play any of the results doesn't cycle through all of them.
+const maxPlaybackFailureRetries = 1
+
+// RetryAfterPlaybackFailure is called when clientId's browser failed to decode the current
+// auto-selected stream. Unless the retry budget is spent, it restarts auto-select for the same
+// episode with the failed release excluded and its codecs deprioritized.
+func (r *Repository) RetryAfterPlaybackFailure(clientId string) *PlaybackFailureResponse {
+	release, opts := r.takeAutoSelectedRelease()
+	if release == "" || opts == nil || !opts.AutoSelect || opts.PlaybackType != PlaybackTypeNativePlayer || opts.ClientId != clientId {
+		return &PlaybackFailureResponse{}
+	}
+
+	ret := &PlaybackFailureResponse{UnsupportedVideoCodecs: autoselect.DetectVideoCodecs(release)}
+	if len(opts.ExcludedReleases) >= maxPlaybackFailureRetries {
+		return ret
+	}
+
+	retryOpts := *opts
+	retryOpts.ExcludedReleases = append(slices.Clone(opts.ExcludedReleases), release)
+	retryOpts.UnsupportedVideoCodecs = lo.Union(opts.UnsupportedVideoCodecs, ret.UnsupportedVideoCodecs)
+
+	r.logger.Warn().Str("release", release).Strs("codecs", ret.UnsupportedVideoCodecs).Msg("torrentstream: Client could not play release, retrying with another")
+	go func() {
+		if err := r.StartStream(context.Background(), &retryOpts); err != nil {
+			r.logger.Error().Err(err).Msg("torrentstream: Retry after playback failure failed")
+		}
+	}()
+
+	ret.Retrying = true
+	return ret
 }
 
 // StartStream is called by the client to start streaming a torrent
@@ -144,6 +198,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 			torrentToStream = &playbackTorrent{
 				Torrent: prepared.Torrent,
 				File:    prepared.File,
+				Release: prepared.Release,
 			}
 			usedPreparedStream = true
 
@@ -163,7 +218,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//
 	if !usedPreparedStream {
 		if opts.AutoSelect {
-			torrentToStream, err = r.findBestTorrent(media, aniDbEpisode, episodeNumber, opts.UnsupportedVideoCodecs...)
+			torrentToStream, err = r.findBestTorrent(media, aniDbEpisode, episodeNumber, opts.clientConstraints())
 			if err != nil {
 				if opts.PlaybackType == PlaybackTypeNativePlayer {
 					r.directStreamManager.AbortOpen(opts.ClientId, err)
@@ -193,6 +248,8 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 		r.sendStateEvent(eventLoadingFailed)
 		return fmt.Errorf("torrentstream: No torrent selected")
 	}
+
+	r.setAutoSelectedRelease(opts, torrentToStream.Release)
 
 	//
 	// Set current file & torrent
@@ -560,7 +617,7 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 	// Find best torrent
 	var torrentToStream *playbackTorrent
 	if opts.AutoSelect {
-		torrentToStream, err = r.findBestTorrent(media, opts.AniDBEpisode, opts.EpisodeNumber, opts.UnsupportedVideoCodecs...)
+		torrentToStream, err = r.findBestTorrent(media, opts.AniDBEpisode, opts.EpisodeNumber, opts.clientConstraints())
 		if err != nil {
 			r.logger.Error().Err(err).Msg("torrentstream: Failed to find torrent for preloading")
 			return err
@@ -593,6 +650,7 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 		File:       torrentToStream.File,
 		Options:    opts,
 		CancelFunc: cancelFunc,
+		Release:    torrentToStream.Release,
 	})
 
 	// Start downloading in background

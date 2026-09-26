@@ -181,7 +181,19 @@ export function startVideoCoreMiniPlayerTransition(update: () => void) {
             flushSync(update)
         })
 
-        void transition.finished.finally(() => {
+        // Some browsers (notably Android WebView-based ones like TV Bro - see
+        // exitFullscreenSafely for the same issue with the Fullscreen API) can leave
+        // transition.finished permanently unsettled. Since the player keeps
+        // view-transition-name set on [data-vc-element="drawer-content"] for as long as
+        // data-vc-miniplayer-view-transition is present, an unsettled promise leaves the real
+        // player stuck mid-transition indefinitely: it keeps working underneath (state updates,
+        // other controls), but the browser never repaints it back to normal, so the resize into
+        // (or out of) the mini player never becomes visible. Race it against a timeout well past
+        // the 320ms CSS transition duration so a hung browser still self-heals.
+        void Promise.race([
+            transition.finished,
+            new Promise<void>(resolve => setTimeout(resolve, 1000)),
+        ]).finally(() => {
             document.documentElement.removeAttribute("data-vc-miniplayer-view-transition")
         }).catch(() => { })
     }

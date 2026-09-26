@@ -2537,6 +2537,16 @@ export const API_ENDPOINTS = {
         },
         /**
          *  @description
+         *  Route reports that the client's browser couldn't decode the current torrent stream.
+         *  Retries auto-select once with the failed release excluded, and returns the codecs that release uses so the client can remember them as unsupported.
+         */
+        TorrentstreamPlaybackFailed: {
+            key: "TORRENTSTREAM-torrentstream-playback-failed",
+            methods: ["POST"],
+            endpoint: "/api/v1/torrentstream/playback-failed",
+        },
+        /**
+         *  @description
          *  Route drops a torrent stream.
          *  This stops the entire streaming process and drops the torrent completely.
          *  This is made to be used to force drop a torrent.

@@ -1,6 +1,6 @@
 import { HibikeTorrent_AnimeTorrent, HibikeTorrent_BatchEpisodeFiles } from "@/api/generated/types"
 import { useTorrentstreamStartStream } from "@/api/hooks/torrentstream.hooks"
-import { getUnsupportedVideoCodecs } from "@/app/(main)/_features/video-core/_lib/codec-utils"
+import { getLearnedUnsupportedVideoCodecs, getUnsupportedVideoCodecs } from "@/app/(main)/_features/video-core/_lib/codec-utils"
 import {
     ElectronPlaybackMethod,
     PlaybackTorrentStreaming,
@@ -52,7 +52,8 @@ type AutoSelectTorrentStreamProps = {
 function getRelevantUnsupportedVideoCodecs(playbackType: string): string[] | undefined {
     if (playbackType !== "nativeplayer" || typeof document === "undefined") return undefined
     const video = document.createElement("video")
-    return getUnsupportedVideoCodecs(codec => video.canPlayType(codec) as "probably" | "maybe" | "")
+    const probed = getUnsupportedVideoCodecs(codec => video.canPlayType(codec) as "probably" | "maybe" | "")
+    return [...new Set([...probed, ...getLearnedUnsupportedVideoCodecs()])]
 }
 
 export function useHandleStartTorrentStream() {
