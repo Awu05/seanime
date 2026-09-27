@@ -195,5 +195,6 @@ func (s *Store) Clear() error {
 			s.total -= info.Size()
 		}
 	}
+	s.total = 0 // every entry is gone, regardless of any Info() misses above
 	return nil
 }
