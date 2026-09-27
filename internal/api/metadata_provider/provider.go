@@ -2,6 +2,7 @@ package metadata_provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"seanime/internal/api/anilist"
@@ -13,6 +14,7 @@ import (
 	"seanime/internal/extension"
 	"seanime/internal/hook"
 	"seanime/internal/util"
+	"seanime/internal/util/diskstore"
 	"seanime/internal/util/filecache"
 	"seanime/internal/util/result"
 	"strings"
@@ -34,6 +36,11 @@ type (
 		customSourceManager *customsource.Manager
 		db                  *db.Database
 		useFallbackProvider atomic.Bool
+		// episodeInfo keeps the last successful fetch of each title on disk, served when a fetch
+		// fails so episode lists survive an outage. Nil disables it.
+		episodeInfo *diskstore.Store
+		// fetch is fetchAnimeMetadata; a field so tests can simulate an outage.
+		fetch func(platform metadata.Platform, mId int) (*metadata.AnimeMetadata, error)
 	}
 
 	NewProviderImplOptions struct {
@@ -41,6 +48,7 @@ type (
 		FileCacher       *filecache.Cacher
 		Database         *db.Database
 		ExtensionBankRef *util.Ref[*extension.UnifiedBank]
+		EpisodeInfoStore *diskstore.Store
 	}
 
 	Provider interface {
@@ -79,7 +87,9 @@ func NewProvider(options *NewProviderImplOptions) Provider {
 		db:                  options.Database,
 		extensionBankRef:    options.ExtensionBankRef,
 		customSourceManager: customsource.NewManager(options.ExtensionBankRef, options.Database, options.Logger),
+		episodeInfo:         options.EpisodeInfoStore,
 	}
+	ret.fetch = ret.fetchAnimeMetadata
 
 	return ret
 }
@@ -112,13 +122,49 @@ func (p *ProviderImpl) GetAnimeMetadata(platform metadata.Platform, mId int) (re
 	}
 
 	res, err, _ := p.singleflight.Do(cacheKey, func() (interface{}, error) {
-		return p.fetchAnimeMetadata(platform, mId)
+		return p.fetchOrSaved(platform, mId, cacheKey)
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return res.(*metadata.AnimeMetadata), nil
+}
+
+// savedCopyTTL keeps a saved copy in memory briefly, so an outage doesn't retry the network on
+// every request.
+const savedCopyTTL = 5 * time.Minute
+
+// fetchOrSaved fetches fresh metadata and saves a copy on disk. When the fetch fails, it serves
+// the saved copy instead.
+func (p *ProviderImpl) fetchOrSaved(platform metadata.Platform, mId int, cacheKey string) (*metadata.AnimeMetadata, error) {
+	ret, err := p.fetch(platform, mId)
+	if p.episodeInfo == nil {
+		return ret, err
+	}
+	if err == nil {
+		if ret != nil {
+			if data, mErr := json.Marshal(ret); mErr == nil {
+				if pErr := p.episodeInfo.Put(cacheKey, data); pErr != nil {
+					p.logger.Warn().Err(pErr).Int("mediaId", mId).Msg("metadata: Could not save episode info")
+				}
+			}
+		}
+		return ret, nil
+	}
+
+	data, ok := p.episodeInfo.Get(cacheKey)
+	if !ok {
+		return nil, err
+	}
+	var saved metadata.AnimeMetadata
+	if uErr := json.Unmarshal(data, &saved); uErr != nil {
+		p.episodeInfo.Delete(cacheKey)
+		return nil, err
+	}
+	p.logger.Debug().Err(err).Int("mediaId", mId).Msg("metadata: Fetch failed, serving saved episode info")
+	p.animeMetadataCache.SetT(cacheKey, &saved, savedCopyTTL)
+	return &saved, nil
 }
 
 func (p *ProviderImpl) fetchAnimeMetadata(platform metadata.Platform, mId int) (*metadata.AnimeMetadata, error) {

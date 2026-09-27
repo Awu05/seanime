@@ -56,6 +56,7 @@ import (
 	"seanime/internal/updater"
 	"seanime/internal/user"
 	"seanime/internal/util"
+	"seanime/internal/util/diskstore"
 	"seanime/internal/util/filecache"
 	"seanime/internal/util/result"
 	"seanime/internal/videocore"
@@ -148,6 +149,8 @@ type (
 		Updater          *updater.Updater
 		SelfUpdater      *updater.SelfUpdater
 		ReportRepository *report.Repository
+		// EpisodeInfoStore keeps saved episode info for outages; see metadata_provider.
+		EpisodeInfoStore *diskstore.Store
 
 		// Integrations
 		DiscordPresence *discordrpc_presence.Presence
@@ -204,6 +207,9 @@ type (
 		ShowTour string
 	}
 )
+
+// episodeInfoMaxBytes caps saved episode info: one small file per title, roughly 2,000-10,000 titles.
+const episodeInfoMaxBytes = 150 << 20
 
 func (a *App) WithEpisodeAvailability(episodes []*anime.Episode) []*anime.Episode {
 	if a.episodeAvailability == nil {
@@ -310,6 +316,12 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		logger.Fatal().Err(err).Msgf("app: Failed to initialize file cacher")
 	}
 
+	// Initialize saved episode info, served when a metadata fetch fails during an outage
+	episodeInfoStore, err := diskstore.New(filepath.Join(cfg.Cache.Dir, "offline-copies", "episode-info"), func() int64 { return episodeInfoMaxBytes }, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msgf("app: Failed to initialize saved episode info")
+	}
+
 	// Initialize the extension bank that will be shared across modules
 	extensionBankRef := util.NewRef(extension.NewUnifiedBank())
 
@@ -329,6 +341,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		FileCacher:       fileCacher,
 		Database:         database,
 		ExtensionBankRef: extensionBankRef,
+		EpisodeInfoStore: episodeInfoStore,
 	})
 
 	// Set initial metadata provider (will change if offline mode is enabled)
@@ -438,6 +451,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		Version:                       constants.Version,
 		Updater:                       updater.New(constants.Version, logger, wsEventManager),
 		FileCacher:                    fileCacher,
+		EpisodeInfoStore:              episodeInfoStore,
 		OnlinestreamRepository:        onlinestreamRepository,
 		MetadataProviderRef:           metadataProviderRef,
 		MangaRepository:               mangaRepository,

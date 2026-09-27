@@ -46,6 +46,7 @@ func (a *App) SetOfflineMode(enabled bool) {
 			FileCacher:       a.FileCacher,
 			ExtensionBankRef: a.ExtensionBankRef,
 			Database:         a.Database,
+			EpisodeInfoStore: a.EpisodeInfoStore,
 		}))
 		a.InitOrRefreshAnilistData()
 	}
