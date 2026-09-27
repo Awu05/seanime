@@ -1286,6 +1286,50 @@
 //     })
 // }
 
+// export function useGetOfflineCopies() {
+//     return useServerQuery<OfflineCopiesInfo>({
+//         endpoint: API_ENDPOINTS.FILECACHE.GetOfflineCopies.endpoint,
+//         method: API_ENDPOINTS.FILECACHE.GetOfflineCopies.methods[0],
+//         queryKey: [API_ENDPOINTS.FILECACHE.GetOfflineCopies.key],
+//         enabled: true,
+//     })
+// }
+
+// export function useSetImageCacheLimit() {
+//     return useServerMutation<boolean, SetImageCacheLimit_Variables>({
+//         endpoint: API_ENDPOINTS.FILECACHE.SetImageCacheLimit.endpoint,
+//         method: API_ENDPOINTS.FILECACHE.SetImageCacheLimit.methods[0],
+//         mutationKey: [API_ENDPOINTS.FILECACHE.SetImageCacheLimit.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
+// export function useClearOfflineCopies() {
+//     return useServerMutation<boolean>({
+//         endpoint: API_ENDPOINTS.FILECACHE.ClearOfflineCopies.endpoint,
+//         method: API_ENDPOINTS.FILECACHE.ClearOfflineCopies.methods[0],
+//         mutationKey: [API_ENDPOINTS.FILECACHE.ClearOfflineCopies.key],
+//         onSuccess: async () => {
+//
+//         },
+//     })
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// image_cache
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// export function useGetCachedImage(url: string) {
+//     return useServerQuery<string>({
+//         endpoint: API_ENDPOINTS.IMAGE_CACHE.GetCachedImage.endpoint.replace("{url}", String(url)),
+//         method: API_ENDPOINTS.IMAGE_CACHE.GetCachedImage.methods[0],
+//         queryKey: [API_ENDPOINTS.IMAGE_CACHE.GetCachedImage.key],
+//         enabled: true,
+//     })
+// }
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // library_explorer
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

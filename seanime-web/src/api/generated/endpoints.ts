@@ -1015,6 +1015,38 @@ export const API_ENDPOINTS = {
             methods: ["DELETE"],
             endpoint: "/api/v1/filecache/mediastream/videofiles",
         },
+        GetOfflineCopies: {
+            key: "FILECACHE-get-offline-copies",
+            methods: ["GET"],
+            endpoint: "/api/v1/filecache/offline-copies",
+        },
+        /**
+         *  @description
+         *  Route sets the image cache size limit in MB.
+         *  The cache is trimmed right away if it's over the new limit.
+         */
+        SetImageCacheLimit: {
+            key: "FILECACHE-set-image-cache-limit",
+            methods: ["POST"],
+            endpoint: "/api/v1/filecache/offline-copies/limit",
+        },
+        ClearOfflineCopies: {
+            key: "FILECACHE-clear-offline-copies",
+            methods: ["DELETE"],
+            endpoint: "/api/v1/filecache/offline-copies",
+        },
+    },
+    IMAGE_CACHE: {
+        /**
+         *  @description
+         *  Route returns an image through the server's image cache.
+         *  Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage.
+         */
+        GetCachedImage: {
+            key: "IMAGE-CACHE-get-cached-image",
+            methods: ["GET"],
+            endpoint: "/api/v1/image-cache",
+        },
     },
     LIBRARY_EXPLORER: {
         /**

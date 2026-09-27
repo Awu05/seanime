@@ -5849,6 +5849,207 @@
     }
   },
   {
+    "name": "canManageSharedCaches",
+    "trimmedName": "canManageSharedCaches",
+    "comments": [
+      "canManageSharedCaches reports whether the request may manage caches every profile shares:",
+      "anyone on a single-user install, only the admin once there are profiles.",
+      ""
+    ],
+    "filepath": "internal/handlers/filecache.go",
+    "filename": "filecache.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "HandleGetOfflineCopies",
+    "trimmedName": "GetOfflineCopies",
+    "comments": [
+      "HandleGetOfflineCopies",
+      "",
+      "\t@summary returns the size of saved episode info and images, and the image cache limit.",
+      "\t@route /api/v1/filecache/offline-copies [GET]",
+      "\t@returns handlers.OfflineCopiesInfo",
+      ""
+    ],
+    "filepath": "internal/handlers/filecache.go",
+    "filename": "filecache.go",
+    "api": {
+      "summary": "returns the size of saved episode info and images, and the image cache limit.",
+      "descriptions": [],
+      "endpoint": "/api/v1/filecache/offline-copies",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "handlers.OfflineCopiesInfo",
+      "returnGoType": "handlers.OfflineCopiesInfo",
+      "returnTypescriptType": "OfflineCopiesInfo"
+    }
+  },
+  {
+    "name": "HandleSetImageCacheLimit",
+    "trimmedName": "SetImageCacheLimit",
+    "comments": [
+      "HandleSetImageCacheLimit",
+      "",
+      "\t@summary sets the image cache size limit in MB.",
+      "\t@desc The cache is trimmed right away if it's over the new limit.",
+      "\t@route /api/v1/filecache/offline-copies/limit [POST]",
+      "\t@returns bool",
+      ""
+    ],
+    "filepath": "internal/handlers/filecache.go",
+    "filename": "filecache.go",
+    "api": {
+      "summary": "sets the image cache size limit in MB.",
+      "descriptions": [
+        "The cache is trimmed right away if it's over the new limit."
+      ],
+      "endpoint": "/api/v1/filecache/offline-copies/limit",
+      "methods": [
+        "POST"
+      ],
+      "params": [],
+      "bodyFields": [
+        {
+          "name": "ImageCacheMaxMB",
+          "jsonName": "imageCacheMaxMB",
+          "goType": "int",
+          "usedStructType": "",
+          "typescriptType": "number",
+          "required": true,
+          "descriptions": []
+        }
+      ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "HandleClearOfflineCopies",
+    "trimmedName": "ClearOfflineCopies",
+    "comments": [
+      "HandleClearOfflineCopies",
+      "",
+      "\t@summary deletes all saved episode info and images.",
+      "\t@route /api/v1/filecache/offline-copies [DELETE]",
+      "\t@returns bool",
+      ""
+    ],
+    "filepath": "internal/handlers/filecache.go",
+    "filename": "filecache.go",
+    "api": {
+      "summary": "deletes all saved episode info and images.",
+      "descriptions": [],
+      "endpoint": "/api/v1/filecache/offline-copies",
+      "methods": [
+        "DELETE"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "HandleGetCachedImage",
+    "trimmedName": "GetCachedImage",
+    "comments": [
+      "HandleGetCachedImage",
+      "",
+      "\t@summary returns an image through the server's image cache.",
+      "\t@desc Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage.",
+      "\t@route /api/v1/image-cache [GET]",
+      "\t@param url - string - true - \"The absolute http(s) image URL\"",
+      "\t@returns string",
+      ""
+    ],
+    "filepath": "internal/handlers/image_cache.go",
+    "filename": "image_cache.go",
+    "api": {
+      "summary": "returns an image through the server's image cache.",
+      "descriptions": [
+        "Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage."
+      ],
+      "endpoint": "/api/v1/image-cache",
+      "methods": [
+        "GET"
+      ],
+      "params": [
+        {
+          "name": "url",
+          "jsonName": "url",
+          "goType": "string",
+          "usedStructType": "",
+          "typescriptType": "string",
+          "required": true,
+          "descriptions": [
+            "The absolute http(s) image URL"
+          ]
+        }
+      ],
+      "bodyFields": [],
+      "returns": "string",
+      "returnGoType": "string",
+      "returnTypescriptType": "string"
+    }
+  },
+  {
+    "name": "TestHandleGetCachedImageRefusesPrivateAddresses",
+    "trimmedName": "TestHandleGetCachedImageRefusesPrivateAddresses",
+    "comments": [
+      "A private address can't be fetched, so it fails as an upstream error, not a crash or a fetch.",
+      ""
+    ],
+    "filepath": "internal/handlers/image_cache_test.go",
+    "filename": "image_cache_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestHandleGetCachedImageRedirectsWhenProxyDisabled",
+    "trimmedName": "TestHandleGetCachedImageRedirectsWhenProxyDisabled",
+    "comments": [
+      "With proxying disabled the server doesn't fetch; it sends the browser to the image itself.",
+      ""
+    ],
+    "filepath": "internal/handlers/image_cache_test.go",
+    "filename": "image_cache_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleGetLibraryExplorerFileTree",
     "trimmedName": "GetLibraryExplorerFileTree",
     "comments": [
@@ -10237,6 +10438,48 @@
           "descriptions": []
         }
       ],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestOfflineCopiesRequireAdminWithProfiles",
+    "trimmedName": "TestOfflineCopiesRequireAdminWithProfiles",
+    "comments": [
+      "Every profile shares these caches, so on a multi-profile server only the admin manages them.",
+      ""
+    ],
+    "filepath": "internal/handlers/offline_copies_test.go",
+    "filename": "offline_copies_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestOfflineCopiesAllowedOnSingleUser",
+    "trimmedName": "TestOfflineCopiesAllowedOnSingleUser",
+    "comments": [
+      "Single-user installs have no admin flag, so they must still be allowed.",
+      ""
+    ],
+    "filepath": "internal/handlers/offline_copies_test.go",
+    "filename": "offline_copies_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
       "returns": "bool",
       "returnGoType": "bool",
       "returnTypescriptType": "boolean"

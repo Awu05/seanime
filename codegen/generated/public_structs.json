@@ -27843,6 +27843,26 @@
         "required": false,
         "public": false,
         "comments": []
+      },
+      {
+        "name": "episodeInfo",
+        "jsonName": "episodeInfo",
+        "goType": "diskstore.Store",
+        "typescriptType": "Store",
+        "usedTypescriptType": "Store",
+        "usedStructName": "diskstore.Store",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "fetch",
+        "jsonName": "fetch",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
       }
     ],
     "comments": []
@@ -27892,6 +27912,17 @@
         "jsonName": "ExtensionBankRef",
         "goType": "",
         "typescriptType": "any",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "EpisodeInfoStore",
+        "jsonName": "EpisodeInfoStore",
+        "goType": "diskstore.Store",
+        "typescriptType": "Store",
+        "usedTypescriptType": "Store",
+        "usedStructName": "diskstore.Store",
         "required": false,
         "public": true,
         "comments": []
@@ -29850,6 +29881,28 @@
         "comments": []
       },
       {
+        "name": "EpisodeInfoStore",
+        "jsonName": "EpisodeInfoStore",
+        "goType": "diskstore.Store",
+        "typescriptType": "Store",
+        "usedTypescriptType": "Store",
+        "usedStructName": "diskstore.Store",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ImageCache",
+        "jsonName": "ImageCache",
+        "goType": "imagecache.Cache",
+        "typescriptType": "Cache",
+        "usedTypescriptType": "Cache",
+        "usedStructName": "imagecache.Cache",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
         "name": "DiscordPresence",
         "jsonName": "DiscordPresence",
         "goType": "discordrpc_presence.Presence",
@@ -30376,9 +30429,9 @@
         "name": "Cache",
         "jsonName": "Cache",
         "goType": "INTERNAL_Config_Cache",
-        "inlineStructType": "struct{\nDir string\nTranscodeDir string}",
+        "inlineStructType": "struct{\nDir string\nTranscodeDir string\nImageCacheMaxMB int}",
         "typescriptType": "INTERNAL_Config_Cache",
-        "usedTypescriptType": "{ Dir: string; TranscodeDir: string; }",
+        "usedTypescriptType": "{ Dir: string; TranscodeDir: string; ImageCacheMaxMB: number; }",
         "usedStructName": "core.Config_Cache",
         "required": true,
         "public": true,
@@ -30682,6 +30735,17 @@
         "required": true,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "ImageCacheMaxMB",
+        "jsonName": "ImageCacheMaxMB",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": [
+          " Size limit of the image cache that keeps images available during outages"
+        ]
       }
     ],
     "comments": []
@@ -48540,6 +48604,37 @@
     "comments": []
   },
   {
+    "filepath": "../internal/handlers/filecache.go",
+    "filename": "filecache.go",
+    "name": "OfflineCopiesInfo",
+    "formattedName": "OfflineCopiesInfo",
+    "package": "handlers",
+    "fields": [
+      {
+        "name": "TotalSize",
+        "jsonName": "totalSize",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "ImageCacheMaxMB",
+        "jsonName": "imageCacheMaxMB",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " OfflineCopiesInfo describes the saved episode info and images that keep the library complete",
+      " during an outage."
+    ]
+  },
+  {
     "filepath": "../internal/handlers/mal.go",
     "filename": "mal.go",
     "name": "MalAuthResponse",
@@ -50598,6 +50693,71 @@
       "\t\tSomeField int",
       "\t}"
     ]
+  },
+  {
+    "filepath": "../internal/imagecache/imagecache.go",
+    "filename": "imagecache.go",
+    "name": "Cache",
+    "formattedName": "Cache",
+    "package": "imagecache",
+    "fields": [
+      {
+        "name": "store",
+        "jsonName": "store",
+        "goType": "diskstore.Store",
+        "typescriptType": "Store",
+        "usedTypescriptType": "Store",
+        "usedStructName": "diskstore.Store",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "client",
+        "jsonName": "client",
+        "goType": "http.Client",
+        "typescriptType": "Client",
+        "usedTypescriptType": "Client",
+        "usedStructName": "http.Client",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "maxMB",
+        "jsonName": "maxMB",
+        "goType": "atomic.Int64",
+        "typescriptType": "Int64",
+        "usedTypescriptType": "Int64",
+        "usedStructName": "atomic.Int64",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "group",
+        "jsonName": "group",
+        "goType": "singleflight.Group",
+        "typescriptType": "Group",
+        "usedTypescriptType": "Group",
+        "usedStructName": "singleflight.Group",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "logger",
+        "jsonName": "logger",
+        "goType": "zerolog.Logger",
+        "typescriptType": "Logger",
+        "usedTypescriptType": "Logger",
+        "usedStructName": "zerolog.Logger",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": []
   },
   {
     "filepath": "../internal/library/anime/autodownloader_types.go",
@@ -102105,6 +102265,67 @@
         "usedTypescriptType": "CancelFunc",
         "usedStructName": "context.CancelFunc",
         "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": []
+  },
+  {
+    "filepath": "../internal/util/diskstore/diskstore.go",
+    "filename": "diskstore.go",
+    "name": "Store",
+    "formattedName": "Store",
+    "package": "diskstore",
+    "fields": [
+      {
+        "name": "dir",
+        "jsonName": "dir",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "maxBytes",
+        "jsonName": "maxBytes",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "logger",
+        "jsonName": "logger",
+        "goType": "zerolog.Logger",
+        "typescriptType": "Logger",
+        "usedTypescriptType": "Logger",
+        "usedStructName": "zerolog.Logger",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "mu",
+        "jsonName": "mu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": [
+          " guards total and serializes writes, deletes and trimming"
+        ]
+      },
+      {
+        "name": "total",
+        "jsonName": "total",
+        "goType": "int64",
+        "typescriptType": "number",
+        "required": true,
         "public": false,
         "comments": []
       }

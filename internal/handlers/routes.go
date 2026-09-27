@@ -511,6 +511,9 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	v1FileCache.DELETE("/bucket", h.HandleRemoveFileCacheBucket)
 	v1FileCache.GET("/mediastream/videofiles/total-size", h.HandleGetFileCacheMediastreamVideoFilesTotalSize)
 	v1FileCache.DELETE("/mediastream/videofiles", h.HandleClearFileCacheMediastreamVideoFiles)
+	v1FileCache.GET("/offline-copies", h.HandleGetOfflineCopies)
+	v1FileCache.POST("/offline-copies/limit", h.HandleSetImageCacheLimit)
+	v1FileCache.DELETE("/offline-copies", h.HandleClearOfflineCopies)
 
 	//
 	// Discord

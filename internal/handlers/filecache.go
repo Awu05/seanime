@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+	"seanime/internal/core"
 	"seanime/internal/util"
 	"strings"
 
@@ -102,5 +104,82 @@ func (h *Handler) HandleClearFileCacheMediastreamVideoFiles(c echo.Context) erro
 	}
 
 	// Return a success response
+	return h.RespondWithData(c, true)
+}
+
+// canManageSharedCaches reports whether the request may manage caches every profile shares:
+// anyone on a single-user install, only the admin once there are profiles.
+func (h *Handler) canManageSharedCaches(c echo.Context) bool {
+	return !h.App.MultiUserEnabled || core.GetIsAdminFromContext(c)
+}
+
+func respondAdminRequired(c echo.Context) error {
+	return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})
+}
+
+// OfflineCopiesInfo describes the saved episode info and images that keep the library complete
+// during an outage.
+type OfflineCopiesInfo struct {
+	TotalSize       string `json:"totalSize"`
+	ImageCacheMaxMB int    `json:"imageCacheMaxMB"`
+}
+
+// HandleGetOfflineCopies
+//
+//	@summary returns the size of saved episode info and images, and the image cache limit.
+//	@route /api/v1/filecache/offline-copies [GET]
+//	@returns handlers.OfflineCopiesInfo
+func (h *Handler) HandleGetOfflineCopies(c echo.Context) error {
+	if !h.canManageSharedCaches(c) {
+		return respondAdminRequired(c)
+	}
+	size := h.App.EpisodeInfoStore.Size() + h.App.ImageCache.Size()
+	return h.RespondWithData(c, OfflineCopiesInfo{
+		TotalSize:       util.Bytes(uint64(size)),
+		ImageCacheMaxMB: h.App.ImageCache.MaxMB(),
+	})
+}
+
+// HandleSetImageCacheLimit
+//
+//	@summary sets the image cache size limit in MB.
+//	@desc The cache is trimmed right away if it's over the new limit.
+//	@route /api/v1/filecache/offline-copies/limit [POST]
+//	@returns bool
+func (h *Handler) HandleSetImageCacheLimit(c echo.Context) error {
+	if !h.canManageSharedCaches(c) {
+		return respondAdminRequired(c)
+	}
+	type body struct {
+		ImageCacheMaxMB int `json:"imageCacheMaxMB"`
+	}
+	var b body
+	if err := c.Bind(&b); err != nil {
+		return h.RespondWithError(c, err)
+	}
+	if err := h.App.SetImageCacheMaxMB(b.ImageCacheMaxMB); err != nil {
+		return h.RespondWithError(c, err)
+	}
+	return h.RespondWithData(c, true)
+}
+
+// HandleClearOfflineCopies
+//
+//	@summary deletes all saved episode info and images.
+//	@route /api/v1/filecache/offline-copies [DELETE]
+//	@returns bool
+func (h *Handler) HandleClearOfflineCopies(c echo.Context) error {
+	if !h.canManageSharedCaches(c) {
+		return respondAdminRequired(c)
+	}
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
+	if err := h.App.EpisodeInfoStore.Clear(); err != nil {
+		return h.RespondWithError(c, err)
+	}
+	if err := h.App.ImageCache.Clear(); err != nil {
+		return h.RespondWithError(c, err)
+	}
 	return h.RespondWithData(c, true)
 }
