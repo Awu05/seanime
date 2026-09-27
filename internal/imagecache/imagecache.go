@@ -112,16 +112,18 @@ type image struct {
 
 // Get returns the image at rawURL and its content type: the saved copy when there is one,
 // otherwise fetched, saved and returned. Image URLs from AniList and TVDB never change content,
-// so a saved copy is never refetched. Concurrent misses for one URL share a single fetch.
+// so a saved copy is never refetched. Concurrent misses for one URL share a single fetch, which
+// runs detached from any one caller's context (fetch has its own timeout) so one caller giving up
+// - a lazy-loaded cover scrolled off-screen, a navigation - can't cancel the fetch for the rest.
 func (c *Cache) Get(ctx context.Context, rawURL string) ([]byte, string, error) {
 	if img, ok := c.saved(rawURL); ok {
 		return img.body, img.contentType, nil
 	}
-	res, err, _ := c.group.Do(rawURL, func() (interface{}, error) {
+	ch := c.group.DoChan(rawURL, func() (interface{}, error) {
 		if img, ok := c.saved(rawURL); ok {
 			return img, nil
 		}
-		img, err := c.fetch(ctx, rawURL)
+		img, err := c.fetch(context.WithoutCancel(ctx), rawURL)
 		if err != nil {
 			return nil, err
 		}
@@ -130,11 +132,16 @@ func (c *Cache) Get(ctx context.Context, rawURL string) ([]byte, string, error) 
 		}
 		return img, nil
 	})
-	if err != nil {
-		return nil, "", err
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, "", res.Err
+		}
+		img := res.Val.(image)
+		return img.body, img.contentType, nil
+	case <-ctx.Done():
+		return nil, "", ctx.Err()
 	}
-	img := res.(image)
-	return img.body, img.contentType, nil
 }
 
 func (c *Cache) saved(rawURL string) (image, bool) {

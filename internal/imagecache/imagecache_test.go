@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"seanime/internal/util"
 
@@ -147,6 +148,49 @@ func TestConcurrentMissesFetchOnce(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err)
 	}
+	require.EqualValues(t, 1, hits.Load())
+}
+
+// One caller giving up on a shared fetch must not cancel it for the others: the fetch runs
+// detached from any one caller's context.
+func TestAbandonedCallerDoesNotCancelOthers(t *testing.T) {
+	release := make(chan struct{})
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		<-release
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("jpegbytes"))
+	}))
+	t.Cleanup(srv.Close)
+	c := newTestCache(t, srv.Client())
+	u := srv.URL + "/shared.jpg"
+
+	ctxA, cancelA := context.WithCancel(context.Background())
+	errA := make(chan error, 1)
+	go func() {
+		_, _, err := c.Get(ctxA, u)
+		errA <- err
+	}()
+
+	require.Eventually(t, func() bool { return hits.Load() == 1 }, time.Second, time.Millisecond)
+
+	var bodyB, ctB atomic.Value
+	errB := make(chan error, 1)
+	go func() {
+		body, ct, err := c.Get(context.Background(), u)
+		bodyB.Store(body)
+		ctB.Store(ct)
+		errB <- err
+	}()
+
+	cancelA()
+	require.ErrorIs(t, <-errA, context.Canceled)
+
+	close(release)
+	require.NoError(t, <-errB)
+	require.Equal(t, "jpegbytes", string(bodyB.Load().([]byte)))
+	require.Equal(t, "image/jpeg", ctB.Load().(string))
 	require.EqualValues(t, 1, hits.Load())
 }
 
