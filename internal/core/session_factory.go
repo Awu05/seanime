@@ -144,6 +144,17 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		TranscodeRequester: &mediastreamTranscodeAdapter{repo: a.MediastreamRepository},
 	})
 
+	streamToken := func() string {
+		if !a.MultiUserEnabled {
+			return ""
+		}
+		token, err := GenerateStreamToken(a.JWTSecret, profileID)
+		if err != nil {
+			return ""
+		}
+		return token
+	}
+
 	// Create per-session TorrentstreamRepository with its own Client wrapper,
 	// but sharing the anacrolix torrent engine from the App's singleton.
 	tsr := torrentstream.NewRepository(&torrentstream.NewRepositoryOptions{
@@ -158,16 +169,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		Database:            a.Database,
 		DirectStreamManager: dsm,
 		NativePlayer:        np,
-		StreamTokenFunc: func() string {
-			if !a.MultiUserEnabled {
-				return ""
-			}
-			token, err := GenerateStreamToken(a.JWTSecret, profileID)
-			if err != nil {
-				return ""
-			}
-			return token
-		},
+		StreamTokenFunc:     streamToken,
 	})
 
 	// Share the anacrolix engine from the App's singleton instead of creating a new one.
@@ -196,5 +198,6 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		PlaybackManager:     pm,
 		DirectStreamManager: dsm,
 		TorrentStream:       tsr,
+		StreamToken:         streamToken,
 	}
 }

@@ -32,5 +32,6 @@ func (h *Handler) sessionPlayback(c echo.Context) nakama.PlaybackContext {
 		NativePlayer:            session.NativePlayer,
 		TorrentstreamRepository: session.TorrentStream,
 		DirectstreamManager:     session.DirectStreamManager,
+		StreamToken:             session.StreamToken,
 	}
 }

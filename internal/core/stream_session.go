@@ -18,6 +18,9 @@ type ProfileStreamSession struct {
 	PlaybackManager     *playbackmanager.PlaybackManager
 	DirectStreamManager *directstream.Manager
 	TorrentStream       *torrentstream.Repository
+	// StreamToken returns a token letting an external player fetch this profile's streams
+	// (see StreamScope), or "" when none is needed.
+	StreamToken func() string
 }
 
 type StreamSessionManager struct {
@@ -26,6 +29,7 @@ type StreamSessionManager struct {
 	cleanupTicker     *time.Ticker
 	cleanupDone       chan struct{}
 	inactivityTimeout time.Duration
+	keepAlive         func(*ProfileStreamSession) bool // guarded by mu; see SetKeepAlive
 }
 
 func NewStreamSessionManager(inactivityTimeout time.Duration) *StreamSessionManager {
@@ -109,23 +113,36 @@ func (sm *StreamSessionManager) EvictSession(profileID string) {
 	}
 }
 
+// SetKeepAlive exempts sessions for which fn returns true from idle eviction, e.g. one a watch
+// party is playing through without sending stream requests. fn runs under the manager lock, so it
+// must not call back into StreamSessionManager.
+func (sm *StreamSessionManager) SetKeepAlive(fn func(*ProfileStreamSession) bool) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.keepAlive = fn
+}
+
+// evictIdle removes and returns sessions idle past the timeout; the caller shuts them down
+// outside the lock so component cleanup can't block other sessions.
+func (sm *StreamSessionManager) evictIdle(now time.Time) []*ProfileStreamSession {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	var evicted []*ProfileStreamSession
+	for id, session := range sm.sessions {
+		if now.Sub(session.LastActive) <= sm.inactivityTimeout || (sm.keepAlive != nil && sm.keepAlive(session)) {
+			continue
+		}
+		evicted = append(evicted, session)
+		delete(sm.sessions, id)
+	}
+	return evicted
+}
+
 func (sm *StreamSessionManager) cleanupLoop() {
 	for {
 		select {
 		case <-sm.cleanupTicker.C:
-			// Collect evicted sessions under the lock, then run Shutdown outside
-			// so component cleanup cannot block other sessions or deadlock on the manager lock.
-			var evicted []*ProfileStreamSession
-			sm.mu.Lock()
-			now := time.Now()
-			for id, session := range sm.sessions {
-				if now.Sub(session.LastActive) > sm.inactivityTimeout {
-					evicted = append(evicted, session)
-					delete(sm.sessions, id)
-				}
-			}
-			sm.mu.Unlock()
-			for _, session := range evicted {
+			for _, session := range sm.evictIdle(time.Now()) {
 				session.Shutdown()
 			}
 		case <-sm.cleanupDone:

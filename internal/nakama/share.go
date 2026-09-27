@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata_provider"
 	"seanime/internal/customsource"
@@ -143,6 +144,16 @@ func (m *Manager) GetHostAnimeLibrary(ctx context.Context) (ac *NakamaAnimeLibra
 	return entryResponse.Data, true
 }
 
+func streamTokenParam(pc PlaybackContext) string {
+	if pc.StreamToken == nil {
+		return ""
+	}
+	if token := pc.StreamToken(); token != "" {
+		return "&auth_token=" + url.QueryEscape(token)
+	}
+	return ""
+}
+
 func (m *Manager) PlayHostAnimeLibraryFile(pc PlaybackContext, path string, userAgent string, clientId string, media *anilist.BaseAnime, aniDBEpisode string, forcePlaybackMethod string) error {
 	if !m.settings.Enabled || !m.IsConnectedToHost() || m.IsRoomConnection() {
 		return errors.New("not connected to host")
@@ -178,7 +189,7 @@ func (m *Manager) PlayHostAnimeLibraryFile(pc PlaybackContext, path string, user
 	if strings.HasPrefix(ret, "http://http") {
 		ret = strings.Replace(ret, "http://http", "http", 1)
 	}
-	ret += pc.DirectstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&")
+	ret += pc.DirectstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&") + streamTokenParam(pc)
 
 	windowTitle := media.GetPreferredTitle()
 	if !media.IsMovieOrSingleEpisode() {
@@ -268,7 +279,7 @@ func (m *Manager) PlayHostAnimeStream(streamType WatchPartyStreamType, userAgent
 	if strings.HasPrefix(ret, "http://http") {
 		ret = strings.Replace(ret, "http://http", "http", 1)
 	}
-	ret += pc.DirectstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&")
+	ret += pc.DirectstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&") + streamTokenParam(pc)
 
 	windowTitle := media.GetPreferredTitle()
 	if !media.IsMovieOrSingleEpisode() {

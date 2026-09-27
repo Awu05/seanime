@@ -112,11 +112,25 @@ type PlaybackContext struct {
 	NativePlayer            *nativeplayer.NativePlayer
 	TorrentstreamRepository *torrentstream.Repository
 	DirectstreamManager     *directstream.Manager
+	// StreamToken lets a desktop player, which can't send the login cookie, fetch this profile's
+	// streams. Nil or "" when not needed.
+	StreamToken func() string
 }
 
 // BindPartyPlayback makes watch parties play through pc until another party is created or joined.
 func (m *Manager) BindPartyPlayback(pc PlaybackContext) {
 	m.partyPlayback.Store(&pc)
+}
+
+// IsPartyPlayingThrough reports whether a running watch party plays through vc, so the profile
+// session owning it must stay alive for the whole party.
+func (m *Manager) IsPartyPlayingThrough(vc *videocore.VideoCore) bool {
+	pc := m.partyPlayback.Load()
+	if pc == nil || pc.VideoCore != vc {
+		return false
+	}
+	_, active := m.watchPartyManager.GetCurrentSession()
+	return active
 }
 
 // DefaultPlayback returns the app-wide playback context.

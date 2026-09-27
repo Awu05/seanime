@@ -10,10 +10,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// isExternalStreamPath reports whether path serves a torrent stream to an external player - the
+// isExternalStreamPath reports whether path serves a stream an external player may fetch - the
 // only thing a core.StreamScope token authorizes.
 func isExternalStreamPath(path string) bool {
-	return strings.HasPrefix(path, "/api/v1/torrentstream/stream/")
+	return strings.HasPrefix(path, "/api/v1/torrentstream/stream/") || path == "/api/v1/nakama/stream"
 }
 
 var publicPaths = []string{

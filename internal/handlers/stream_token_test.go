@@ -45,8 +45,13 @@ func TestExternalStreamToken(t *testing.T) {
 		require.Empty(t, rec.Header().Get("Set-Cookie"))
 	})
 
+	t.Run("opens a watch party stream played in a desktop player", func(t *testing.T) {
+		require.Equal(t, http.StatusOK, serve("/api/v1/nakama/stream").Code)
+	})
+
 	t.Run("grants nothing beyond the stream", func(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, serve("/api/v1/settings").Code)
+		require.Equal(t, http.StatusForbidden, serve("/api/v1/nakama/stream-settings").Code)
 	})
 
 	t.Run("passes the request boundary only on the stream path", func(t *testing.T) {

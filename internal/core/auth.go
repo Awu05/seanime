@@ -30,7 +30,7 @@ func GenerateJWTSecret() (string, error) {
 }
 
 // StreamScope marks a token that only lets an external player (VLC, mpv) fetch one profile's
-// stream: those players can't send the login cookie.
+// streams: those players can't send the login cookie.
 const StreamScope = "stream"
 
 func GenerateStreamToken(secret string, profileID string) (string, error) {

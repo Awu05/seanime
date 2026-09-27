@@ -324,6 +324,9 @@ func (a *App) initModulesOnce() {
 		DirectStreamManager:     a.DirectStreamManager,
 		IsOfflineRef:            a.IsOfflineRef(),
 	})
+	a.StreamSessionManager.SetKeepAlive(func(s *ProfileStreamSession) bool {
+		return a.NakamaManager.IsPartyPlayingThrough(s.VideoCore)
+	})
 
 	// +---------------------+
 	// |      Playlist       |
