@@ -1,6 +1,9 @@
 package security
 
-import "testing"
+import (
+	"net/netip"
+	"testing"
+)
 
 func TestValidateOutboundURL(t *testing.T) {
 	t.Cleanup(func() {
@@ -41,4 +44,22 @@ func TestValidateOutboundURL(t *testing.T) {
 			t.Fatalf("expected public ip to be allowed in strict mode: %v", err)
 		}
 	})
+}
+
+func TestIsPrivateNetworkAddrTailscaleCGNATRange(t *testing.T) {
+	tests := []struct {
+		addr    string
+		private bool
+	}{
+		{"100.64.0.1", true},      // start of the Tailscale/CGNAT range
+		{"100.127.255.254", true}, // end of the Tailscale/CGNAT range
+		{"100.128.0.1", false},    // just outside the range
+		{"8.8.8.8", false},        // ordinary public address
+	}
+
+	for _, tt := range tests {
+		if got := IsPrivateNetworkAddr(netip.MustParseAddr(tt.addr)); got != tt.private {
+			t.Errorf("IsPrivateNetworkAddr(%s) = %v, want %v", tt.addr, got, tt.private)
+		}
+	}
 }

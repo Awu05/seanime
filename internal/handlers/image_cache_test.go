@@ -21,6 +21,15 @@ func imageCacheRequest(t *testing.T, h *Handler, rawURL string) *httptest.Respon
 	return rec
 }
 
+func imageCacheNavigationRequest(t *testing.T, h *Handler, rawURL string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/image-cache?url="+url.QueryEscape(rawURL), nil)
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	rec := httptest.NewRecorder()
+	require.NoError(t, h.HandleGetCachedImage(echo.New().NewContext(req, rec)))
+	return rec
+}
+
 func newImageCacheHandler(t *testing.T, disabled ...core.FeatureKey) *Handler {
 	t.Helper()
 	logger := util.NewLogger()
@@ -56,4 +65,13 @@ func TestHandleGetCachedImageRedirectsWhenProxyDisabled(t *testing.T) {
 	require.Equal(t, "https://s4.anilist.co/cover.jpg", rec.Header().Get(echo.HeaderLocation))
 
 	require.Equal(t, http.StatusBadRequest, imageCacheRequest(t, h, "javascript:alert(1)").Code)
+}
+
+// A navigation (a clicked/typed link) never hits this route legitimately, so it's rejected before
+// any fetch is attempted, without leaking a Location for the browser to follow.
+func TestHandleGetCachedImageRejectsNavigations(t *testing.T) {
+	h := newImageCacheHandler(t)
+	rec := imageCacheNavigationRequest(t, h, "https://s4.anilist.co/cover.jpg")
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, rec.Header().Get(echo.HeaderLocation))
 }

@@ -15,7 +15,19 @@ class HMACAuth {
         this.ttl = ttl
     }
 
+    // The underlying signature (CryptoJS, not WebCrypto) is synchronous; generateToken stays async
+    // only to keep its existing public signature for callers that already await it.
     async generateToken(endpoint: string): Promise<string> {
+        return this.generateTokenSync(endpoint)
+    }
+
+    generateQueryParam(endpoint: string, symbol?: string): Promise<string> {
+        return Promise.resolve(this.generateQueryParamSync(endpoint, symbol))
+    }
+
+    // Synchronous variants for callers that build a URL synchronously (e.g. an <img src>) and can't
+    // await a token, such as the image cache's cachedImageUrl.
+    generateTokenSync(endpoint: string): string {
         const now = Math.floor(Date.now() / 1000)
         const claims: TokenClaims = {
             endpoint,
@@ -32,20 +44,19 @@ class HMACAuth {
             .replace(/=/g, "")
 
         // Generate HMAC signature
-        const signature = await this.generateHMACSignature(claimsB64)
+        const signature = this.generateHMACSignatureSync(claimsB64)
 
         // Return token in format: claims.signature
         return `${claimsB64}.${signature}`
     }
 
-    generateQueryParam(endpoint: string, symbol?: string): Promise<string> {
-        return this.generateToken(endpoint).then(token => {
-            const sym = symbol || "?"
-            return `${sym}token=${encodeURIComponent(token)}`
-        })
+    generateQueryParamSync(endpoint: string, symbol?: string): string {
+        const token = this.generateTokenSync(endpoint)
+        const sym = symbol || "?"
+        return `${sym}token=${encodeURIComponent(token)}`
     }
 
-    private async generateHMACSignature(data: string): Promise<string> {
+    private generateHMACSignatureSync(data: string): string {
         const signature = CryptoJS.HmacSHA256(data, this.secret)
 
         const base64 = CryptoJS.enc.Base64.stringify(signature)

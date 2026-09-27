@@ -27,6 +27,7 @@ import (
 const (
 	DefaultMaxMB  = 1024
 	MinMaxMB      = 100
+	MaxMaxMB      = 1 << 20 // 1 TB
 	maxImageBytes = 10 << 20
 	fetchTimeout  = 15 * time.Second
 )
@@ -53,7 +54,7 @@ func New(dir string, maxMB int, logger *zerolog.Logger) (*Cache, error) {
 
 func newCache(dir string, maxMB int, client *http.Client, logger *zerolog.Logger) (*Cache, error) {
 	c := &Cache{client: client, logger: logger}
-	c.maxMB.Store(int64(max(maxMB, MinMaxMB)))
+	c.maxMB.Store(int64(min(max(maxMB, MinMaxMB), MaxMaxMB)))
 	store, err := diskstore.New(dir, func() int64 { return c.maxMB.Load() << 20 }, logger)
 	if err != nil {
 		return nil, err
@@ -95,6 +96,9 @@ func (c *Cache) MaxMB() int { return int(c.maxMB.Load()) }
 func (c *Cache) SetMaxMB(mb int) error {
 	if mb < MinMaxMB {
 		return fmt.Errorf("imagecache: limit must be at least %d MB", MinMaxMB)
+	}
+	if mb > MaxMaxMB {
+		return fmt.Errorf("imagecache: limit must be at most %d MB", MaxMaxMB)
 	}
 	c.maxMB.Store(int64(mb))
 	c.store.Trim()

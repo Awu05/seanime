@@ -6,6 +6,7 @@ import React from "react"
 import { SettingsCard } from "../_components/settings-card"
 
 const MIN_IMAGE_CACHE_MB = 100
+const MAX_IMAGE_CACHE_MB = 1048576 // 1 TB, mirrors imagecache.MaxMaxMB
 
 export function OfflineCopiesSettings() {
     const { data } = useGetOfflineCopies()
@@ -25,7 +26,7 @@ export function OfflineCopiesSettings() {
         onConfirm: () => clear(),
     })
 
-    const canSave = !!limit && limit >= MIN_IMAGE_CACHE_MB && limit !== data?.imageCacheMaxMB
+    const canSave = !!limit && limit >= MIN_IMAGE_CACHE_MB && limit <= MAX_IMAGE_CACHE_MB && limit !== data?.imageCacheMaxMB
 
     return (
         <SettingsCard
@@ -39,6 +40,7 @@ export function OfflineCopiesSettings() {
                     label="Image cache limit (MB)"
                     value={limit}
                     min={MIN_IMAGE_CACHE_MB}
+                    max={MAX_IMAGE_CACHE_MB}
                     onValueChange={value => setLimitValue(value)}
                     className="max-w-[200px]"
                 />

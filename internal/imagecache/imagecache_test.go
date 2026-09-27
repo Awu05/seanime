@@ -201,6 +201,14 @@ func TestSetMaxMB(t *testing.T) {
 	require.Equal(t, 2048, c.MaxMB())
 }
 
+// Review focus: SetMaxMB refuses a limit above MaxMaxMB instead of silently accepting it.
+func TestSetMaxMBRejectsAboveMaximum(t *testing.T) {
+	c := newTestCache(t, http.DefaultClient)
+	require.Error(t, c.SetMaxMB(MaxMaxMB+1))
+	require.NoError(t, c.SetMaxMB(MaxMaxMB))
+	require.Equal(t, MaxMaxMB, c.MaxMB())
+}
+
 // Review focus 3: lowering the limit shrinks the cache right away.
 func TestSetMaxMBTrimsImmediately(t *testing.T) {
 	c := newTestCache(t, http.DefaultClient)
@@ -218,4 +226,10 @@ func TestNewClampsLimitToMinimum(t *testing.T) {
 	c, err := newCache(t.TempDir(), 5, http.DefaultClient, util.NewLogger())
 	require.NoError(t, err)
 	require.Equal(t, MinMaxMB, c.MaxMB())
+}
+
+func TestNewClampsLimitToMaximum(t *testing.T) {
+	c, err := newCache(t.TempDir(), MaxMaxMB+1, http.DefaultClient, util.NewLogger())
+	require.NoError(t, err)
+	require.Equal(t, MaxMaxMB, c.MaxMB())
 }

@@ -53,9 +53,14 @@ func ValidateOutboundUrl(rawURL string) error {
 	return nil
 }
 
-// IsPrivateNetworkAddr reports whether addr is loopback, private, link-local, multicast or
-// unspecified - anything that isn't a public internet address.
+// tailscaleCGNATRange is the shared carrier-grade NAT block (RFC 6598) that Tailscale and other
+// overlay networks assign addresses from - not one of the RFC 1918 ranges netip.IsPrivate covers,
+// but still not reachable from the public internet.
+var tailscaleCGNATRange = netip.MustParsePrefix("100.64.0.0/10")
+
+// IsPrivateNetworkAddr reports whether addr is loopback, private, link-local, multicast,
+// unspecified or Tailscale/CGNAT - anything that isn't a public internet address.
 func IsPrivateNetworkAddr(addr netip.Addr) bool {
 	addr = addr.Unmap()
-	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() || addr.IsUnspecified()
+	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() || addr.IsUnspecified() || tailscaleCGNATRange.Contains(addr)
 }

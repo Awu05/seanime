@@ -8,9 +8,14 @@ import (
 	"seanime/internal/hook"
 	"seanime/internal/util/result"
 	"strconv"
+	"time"
 
 	"github.com/goccy/go-json"
 )
+
+// client has a timeout so a silent-drop outage doesn't hang the request for minutes before the
+// saved episode info is served.
+var client = &http.Client{Timeout: 15 * time.Second}
 
 type (
 	Anime struct {
@@ -97,7 +102,7 @@ func FetchAnimapMedia(from string, id int) (*Anime, error) {
 	request.Header.Set("X-Seanime-Version", "Seanime/"+constants.Version)
 
 	// Send an HTTP GET request
-	response, err := http.DefaultClient.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}

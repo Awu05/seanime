@@ -5965,13 +5965,35 @@
     }
   },
   {
+    "name": "TestHandleSetImageCacheLimitStrictMode",
+    "trimmedName": "TestHandleSetImageCacheLimitStrictMode",
+    "comments": [
+      "HandleSetImageCacheLimit changes a cache every profile shares, so strict mode restricts it to",
+      "trusted local requests exactly like HandleClearOfflineCopies.",
+      ""
+    ],
+    "filepath": "internal/handlers/filecache_test.go",
+    "filename": "filecache_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleGetCachedImage",
     "trimmedName": "GetCachedImage",
     "comments": [
       "HandleGetCachedImage",
       "",
       "\t@summary returns an image through the server's image cache.",
-      "\t@desc Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage.",
+      "\t@desc Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage. If the fetch fails for any reason, redirects to the original URL so the browser loads it directly as before; during an outage that load fails too and the placeholder shows.",
       "\t@route /api/v1/image-cache [GET]",
       "\t@param url - string - true - \"The absolute http(s) image URL\"",
       "\t@returns string",
@@ -5982,7 +6004,7 @@
     "api": {
       "summary": "returns an image through the server's image cache.",
       "descriptions": [
-        "Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage."
+        "Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage. If the fetch fails for any reason, redirects to the original URL so the browser loads it directly as before; during an outage that load fails too and the placeholder shows."
       ],
       "endpoint": "/api/v1/image-cache",
       "methods": [
@@ -6008,10 +6030,11 @@
     }
   },
   {
-    "name": "TestHandleGetCachedImageRefusesPrivateAddresses",
-    "trimmedName": "TestHandleGetCachedImageRefusesPrivateAddresses",
+    "name": "TestHandleGetCachedImageRedirectsPrivateAddresses",
+    "trimmedName": "TestHandleGetCachedImageRedirectsPrivateAddresses",
     "comments": [
-      "A private address can't be fetched, so it fails as an upstream error, not a crash or a fetch.",
+      "A private address can't be fetched by the cache, so the browser is sent to load it directly,",
+      "same as before this route existed.",
       ""
     ],
     "filepath": "internal/handlers/image_cache_test.go",
@@ -6033,6 +6056,28 @@
     "trimmedName": "TestHandleGetCachedImageRedirectsWhenProxyDisabled",
     "comments": [
       "With proxying disabled the server doesn't fetch; it sends the browser to the image itself.",
+      ""
+    ],
+    "filepath": "internal/handlers/image_cache_test.go",
+    "filename": "image_cache_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestHandleGetCachedImageRejectsNavigations",
+    "trimmedName": "TestHandleGetCachedImageRejectsNavigations",
+    "comments": [
+      "A navigation (a clicked/typed link) never hits this route legitimately, so it's rejected before",
+      "any fetch is attempted, without leaking a Location for the browser to follow.",
       ""
     ],
     "filepath": "internal/handlers/image_cache_test.go",

@@ -1040,7 +1040,7 @@ export const API_ENDPOINTS = {
         /**
          *  @description
          *  Route returns an image through the server's image cache.
-         *  Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage.
+         *  Serves the saved copy when there is one, otherwise fetches, saves and serves the image, so images still show during an internet outage. If the fetch fails for any reason, redirects to the original URL so the browser loads it directly as before; during an outage that load fails too and the placeholder shows.
          */
         GetCachedImage: {
             key: "IMAGE-CACHE-get-cached-image",

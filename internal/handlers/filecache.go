@@ -150,6 +150,9 @@ func (h *Handler) HandleSetImageCacheLimit(c echo.Context) error {
 	if !h.canManageSharedCaches(c) {
 		return respondAdminRequired(c)
 	}
+	if err := h.guardStrictLocalOnlyAction(c); err != nil {
+		return err
+	}
 	type body struct {
 		ImageCacheMaxMB int `json:"imageCacheMaxMB"`
 	}
