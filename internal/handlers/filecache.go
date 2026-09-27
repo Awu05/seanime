@@ -22,6 +22,18 @@ func (h *Handler) HandleGetFileCacheTotalSize(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// The saved episode info and cached images live under the same cache directory but are shown
+	// and cleared from their own "Offline copies" card, so exclude them here.
+	if h.App.EpisodeInfoStore != nil {
+		size -= h.App.EpisodeInfoStore.Size()
+	}
+	if h.App.ImageCache != nil {
+		size -= h.App.ImageCache.Size()
+	}
+	if size < 0 {
+		size = 0
+	}
+
 	// Return the cache size
 	return h.RespondWithData(c, util.Bytes(uint64(size)))
 }

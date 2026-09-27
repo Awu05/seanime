@@ -1,12 +1,17 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"seanime/internal/core"
 	"seanime/internal/imagecache"
 	"seanime/internal/security"
 	"seanime/internal/util"
+	"seanime/internal/util/diskstore"
+	"seanime/internal/util/filecache"
 	"strings"
 	"testing"
 
@@ -57,4 +62,31 @@ func TestHandleSetImageCacheLimitStrictMode(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, 200, cache.MaxMB())
 	})
+}
+
+// The offline copies (saved episode info + cached images) live under the same cache directory the
+// old cache card totals up, but they're shown and cleared from their own "Offline copies" card, so
+// the old card's total shouldn't double-count them.
+func TestHandleGetFileCacheTotalSizeExcludesOfflineCopies(t *testing.T) {
+	dir := t.TempDir()
+	fileCacher, err := filecache.NewCacher(dir)
+	require.NoError(t, err)
+
+	regularContents := []byte("regular-cache-file-contents")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "somebucket_a-key.json"), regularContents, 0o644))
+
+	episodeInfoStore, err := diskstore.New(filepath.Join(dir, "offline-copies", "episode-info"), func() int64 { return 1 << 30 }, util.NewLogger())
+	require.NoError(t, err)
+	require.NoError(t, episodeInfoStore.Put("anime-1", []byte("saved-episode-info-bytes")))
+
+	h := &Handler{App: &core.App{FileCacher: fileCacher, EpisodeInfoStore: episodeInfoStore}}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/filecache/total-size", nil)
+	rec := httptest.NewRecorder()
+	require.NoError(t, h.HandleGetFileCacheTotalSize(echo.New().NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp SeaResponse[string]
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, util.Bytes(uint64(len(regularContents))), resp.Data)
 }
