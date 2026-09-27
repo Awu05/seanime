@@ -21,6 +21,7 @@ import { DebridSettings } from "@/app/(main)/settings/_containers/debrid-setting
 import { FilecacheSettings } from "@/app/(main)/settings/_containers/filecache-settings"
 import { LogsSettings } from "@/app/(main)/settings/_containers/logs-settings"
 import { MangaSettings } from "@/app/(main)/settings/_containers/manga-settings"
+import { OfflineCopiesSettings } from "@/app/(main)/settings/_containers/offline-copies-settings"
 import { MediastreamSettings } from "@/app/(main)/settings/_containers/mediastream-settings"
 import { ServerSettings } from "@/app/(main)/settings/_containers/server-settings"
 import { TorrentstreamSettings } from "@/app/(main)/settings/_containers/torrentstream-settings"
@@ -1179,6 +1180,8 @@ export default function Page() {
                             />
 
                             <FilecacheSettings />
+
+                            {(!status?.multiUserEnabled || isAdmin) && <OfflineCopiesSettings />}
 
                         </TabsContent>
 
