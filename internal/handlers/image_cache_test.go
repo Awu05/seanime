@@ -39,10 +39,13 @@ func TestHandleGetCachedImageRejectsBadURLs(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, imageCacheRequest(t, h, "file:///etc/passwd").Code)
 }
 
-// A private address can't be fetched, so it fails as an upstream error, not a crash or a fetch.
-func TestHandleGetCachedImageRefusesPrivateAddresses(t *testing.T) {
+// A private address can't be fetched by the cache, so the browser is sent to load it directly,
+// same as before this route existed.
+func TestHandleGetCachedImageRedirectsPrivateAddresses(t *testing.T) {
 	h := newImageCacheHandler(t)
-	require.Equal(t, http.StatusBadGateway, imageCacheRequest(t, h, "http://127.0.0.1:1/a.jpg").Code)
+	rec := imageCacheRequest(t, h, "http://127.0.0.1:1/a.jpg")
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, "http://127.0.0.1:1/a.jpg", rec.Header().Get(echo.HeaderLocation))
 }
 
 // With proxying disabled the server doesn't fetch; it sends the browser to the image itself.

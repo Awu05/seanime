@@ -33,6 +33,13 @@ func (h *Handler) HandleGetCachedImage(c echo.Context) error {
 		if errors.Is(err, imagecache.ErrInvalidURL) {
 			return c.String(http.StatusBadRequest, "An http(s) image URL is required")
 		}
+		// A private-network source (e.g. a LAN manga server) or a non-image response (e.g. an
+		// extension source without a proper Content-Type) can't be cached, but the browser can
+		// still load it directly like it did before this route existed, so send it there instead
+		// of failing the image outright.
+		if errors.Is(err, imagecache.ErrPrivateAddress) || errors.Is(err, imagecache.ErrNotImage) {
+			return c.Redirect(http.StatusFound, rawURL)
+		}
 		h.App.Logger.Debug().Err(err).Str("url", rawURL).Msg("image cache: Could not serve image")
 		return c.String(http.StatusBadGateway, "Could not load image")
 	}
