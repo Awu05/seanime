@@ -135,6 +135,18 @@ func (p *ProviderImpl) GetAnimeMetadata(platform metadata.Platform, mId int) (re
 // every request.
 const savedCopyTTL = 5 * time.Minute
 
+// saveEpisodeInfo saves a fetched copy on disk so it can be served if a later fetch fails.
+func (p *ProviderImpl) saveEpisodeInfo(cacheKey string, mId int, m *metadata.AnimeMetadata) {
+	data, err := json.Marshal(m)
+	if err != nil {
+		p.logger.Warn().Err(err).Int("mediaId", mId).Msg("metadata: Could not save episode info")
+		return
+	}
+	if err := p.episodeInfo.Put(cacheKey, data); err != nil {
+		p.logger.Warn().Err(err).Int("mediaId", mId).Msg("metadata: Could not save episode info")
+	}
+}
+
 // fetchOrSaved fetches fresh metadata and saves a copy on disk. When the fetch fails, it serves
 // the saved copy instead.
 func (p *ProviderImpl) fetchOrSaved(platform metadata.Platform, mId int, cacheKey string) (*metadata.AnimeMetadata, error) {
@@ -144,11 +156,7 @@ func (p *ProviderImpl) fetchOrSaved(platform metadata.Platform, mId int, cacheKe
 	}
 	if err == nil {
 		if ret != nil {
-			if data, mErr := json.Marshal(ret); mErr == nil {
-				if pErr := p.episodeInfo.Put(cacheKey, data); pErr != nil {
-					p.logger.Warn().Err(pErr).Int("mediaId", mId).Msg("metadata: Could not save episode info")
-				}
-			}
+			p.saveEpisodeInfo(cacheKey, mId, ret)
 		}
 		return ret, nil
 	}
