@@ -133,7 +133,7 @@ func (r *Repository) GetTorrentFilePreviewsFromManualSelection(opts *GetTorrentF
 	})
 
 	r.logger.Debug().Str("hash", opts.Torrent.InfoHash).Msg("torrentstream: Got file previews for torrent selection, dropping torrent")
-	go selectedTorrent.Drop()
+	go r.client.dropIfUnclaimed(selectedTorrent)
 
 	return
 }

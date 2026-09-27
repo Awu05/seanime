@@ -266,12 +266,10 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 
 	r.sendStateEvent(eventLoading, TLSStateSendingStreamToMediaPlayer)
 
-	go func() {
-		// Add the torrent to the history if it is a batch & manually selected
-		if len(r.client.currentTorrent.MustGet().Files()) > 1 && opts.Torrent != nil && opts.Torrent.IsBatch {
-			r.AddBatchHistory(opts.MediaId, opts.Torrent, opts.BatchEpisodeFiles) // ran in goroutine
-		}
-	}()
+	// Add the torrent to the history if it is a batch & manually selected
+	if len(torrentToStream.Torrent.Files()) > 1 && opts.Torrent != nil && opts.Torrent.IsBatch {
+		r.AddBatchHistory(opts.MediaId, opts.Torrent, opts.BatchEpisodeFiles)
+	}
 
 	//
 	// Start the playback
@@ -309,8 +307,8 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 				EpisodeNumber: opts.EpisodeNumber,
 				AnidbEpisode:  opts.AniDBEpisode,
 				Media:         media.ToBaseAnime(),
-				Torrent:       r.client.currentTorrent.MustGet(),
-				File:          r.client.currentFile.MustGet(),
+				Torrent:       torrentToStream.Torrent,
+				File:          torrentToStream.File,
 				OnTerminate: func() {
 					_ = r.StopStream(true)
 				},

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"seanime/internal/mediaplayers/mediaplayer"
 	"seanime/internal/util"
 	"seanime/internal/util/torrentutil"
@@ -678,6 +679,7 @@ func (c *Client) FindTorrent(infoHash string) (*torrent.Torrent, error) {
 	return nil, fmt.Errorf("no torrent found")
 }
 
+// RemoveTorrent drops a torrent the caller no longer needs, unless a session is streaming it.
 func (c *Client) RemoveTorrent(infoHash string) error {
 	if c.torrentClient.IsAbsent() {
 		return errors.New("torrent client is not initialized")
@@ -688,8 +690,9 @@ func (c *Client) RemoveTorrent(infoHash string) error {
 	torrents := c.torrentClient.MustGet().Torrents()
 	for _, t := range torrents {
 		if t.InfoHash().AsString() == infoHash {
-			t.Drop()
-			c.repository.logger.Debug().Msgf("torrentstream: Removed torrent: %s", infoHash)
+			if c.dropIfUnclaimed(t) {
+				c.repository.logger.Debug().Msgf("torrentstream: Removed torrent: %s", infoHash)
+			}
 			return nil
 		}
 	}
@@ -731,20 +734,35 @@ func (c *Client) dropUnclaimedTorrentsWithClaims(keepHashes map[metainfo.Hash]bo
 			c.repository.logger.Debug().Str("infoHash", infoHash.String()).Msg("torrentstream: torrent kept alive by add grace period")
 			continue
 		}
-		name := t.Name()
 		c.repository.logger.Trace().Msgf("torrentstream: Dropping unclaimed torrent: %s", infoHash)
-		t.Drop()
+		c.dropTorrentAndData(t)
 		droppedCount++
-
-		// Remove only this torrent's directory
-		if c.repository.settings.IsPresent() && name != "" {
-			torrentDir := path.Join(c.repository.settings.MustGet().DownloadDir, name)
-			_ = os.RemoveAll(torrentDir)
-		}
 	}
 
 	if droppedCount > 0 {
 		c.repository.logger.Debug().Msgf("torrentstream: Dropped %d unclaimed torrent(s)", droppedCount)
+	}
+}
+
+// dropIfUnclaimed drops a torrent a caller added for its own short-lived use (file previews, a
+// rejected auto-select candidate, a cancelled preload), unless a session is streaming it: the
+// shared engine returns the same handle for an infohash that's already loaded. Must not be called
+// while holding c.mu (see claimedHashes).
+func (c *Client) dropIfUnclaimed(t *torrent.Torrent) bool {
+	if claimedHashes(nil)[t.InfoHash()] {
+		return false
+	}
+	c.dropTorrentAndData(t)
+	return true
+}
+
+func (c *Client) dropTorrentAndData(t *torrent.Torrent) {
+	infoHash := t.InfoHash()
+	t.Drop()
+	// Data lives in DownloadDir/<infohash> (storage.NewFileByInfoHash), never under the torrent's
+	// name, which comes from untrusted metadata.
+	if settings, ok := c.repository.settings.Get(); ok {
+		_ = os.RemoveAll(filepath.Join(settings.DownloadDir, infoHash.HexString()))
 	}
 }
 

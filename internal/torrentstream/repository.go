@@ -178,15 +178,12 @@ func (r *Repository) takePreloadedStream() (*preloadedStream, bool) {
 }
 
 // cancelAndMaybeDropPreloaded cancels a taken-out preloaded stream's prepare context and drops
-// its torrent from the shared engine, unless that torrent is also the one currently playing.
+// its torrent from the shared engine, unless some session is streaming it.
 func (r *Repository) cancelAndMaybeDropPreloaded(prepared *preloadedStream) {
 	if prepared.CancelFunc != nil {
 		prepared.CancelFunc()
 	}
-	if torrentOpt, _ := r.client.currentTorrentAndFile(); torrentOpt.IsAbsent() ||
-		torrentOpt.MustGet().InfoHash() != prepared.Torrent.InfoHash() {
-		prepared.Torrent.Drop()
-	}
+	r.client.dropIfUnclaimed(prepared.Torrent)
 }
 
 func (r *Repository) IsEnabled() bool {
