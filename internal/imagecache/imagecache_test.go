@@ -65,7 +65,7 @@ func TestRefusesNonImagesAndSVG(t *testing.T) {
 		srv, _ := imageServer(t, ct, []byte("<svg/>"))
 		c := newTestCache(t, srv.Client())
 		_, _, err := c.Get(context.Background(), srv.URL+"/x")
-		require.ErrorIs(t, err, ErrNotImage, ct)
+		require.ErrorIs(t, err, errNotImage, ct)
 		require.EqualValues(t, 0, c.Size(), "refused responses aren't saved")
 	}
 }
@@ -74,7 +74,7 @@ func TestRefusesOversizedImages(t *testing.T) {
 	srv, _ := imageServer(t, "image/jpeg", make([]byte, maxImageBytes+1))
 	c := newTestCache(t, srv.Client())
 	_, _, err := c.Get(context.Background(), srv.URL+"/big.jpg")
-	require.ErrorIs(t, err, ErrTooLarge)
+	require.ErrorIs(t, err, errTooLarge)
 }
 
 func TestRefusesNonOKResponses(t *testing.T) {
@@ -89,7 +89,7 @@ func TestRefusesNonHTTPURLs(t *testing.T) {
 	c := newTestCache(t, http.DefaultClient)
 	for _, u := range []string{"file:///etc/passwd", "ftp://example.com/a.jpg", "not a url", ""} {
 		_, _, err := c.Get(context.Background(), u)
-		require.ErrorIs(t, err, ErrInvalidURL, u)
+		require.ErrorIs(t, err, errInvalidURL, u)
 	}
 }
 
@@ -100,7 +100,7 @@ func TestPublicOnlyClientRefusesPrivateAddresses(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = c.Get(context.Background(), srv.URL+"/a.jpg")
-	require.ErrorIs(t, err, ErrPrivateAddress)
+	require.ErrorIs(t, err, errPrivateAddress)
 	require.EqualValues(t, 0, hits.Load())
 }
 

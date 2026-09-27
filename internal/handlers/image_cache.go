@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"net/url"
 	"seanime/internal/core"
-	"seanime/internal/imagecache"
 
 	"github.com/labstack/echo/v4"
 )
@@ -36,13 +34,7 @@ func (h *Handler) HandleGetCachedImage(c echo.Context) error {
 
 	body, contentType, err := h.App.ImageCache.Get(c.Request().Context(), rawURL)
 	if err != nil {
-		if errors.Is(err, imagecache.ErrInvalidURL) {
-			return c.String(http.StatusBadRequest, "An http(s) image URL is required")
-		}
-		// Whatever went wrong - a private-network source, a non-image response, a host that 403s
-		// Go's User-Agent or wants a Referer, a banner over 10 MB, a proxy-only host, an outage -
-		// the browser can still load rawURL directly like it did before this route existed, so send
-		// it there instead of failing the image outright. During an actual outage that direct load
+		// Fall back to a direct load, same as before this route existed; during an outage that
 		// fails too and the placeholder shows.
 		h.App.Logger.Debug().Err(err).Str("url", rawURL).Msg("image cache: Could not serve image")
 		return c.Redirect(http.StatusFound, rawURL)
@@ -51,13 +43,10 @@ func (h *Handler) HandleGetCachedImage(c echo.Context) error {
 	return writeCachedImage(c, contentType, body)
 }
 
-// writeCachedImage writes a successfully fetched/cached image with the headers that make the
-// browser treat it correctly.
 func writeCachedImage(c echo.Context, contentType string, body []byte) error {
 	header := c.Response().Header()
-	// private + a week: the browser comes back about weekly so the store's 24h access refresh sees
-	// real use and trimming doesn't delete the most-viewed covers; private so shared proxies don't
-	// store a response that may carry a renewed Set-Cookie.
+	// A week matches the store's 24h access refresh so trimming doesn't delete popular covers;
+	// private since a shared proxy shouldn't cache a response that may carry a renewed Set-Cookie.
 	header.Set(echo.HeaderCacheControl, "private, max-age=604800")
 	header.Set("X-Content-Type-Options", "nosniff")
 	return c.Blob(http.StatusOK, contentType, body)

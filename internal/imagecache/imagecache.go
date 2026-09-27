@@ -33,10 +33,10 @@ const (
 )
 
 var (
-	ErrInvalidURL     = errors.New("imagecache: not an http(s) URL")
-	ErrNotImage       = errors.New("imagecache: response is not a supported image")
-	ErrTooLarge       = errors.New("imagecache: image is larger than 10 MB")
-	ErrPrivateAddress = errors.New("imagecache: refusing to connect to a private network address")
+	errInvalidURL     = errors.New("imagecache: not an http(s) URL")
+	errNotImage       = errors.New("imagecache: response is not a supported image")
+	errTooLarge       = errors.New("imagecache: image is larger than 10 MB")
+	errPrivateAddress = errors.New("imagecache: refusing to connect to a private network address")
 )
 
 type Cache struct {
@@ -79,7 +79,7 @@ func publicOnlyClient() *http.Client {
 				return err
 			}
 			if security.IsPrivateNetworkAddr(addr) {
-				return ErrPrivateAddress
+				return errPrivateAddress
 			}
 			return nil
 		},
@@ -163,13 +163,13 @@ func (c *Cache) saved(rawURL string) (image, bool) {
 func (c *Cache) fetch(ctx context.Context, rawURL string) (image, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return image{}, ErrInvalidURL
+		return image{}, errInvalidURL
 	}
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return image{}, ErrInvalidURL
+		return image{}, errInvalidURL
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -181,14 +181,14 @@ func (c *Cache) fetch(ctx context.Context, rawURL string) (image, error) {
 	}
 	contentType := resp.Header.Get("Content-Type")
 	if !isAllowedImageType(contentType) {
-		return image{}, ErrNotImage
+		return image{}, errNotImage
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
 	if err != nil {
 		return image{}, err
 	}
 	if len(body) > maxImageBytes {
-		return image{}, ErrTooLarge
+		return image{}, errTooLarge
 	}
 	return image{body: body, contentType: contentType}, nil
 }
