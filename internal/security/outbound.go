@@ -30,7 +30,7 @@ func ValidateOutboundUrl(rawURL string) error {
 	}
 
 	if addr, err := netip.ParseAddr(host); err == nil {
-		if isPrivateNetworkAddr(addr) {
+		if IsPrivateNetworkAddr(addr) {
 			return fmt.Errorf("private network access denied: host '%s' is not reachable from strict mode", host)
 		}
 		return nil
@@ -45,7 +45,7 @@ func ValidateOutboundUrl(rawURL string) error {
 	}
 
 	for _, addr := range addrs {
-		if isPrivateNetworkAddr(addr) {
+		if IsPrivateNetworkAddr(addr) {
 			return fmt.Errorf("private network access denied: host '%s' resolves to a private address", host)
 		}
 	}
@@ -53,7 +53,9 @@ func ValidateOutboundUrl(rawURL string) error {
 	return nil
 }
 
-func isPrivateNetworkAddr(addr netip.Addr) bool {
+// IsPrivateNetworkAddr reports whether addr is loopback, private, link-local, multicast or
+// unspecified - anything that isn't a public internet address.
+func IsPrivateNetworkAddr(addr netip.Addr) bool {
 	addr = addr.Unmap()
 	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() || addr.IsUnspecified()
 }
