@@ -2240,6 +2240,28 @@
     }
   },
   {
+    "name": "isExternalStreamPath",
+    "trimmedName": "isExternalStreamPath",
+    "comments": [
+      "isExternalStreamPath reports whether path serves a torrent stream to an external player - the",
+      "only thing a core.StreamScope token authorizes.",
+      ""
+    ],
+    "filepath": "internal/handlers/auth_middleware.go",
+    "filename": "auth_middleware.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "sessionLifetime",
     "trimmedName": "sessionLifetime",
     "comments": [
@@ -11748,6 +11770,28 @@
     }
   },
   {
+    "name": "sessionPlayback",
+    "trimmedName": "sessionPlayback",
+    "comments": [
+      "sessionPlayback returns the requesting profile's playback context, for Nakama playback that",
+      "must be tracked as that profile's.",
+      ""
+    ],
+    "filepath": "internal/handlers/session_helper.go",
+    "filename": "session_helper.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
     "name": "HandleGetSettings",
     "trimmedName": "GetSettings",
     "comments": [
@@ -13108,6 +13152,29 @@
     ],
     "filepath": "internal/handlers/status_anilist_healthy_test.go",
     "filename": "status_anilist_healthy_test.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
+    }
+  },
+  {
+    "name": "TestExternalStreamToken",
+    "trimmedName": "TestExternalStreamToken",
+    "comments": [
+      "TestExternalStreamToken guards torrent stream URLs opened by external players (VLC, mpv), which",
+      "can't send the login cookie: with multi-user auth they were rejected outright, and even with a",
+      "valid credential the request carried no profile, so it was served from the wrong session.",
+      ""
+    ],
+    "filepath": "internal/handlers/stream_token_test.go",
+    "filename": "stream_token_test.go",
     "api": {
       "summary": "",
       "descriptions": [],

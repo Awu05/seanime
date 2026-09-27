@@ -406,7 +406,7 @@ func (wpm *WatchPartyManager) handleWatchPartyStateChangedEvent(payload *WatchPa
 				wpm.manager.wsEventManager.SendEvent(events.ErrorToast, "Watch party: Failed to play media: Host did not return torrent stream start options")
 				return
 			}
-			if !wpm.manager.torrentstreamRepository.IsEnabled() {
+			if !wpm.manager.PartyPlayback().TorrentstreamRepository.IsEnabled() {
 				wpm.logger.Error().Msg("nakama: Torrent streaming is not enabled")
 				wpm.manager.wsEventManager.SendEvent(events.ErrorToast, "Watch party: Failed to play media: Torrent streaming is not enabled")
 				return
@@ -420,13 +420,13 @@ func (wpm *WatchPartyManager) handleWatchPartyStateChangedEvent(payload *WatchPa
 			wpm.logger.Debug().Interface("params", payload.Session.CurrentMediaInfo.TorrentStreamParams).Msg("nakama: Starting torrent stream")
 
 			// Start the torrent
-			err = wpm.manager.torrentstreamRepository.StartStream(wpm.sessionCtx, payload.Session.CurrentMediaInfo.TorrentStreamParams)
+			err = wpm.manager.PartyPlayback().TorrentstreamRepository.StartStream(wpm.sessionCtx, payload.Session.CurrentMediaInfo.TorrentStreamParams)
 		case WatchPartyStreamTypeDebrid:
 			// Start the debrid stream, which is just the current stream the host is playing
 			err = wpm.manager.PlayHostAnimeStream(payload.Session.CurrentMediaInfo.StreamType, "seanime/nakama", wpm.clientId, media, payload.Session.CurrentMediaInfo.AniDBEpisode)
 		case WatchPartyStreamTypeFile:
 			// Start the local file stream off of the host using the file path
-			err = wpm.manager.PlayHostAnimeLibraryFile(payload.Session.CurrentMediaInfo.LocalFilePath, "seanime/nakama", wpm.clientId, media, payload.Session.CurrentMediaInfo.AniDBEpisode, "")
+			err = wpm.manager.PlayHostAnimeLibraryFile(wpm.manager.PartyPlayback(), payload.Session.CurrentMediaInfo.LocalFilePath, "seanime/nakama", wpm.clientId, media, payload.Session.CurrentMediaInfo.AniDBEpisode, "")
 		case WatchPartyStreamTypeOnlinestream:
 			if payload.Session.CurrentMediaInfo.OnlinestreamParams == nil {
 				wpm.logger.Error().Msg("nakama: No onlinestream params found")
@@ -436,7 +436,7 @@ func (wpm *WatchPartyManager) handleWatchPartyStateChangedEvent(payload *WatchPa
 			// Since it's an online stream force the current player to VideoCore
 			wpm.manager.genericPlayer.SetType(WatchPartyVideoCore)
 			// Start the onlinestream using the params
-			wpm.manager.videoCore.StartOnlinestreamWatchParty(payload.Session.CurrentMediaInfo.OnlinestreamParams)
+			wpm.manager.PartyPlayback().VideoCore.StartOnlinestreamWatchParty(payload.Session.CurrentMediaInfo.OnlinestreamParams)
 		}
 		if err != nil {
 			wpm.logger.Error().Err(err).Msg("nakama: Failed to play watch party media")
@@ -660,11 +660,11 @@ func (wpm *WatchPartyManager) relayModeListenToPlayerAsOrigin() {
 					if event.StreamType == WatchPartyStreamTypeFile {
 						streamStartedPayload.LocalFilePath = wpm.manager.previousPath
 					} else if event.StreamType == WatchPartyStreamTypeTorrent {
-						streamStartedPayload.TorrentStreamParams, _ = wpm.manager.torrentstreamRepository.GetPreviousStreamOptions()
+						streamStartedPayload.TorrentStreamParams, _ = wpm.manager.PartyPlayback().TorrentstreamRepository.GetPreviousStreamOptions()
 					} else if event.StreamType == WatchPartyStreamTypeDebrid {
 						streamStartedPayload.DebridStreamParams, _ = wpm.manager.debridClientRepository.GetPreviousStreamOptions()
 					} else if event.StreamType == WatchPartyStreamTypeOnlinestream {
-						state, ok := wpm.manager.videoCore.GetPlaybackState()
+						state, ok := wpm.manager.PartyPlayback().VideoCore.GetPlaybackState()
 						if !ok {
 							wpm.logger.Error().Msg("nakama: Failed to get playback state for online stream")
 							currentSession.mu.Unlock()

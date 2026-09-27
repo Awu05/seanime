@@ -143,7 +143,7 @@ func (m *Manager) GetHostAnimeLibrary(ctx context.Context) (ac *NakamaAnimeLibra
 	return entryResponse.Data, true
 }
 
-func (m *Manager) PlayHostAnimeLibraryFile(path string, userAgent string, clientId string, media *anilist.BaseAnime, aniDBEpisode string, forcePlaybackMethod string) error {
+func (m *Manager) PlayHostAnimeLibraryFile(pc PlaybackContext, path string, userAgent string, clientId string, media *anilist.BaseAnime, aniDBEpisode string, forcePlaybackMethod string) error {
 	if !m.settings.Enabled || !m.IsConnectedToHost() || m.IsRoomConnection() {
 		return errors.New("not connected to host")
 	}
@@ -178,7 +178,7 @@ func (m *Manager) PlayHostAnimeLibraryFile(path string, userAgent string, client
 	if strings.HasPrefix(ret, "http://http") {
 		ret = strings.Replace(ret, "http://http", "http", 1)
 	}
-	ret += m.directstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&")
+	ret += pc.DirectstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&")
 
 	windowTitle := media.GetPreferredTitle()
 	if !media.IsMovieOrSingleEpisode() {
@@ -197,18 +197,18 @@ func (m *Manager) PlayHostAnimeLibraryFile(path string, userAgent string, client
 	// Playback Manager
 	switch playbackMethod {
 	case "playbackmanager":
-		err = m.playbackManager.StartStreamingUsingMediaPlayer(windowTitle, &playbackmanager.StartPlayingOptions{
+		err = pc.PlaybackManager.StartStreamingUsingMediaPlayer(windowTitle, &playbackmanager.StartPlayingOptions{
 			Payload:   ret,
 			UserAgent: userAgent,
 			ClientId:  clientId,
 		}, media, aniDBEpisode)
 		if err != nil {
 			m.wsEventManager.SendEvent(events.HideIndefiniteLoader, "nakama-file")
-			go m.playbackManager.UnsubscribeFromPlaybackStatus("nakama-file")
+			go pc.PlaybackManager.UnsubscribeFromPlaybackStatus("nakama-file")
 			return err
 		}
 
-		m.playbackManager.RegisterMediaPlayerCallback(func(event playbackmanager.PlaybackEvent) bool {
+		pc.PlaybackManager.RegisterMediaPlayerCallback(func(event playbackmanager.PlaybackEvent) bool {
 			switch event.(type) {
 			case playbackmanager.StreamStartedEvent, playbackmanager.StreamStoppedEvent:
 				m.wsEventManager.SendEvent(events.HideIndefiniteLoader, "nakama-file")
@@ -218,7 +218,7 @@ func (m *Manager) PlayHostAnimeLibraryFile(path string, userAgent string, client
 		})
 	case "nativeplayer":
 		// Native Player
-		err = m.directstreamManager.PlayNakamaStream(context.Background(), directstream.PlayNakamaStreamOptions{
+		err = pc.DirectstreamManager.PlayNakamaStream(context.Background(), directstream.PlayNakamaStreamOptions{
 			StreamUrl:          ret,
 			MediaId:            media.ID,
 			AnidbEpisode:       aniDBEpisode,
@@ -228,11 +228,11 @@ func (m *Manager) PlayHostAnimeLibraryFile(path string, userAgent string, client
 		})
 		if err != nil {
 			m.wsEventManager.SendEvent(events.HideIndefiniteLoader, "nakama-file")
-			go m.playbackManager.UnsubscribeFromPlaybackStatus("nakama-file")
+			go pc.PlaybackManager.UnsubscribeFromPlaybackStatus("nakama-file")
 			return err
 		}
 
-		m.nativePlayer.VideoCore().RegisterEventCallback(func(event videocore.VideoEvent) bool {
+		pc.VideoCore.RegisterEventCallback(func(event videocore.VideoEvent) bool {
 			if !event.IsNakama() {
 				return true // continue
 			}
@@ -253,6 +253,7 @@ func (m *Manager) PlayHostAnimeStream(streamType WatchPartyStreamType, userAgent
 		return errors.New("not connected to host")
 	}
 
+	pc := m.PartyPlayback()
 	m.logger.Debug().Int("mediaId", media.ID).Msg("nakama: Playing host anime stream")
 	m.wsEventManager.SendEvent(events.ShowIndefiniteLoader, "nakama-stream")
 	m.wsEventManager.SendEvent(events.InfoToast, "Sending stream to player...")
@@ -267,7 +268,7 @@ func (m *Manager) PlayHostAnimeStream(streamType WatchPartyStreamType, userAgent
 	if strings.HasPrefix(ret, "http://http") {
 		ret = strings.Replace(ret, "http://http", "http", 1)
 	}
-	ret += m.directstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&")
+	ret += pc.DirectstreamManager.GetHMACTokenQueryParam("/api/v1/nakama/stream", "&")
 
 	windowTitle := media.GetPreferredTitle()
 	if !media.IsMovieOrSingleEpisode() {
@@ -276,18 +277,18 @@ func (m *Manager) PlayHostAnimeStream(streamType WatchPartyStreamType, userAgent
 
 	// Playback Manager
 	if !m.GetUseDenshiPlayer() {
-		err := m.playbackManager.StartStreamingUsingMediaPlayer(windowTitle, &playbackmanager.StartPlayingOptions{
+		err := pc.PlaybackManager.StartStreamingUsingMediaPlayer(windowTitle, &playbackmanager.StartPlayingOptions{
 			Payload:   ret,
 			UserAgent: userAgent,
 			ClientId:  clientId,
 		}, media, aniDBEpisode)
 		if err != nil {
 			m.wsEventManager.SendEvent(events.HideIndefiniteLoader, "nakama-stream")
-			go m.playbackManager.UnsubscribeFromPlaybackStatus("nakama-stream")
+			go pc.PlaybackManager.UnsubscribeFromPlaybackStatus("nakama-stream")
 			return err
 		}
 
-		m.playbackManager.RegisterMediaPlayerCallback(func(event playbackmanager.PlaybackEvent) bool {
+		pc.PlaybackManager.RegisterMediaPlayerCallback(func(event playbackmanager.PlaybackEvent) bool {
 			switch event.(type) {
 			case playbackmanager.StreamStartedEvent, playbackmanager.StreamStoppedEvent:
 				m.wsEventManager.SendEvent(events.HideIndefiniteLoader, "nakama-stream")
@@ -297,7 +298,7 @@ func (m *Manager) PlayHostAnimeStream(streamType WatchPartyStreamType, userAgent
 		})
 	} else {
 		// Native Player
-		err := m.directstreamManager.PlayNakamaStream(context.Background(), directstream.PlayNakamaStreamOptions{
+		err := pc.DirectstreamManager.PlayNakamaStream(context.Background(), directstream.PlayNakamaStreamOptions{
 			StreamUrl:          ret,
 			MediaId:            media.ID,
 			AnidbEpisode:       aniDBEpisode,
@@ -307,11 +308,11 @@ func (m *Manager) PlayHostAnimeStream(streamType WatchPartyStreamType, userAgent
 		})
 		if err != nil {
 			m.wsEventManager.SendEvent(events.HideIndefiniteLoader, "nakama-stream")
-			go m.playbackManager.UnsubscribeFromPlaybackStatus("nakama-stream")
+			go pc.PlaybackManager.UnsubscribeFromPlaybackStatus("nakama-stream")
 			return err
 		}
 
-		m.nativePlayer.VideoCore().RegisterEventCallback(func(event videocore.VideoEvent) bool {
+		pc.VideoCore.RegisterEventCallback(func(event videocore.VideoEvent) bool {
 			if !event.IsNakama() {
 				return true // keep listening
 			}

@@ -298,7 +298,7 @@ func (h *Handler) HandleNakamaPlayVideo(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	err = h.App.NakamaManager.PlayHostAnimeLibraryFile(b.Path, c.Request().Header.Get("User-Agent"), b.ClientId, media, b.AniDBEpisode, b.ForcePlaybackMethod)
+	err = h.App.NakamaManager.PlayHostAnimeLibraryFile(h.sessionPlayback(c), b.Path, c.Request().Header.Get("User-Agent"), b.ClientId, media, b.AniDBEpisode, b.ForcePlaybackMethod)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
@@ -310,8 +310,8 @@ func (h *Handler) HandleNakamaPlayVideo(c echo.Context) error {
 // route /api/v1/nakama/host/torrentstream/stream
 // Allows peers to stream the currently playing torrent.
 func (h *Handler) HandleNakamaHostTorrentstreamServeStream(c echo.Context) error {
-	session := h.getStreamSession(c)
-	session.TorrentStream.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
+	// A peer carries no profile on this instance: serve the stream of the profile hosting the party.
+	h.App.NakamaManager.PartyPlayback().TorrentstreamRepository.HTTPStreamHandler().ServeHTTP(c.Response().Writer, c.Request())
 	return nil
 }
 
@@ -789,6 +789,7 @@ func (h *Handler) HandleNakamaCreateWatchParty(c echo.Context) error {
 		}
 	}
 
+	h.App.NakamaManager.BindPartyPlayback(h.sessionPlayback(c))
 	_, err := h.App.NakamaManager.GetWatchPartyManager().CreateWatchParty(&nakama.CreateWatchOptions{
 		Settings: b.Settings,
 	})
@@ -825,6 +826,7 @@ func (h *Handler) HandleNakamaJoinWatchParty(c echo.Context) error {
 		return h.RespondWithError(c, errors.New("not connected to host"))
 	}
 
+	h.App.NakamaManager.BindPartyPlayback(h.sessionPlayback(c))
 	// Send join request to host
 	err := h.App.NakamaManager.GetWatchPartyManager().JoinWatchParty(b.ClientId)
 	if err != nil {

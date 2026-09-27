@@ -3,6 +3,7 @@ package core
 import (
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
+	"seanime/internal/nativeplayer"
 	"seanime/internal/torrentstream"
 	"seanime/internal/videocore"
 	"sync"
@@ -13,6 +14,7 @@ type ProfileStreamSession struct {
 	ProfileID           string
 	LastActive          time.Time
 	VideoCore           *videocore.VideoCore
+	NativePlayer        *nativeplayer.NativePlayer
 	PlaybackManager     *playbackmanager.PlaybackManager
 	DirectStreamManager *directstream.Manager
 	TorrentStream       *torrentstream.Repository

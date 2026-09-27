@@ -73,7 +73,7 @@ func (m *WatchPartyGenericPlayer) Reset() {
 func (m *WatchPartyGenericPlayer) PullStatus() (*WatchPartyPlaybackStatus, bool) {
 	// Playback manager
 	if m.isPlaybackManager() {
-		status, ok := m.manager.playbackManager.PullStatus()
+		status, ok := m.manager.PartyPlayback().PlaybackManager.PullStatus()
 		if !ok {
 			return nil, false
 		}
@@ -86,7 +86,7 @@ func (m *WatchPartyGenericPlayer) PullStatus() (*WatchPartyPlaybackStatus, bool)
 	}
 
 	// VideoCore
-	status, ok := m.manager.videoCore.PullStatus()
+	status, ok := m.manager.PartyPlayback().VideoCore.PullStatus()
 	if !ok {
 		return nil, false
 	}
@@ -100,35 +100,35 @@ func (m *WatchPartyGenericPlayer) PullStatus() (*WatchPartyPlaybackStatus, bool)
 
 func (m *WatchPartyGenericPlayer) Pause() {
 	if m.isPlaybackManager() {
-		_ = m.manager.playbackManager.Pause()
+		_ = m.manager.PartyPlayback().PlaybackManager.Pause()
 		return
 	}
-	m.manager.videoCore.Pause()
+	m.manager.PartyPlayback().VideoCore.Pause()
 }
 
 func (m *WatchPartyGenericPlayer) Resume() {
 	if m.isPlaybackManager() {
-		_ = m.manager.playbackManager.Resume()
+		_ = m.manager.PartyPlayback().PlaybackManager.Resume()
 		return
 	}
-	m.manager.videoCore.Resume()
+	m.manager.PartyPlayback().VideoCore.Resume()
 }
 
 func (m *WatchPartyGenericPlayer) Cancel() {
 	defer m.Reset()
 	if m.isPlaybackManager() {
-		_ = m.manager.playbackManager.Cancel()
+		_ = m.manager.PartyPlayback().PlaybackManager.Cancel()
 		return
 	}
-	m.manager.videoCore.Terminate()
+	m.manager.PartyPlayback().VideoCore.Terminate()
 }
 
 func (m *WatchPartyGenericPlayer) SeekTo(time float64) {
 	if m.isPlaybackManager() {
-		_ = m.manager.playbackManager.SeekTo(time)
+		_ = m.manager.PartyPlayback().PlaybackManager.SeekTo(time)
 		return
 	}
-	m.manager.videoCore.SeekTo(time)
+	m.manager.PartyPlayback().VideoCore.SeekTo(time)
 }
 
 type (
@@ -140,6 +140,7 @@ type (
 		id                        string
 		EventCh                   chan WatchPartyPlaybackEvent
 		closeOnce                 sync.Once
+		playback                  PlaybackContext // the one subscribed to, for unsubscribing
 		playbackManagerSubscriber *playbackmanager.PlaybackStatusSubscriber
 		videoCoreSubscriber       *videocore.Subscriber
 	}
@@ -184,11 +185,11 @@ func (m *WatchPartyGenericPlayer) Unsubscribe(id string) {
 	if subscriber, ok := m.subscribers.Pop(id); ok {
 		// Playback manager
 		if subscriber.playbackManagerSubscriber != nil {
-			m.manager.playbackManager.UnsubscribeFromPlaybackStatus(subscriber.id)
+			subscriber.playback.PlaybackManager.UnsubscribeFromPlaybackStatus(subscriber.id)
 		}
 		// Video core
 		if subscriber.videoCoreSubscriber != nil {
-			m.manager.videoCore.Unsubscribe(subscriber.id)
+			subscriber.playback.VideoCore.Unsubscribe(subscriber.id)
 		}
 		subscriber.closeOnce.Do(func() {
 			close(subscriber.EventCh)
@@ -261,14 +262,16 @@ func fromVideoCoreStatus(event *videocore.VideoStatusEvent, state *videocore.Pla
 // Subscribe is a generic subscriber to both playbackmanager.PlaybackManager and videocore.VideoCore.
 func (m *WatchPartyGenericPlayer) Subscribe(id string) *WatchPartyPlaybackSubscriber {
 	defer util.HandlePanicInModuleThen("nakama/Subscribe", func() {})
+	pc := m.manager.PartyPlayback()
 	subscriber := &WatchPartyPlaybackSubscriber{
-		id:      id,
-		EventCh: make(chan WatchPartyPlaybackEvent, 100),
+		id:       id,
+		EventCh:  make(chan WatchPartyPlaybackEvent, 100),
+		playback: pc,
 	}
 
 	m.subscribers.Set(id, subscriber)
 
-	playbackManagerSubscriber := m.manager.playbackManager.SubscribeToPlaybackStatus(id)
+	playbackManagerSubscriber := pc.PlaybackManager.SubscribeToPlaybackStatus(id)
 	subscriber.playbackManagerSubscriber = playbackManagerSubscriber
 
 	go func() {
@@ -303,7 +306,7 @@ func (m *WatchPartyGenericPlayer) Subscribe(id string) *WatchPartyPlaybackSubscr
 		}
 	}()
 
-	videoCoreSubscriber := m.manager.videoCore.Subscribe(id)
+	videoCoreSubscriber := pc.VideoCore.Subscribe(id)
 	subscriber.videoCoreSubscriber = videoCoreSubscriber
 
 	go func() {
@@ -327,7 +330,7 @@ func (m *WatchPartyGenericPlayer) Subscribe(id string) *WatchPartyPlaybackSubscr
 					StreamType: streamType,
 				}
 			case *videocore.VideoStatusEvent:
-				state, ok := m.manager.videoCore.GetPlaybackState()
+				state, ok := pc.VideoCore.GetPlaybackState()
 				if !ok {
 					continue
 				}

@@ -222,7 +222,7 @@ type hostPlaybackHandleStatusOptions struct {
 }
 
 func (wpm *WatchPartyManager) hostPlaybackHandleStatus(opts hostPlaybackHandleStatusOptions) {
-	torrentStreamStartOptions, _ := wpm.manager.torrentstreamRepository.GetPreviousStreamOptions()
+	torrentStreamStartOptions, _ := wpm.manager.PartyPlayback().TorrentstreamRepository.GetPreviousStreamOptions()
 
 	localFilePath := opts.localFilePath
 	newCurrentMediaInfo := &WatchPartySessionMediaInfo{
@@ -303,15 +303,16 @@ func (wpm *WatchPartyManager) hostPlaybackHandleStatus(opts hostPlaybackHandleSt
 // listenToPlaybackManager listens to playback events from the host.
 // It handles starting a new watch party session and sending playback status updates to peers.
 func (wpm *WatchPartyManager) listenToPlaybackAsHost() {
+	pc := wpm.manager.PartyPlayback()
 	id := "nakama:watch-party:host"
-	playbackSubscriber := wpm.manager.playbackManager.SubscribeToPlaybackStatus(id)
-	videoCoreSubscriber := wpm.manager.videoCore.Subscribe(id)
+	playbackSubscriber := pc.PlaybackManager.SubscribeToPlaybackStatus(id)
+	videoCoreSubscriber := pc.VideoCore.Subscribe(id)
 
 	go func() {
 		defer util.HandlePanicInModuleThen("nakama/listenToPlaybackAsHost", func() {})
 		defer func() {
 			wpm.logger.Debug().Msg("nakama: Stopping playback manager listener")
-			go wpm.manager.playbackManager.UnsubscribeFromPlaybackStatus(id)
+			go pc.PlaybackManager.UnsubscribeFromPlaybackStatus(id)
 		}()
 
 		for {
@@ -368,7 +369,7 @@ func (wpm *WatchPartyManager) listenToPlaybackAsHost() {
 		defer util.HandlePanicInModuleThen("nakama/listenToPlaybackAsHost", func() {})
 		defer func() {
 			wpm.logger.Debug().Msg("nakama: Stopping video core listener")
-			go wpm.manager.videoCore.Unsubscribe(id)
+			go pc.VideoCore.Unsubscribe(id)
 		}()
 
 		for {
@@ -381,7 +382,7 @@ func (wpm *WatchPartyManager) listenToPlaybackAsHost() {
 				case *videocore.VideoTerminatedEvent:
 					wpm.hostPlaybackStopped()
 				case *videocore.VideoStatusEvent:
-					state, ok := wpm.manager.videoCore.GetPlaybackState()
+					state, ok := pc.VideoCore.GetPlaybackState()
 					if !ok {
 						continue
 					}

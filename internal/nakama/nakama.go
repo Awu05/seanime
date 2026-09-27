@@ -19,6 +19,7 @@ import (
 	"seanime/internal/videocore"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -41,14 +42,13 @@ type Manager struct {
 	settings                *models.NakamaSettings
 	wsEventManager          events.WSEventManagerInterface
 	platformRef             *util.Ref[platform.Platform]
-	playbackManager         *playbackmanager.PlaybackManager
-	torrentstreamRepository *torrentstream.Repository
 	debridClientRepository  *debrid_client.Repository
-	directstreamManager     *directstream.Manager
 	peerId                  string
-	nativePlayer            *nativeplayer.NativePlayer
-	videoCore               *videocore.VideoCore
 	genericPlayer           *WatchPartyGenericPlayer
+	// defaultPlayback is the app-wide playback set; partyPlayback, once a party is created or
+	// joined, is the session of the profile that did it (see BindPartyPlayback).
+	defaultPlayback PlaybackContext
+	partyPlayback   atomic.Pointer[PlaybackContext]
 
 	// Host connections (when acting as host)
 	peerConnections *result.Map[string, *PeerConnection]
@@ -102,6 +102,34 @@ type NewManagerOptions struct {
 	VideoCore               *videocore.VideoCore
 	DirectStreamManager     *directstream.Manager
 	IsOfflineRef            *util.Ref[bool]
+}
+
+// PlaybackContext is the set of players and stream services playback goes through. Each profile
+// session has its own, so a watch party must play through the session of the profile running it.
+type PlaybackContext struct {
+	PlaybackManager         *playbackmanager.PlaybackManager
+	VideoCore               *videocore.VideoCore
+	NativePlayer            *nativeplayer.NativePlayer
+	TorrentstreamRepository *torrentstream.Repository
+	DirectstreamManager     *directstream.Manager
+}
+
+// BindPartyPlayback makes watch parties play through pc until another party is created or joined.
+func (m *Manager) BindPartyPlayback(pc PlaybackContext) {
+	m.partyPlayback.Store(&pc)
+}
+
+// DefaultPlayback returns the app-wide playback context.
+func (m *Manager) DefaultPlayback() PlaybackContext {
+	return m.defaultPlayback
+}
+
+// PartyPlayback returns the playback context watch parties use.
+func (m *Manager) PartyPlayback() PlaybackContext {
+	if pc := m.partyPlayback.Load(); pc != nil {
+		return *pc
+	}
+	return m.defaultPlayback
 }
 
 type ConnectionType string
@@ -228,7 +256,6 @@ func NewManager(opts *NewManagerOptions) *Manager {
 		username:                "",
 		logger:                  opts.Logger,
 		wsEventManager:          opts.WSEventManager,
-		playbackManager:         opts.PlaybackManager,
 		peerConnections:         result.NewMap[string, *PeerConnection](),
 		platformRef:             opts.PlatformRef,
 		ctx:                     ctx,
@@ -239,14 +266,17 @@ func NewManager(opts *NewManagerOptions) *Manager {
 		serverHost:              opts.ServerHost,
 		serverPort:              opts.ServerPort,
 		settings:                &models.NakamaSettings{},
-		torrentstreamRepository: opts.TorrentstreamRepository,
 		debridClientRepository:  opts.DebridClientRepository,
 		previousPath:            "",
-		nativePlayer:            opts.NativePlayer,
-		videoCore:               opts.VideoCore,
 		useDenshiPlayer:         false,
-		directstreamManager:     opts.DirectStreamManager,
 		isOfflineRef:            opts.IsOfflineRef,
+		defaultPlayback: PlaybackContext{
+			PlaybackManager:         opts.PlaybackManager,
+			VideoCore:               opts.VideoCore,
+			NativePlayer:            opts.NativePlayer,
+			TorrentstreamRepository: opts.TorrentstreamRepository,
+			DirectstreamManager:     opts.DirectStreamManager,
+		},
 		connectionMode:          ConnectionModeDirect, // Default to direct mode
 	}
 

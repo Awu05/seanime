@@ -29717,6 +29717,17 @@
         "comments": []
       },
       {
+        "name": "VideoCoreRouter",
+        "jsonName": "VideoCoreRouter",
+        "goType": "videocore.ClientRouter",
+        "typescriptType": "VideoCore_ClientRouter",
+        "usedTypescriptType": "VideoCore_ClientRouter",
+        "usedStructName": "videocore.ClientRouter",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
         "name": "MediacoreCoordinator",
         "jsonName": "MediacoreCoordinator",
         "goType": "mediacore.Coordinator",
@@ -31243,6 +31254,17 @@
         "typescriptType": "VideoCore_VideoCore",
         "usedTypescriptType": "VideoCore_VideoCore",
         "usedStructName": "videocore.VideoCore",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "NativePlayer",
+        "jsonName": "NativePlayer",
+        "goType": "nativeplayer.NativePlayer",
+        "typescriptType": "NativePlayer_NativePlayer",
+        "usedTypescriptType": "NativePlayer_NativePlayer",
+        "usedStructName": "nativeplayer.NativePlayer",
         "required": false,
         "public": true,
         "comments": []
@@ -42706,6 +42728,15 @@
         "typescriptType": "any",
         "required": false,
         "public": false,
+        "comments": []
+      },
+      {
+        "name": "ClientProfileIDs",
+        "jsonName": "ClientProfileIDs",
+        "goType": "map[string]string",
+        "typescriptType": "Record\u003cstring, string\u003e",
+        "required": false,
+        "public": true,
         "comments": []
       },
       {
@@ -75285,45 +75316,12 @@
         "comments": []
       },
       {
-        "name": "playbackManager",
-        "jsonName": "playbackManager",
-        "goType": "playbackmanager.PlaybackManager",
-        "typescriptType": "PlaybackManager_PlaybackManager",
-        "usedTypescriptType": "PlaybackManager_PlaybackManager",
-        "usedStructName": "playbackmanager.PlaybackManager",
-        "required": false,
-        "public": false,
-        "comments": []
-      },
-      {
-        "name": "torrentstreamRepository",
-        "jsonName": "torrentstreamRepository",
-        "goType": "torrentstream.Repository",
-        "typescriptType": "Torrentstream_Repository",
-        "usedTypescriptType": "Torrentstream_Repository",
-        "usedStructName": "torrentstream.Repository",
-        "required": false,
-        "public": false,
-        "comments": []
-      },
-      {
         "name": "debridClientRepository",
         "jsonName": "debridClientRepository",
         "goType": "debrid_client.Repository",
         "typescriptType": "DebridClient_Repository",
         "usedTypescriptType": "DebridClient_Repository",
         "usedStructName": "debrid_client.Repository",
-        "required": false,
-        "public": false,
-        "comments": []
-      },
-      {
-        "name": "directstreamManager",
-        "jsonName": "directstreamManager",
-        "goType": "directstream.Manager",
-        "typescriptType": "Directstream_Manager",
-        "usedTypescriptType": "Directstream_Manager",
-        "usedStructName": "directstream.Manager",
         "required": false,
         "public": false,
         "comments": []
@@ -75338,28 +75336,6 @@
         "comments": []
       },
       {
-        "name": "nativePlayer",
-        "jsonName": "nativePlayer",
-        "goType": "nativeplayer.NativePlayer",
-        "typescriptType": "NativePlayer_NativePlayer",
-        "usedTypescriptType": "NativePlayer_NativePlayer",
-        "usedStructName": "nativeplayer.NativePlayer",
-        "required": false,
-        "public": false,
-        "comments": []
-      },
-      {
-        "name": "videoCore",
-        "jsonName": "videoCore",
-        "goType": "videocore.VideoCore",
-        "typescriptType": "VideoCore_VideoCore",
-        "usedTypescriptType": "VideoCore_VideoCore",
-        "usedStructName": "videocore.VideoCore",
-        "required": false,
-        "public": false,
-        "comments": []
-      },
-      {
         "name": "genericPlayer",
         "jsonName": "genericPlayer",
         "goType": "WatchPartyGenericPlayer",
@@ -75367,6 +75343,26 @@
         "usedTypescriptType": "Nakama_WatchPartyGenericPlayer",
         "usedStructName": "nakama.WatchPartyGenericPlayer",
         "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "defaultPlayback",
+        "jsonName": "defaultPlayback",
+        "goType": "PlaybackContext",
+        "typescriptType": "Nakama_PlaybackContext",
+        "usedTypescriptType": "Nakama_PlaybackContext",
+        "usedStructName": "nakama.PlaybackContext",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "partyPlayback",
+        "jsonName": "partyPlayback",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
         "public": false,
         "comments": []
       },
@@ -75729,6 +75725,74 @@
       }
     ],
     "comments": []
+  },
+  {
+    "filepath": "../internal/nakama/nakama.go",
+    "filename": "nakama.go",
+    "name": "PlaybackContext",
+    "formattedName": "Nakama_PlaybackContext",
+    "package": "nakama",
+    "fields": [
+      {
+        "name": "PlaybackManager",
+        "jsonName": "PlaybackManager",
+        "goType": "playbackmanager.PlaybackManager",
+        "typescriptType": "PlaybackManager_PlaybackManager",
+        "usedTypescriptType": "PlaybackManager_PlaybackManager",
+        "usedStructName": "playbackmanager.PlaybackManager",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "VideoCore",
+        "jsonName": "VideoCore",
+        "goType": "videocore.VideoCore",
+        "typescriptType": "VideoCore_VideoCore",
+        "usedTypescriptType": "VideoCore_VideoCore",
+        "usedStructName": "videocore.VideoCore",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "NativePlayer",
+        "jsonName": "NativePlayer",
+        "goType": "nativeplayer.NativePlayer",
+        "typescriptType": "NativePlayer_NativePlayer",
+        "usedTypescriptType": "NativePlayer_NativePlayer",
+        "usedStructName": "nativeplayer.NativePlayer",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TorrentstreamRepository",
+        "jsonName": "TorrentstreamRepository",
+        "goType": "torrentstream.Repository",
+        "typescriptType": "Torrentstream_Repository",
+        "usedTypescriptType": "Torrentstream_Repository",
+        "usedStructName": "torrentstream.Repository",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "DirectstreamManager",
+        "jsonName": "DirectstreamManager",
+        "goType": "directstream.Manager",
+        "typescriptType": "Directstream_Manager",
+        "usedTypescriptType": "Directstream_Manager",
+        "usedStructName": "directstream.Manager",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " PlaybackContext is the set of players and stream services playback goes through. Each profile",
+      " session has its own, so a watch party must play through the session of the profile running it."
+    ]
   },
   {
     "filepath": "../internal/nakama/nakama.go",
@@ -78145,6 +78209,19 @@
         "required": false,
         "public": false,
         "comments": []
+      },
+      {
+        "name": "playback",
+        "jsonName": "playback",
+        "goType": "PlaybackContext",
+        "typescriptType": "Nakama_PlaybackContext",
+        "usedTypescriptType": "Nakama_PlaybackContext",
+        "usedStructName": "nakama.PlaybackContext",
+        "required": true,
+        "public": false,
+        "comments": [
+          " the one subscribed to, for unsubscribing"
+        ]
       },
       {
         "name": "playbackManagerSubscriber",
@@ -99559,7 +99636,9 @@
         "usedStructName": "context.CancelFunc",
         "required": false,
         "public": false,
-        "comments": []
+        "comments": [
+          " stops monitorLoop; guarded by mu"
+        ]
       },
       {
         "name": "activeStreams",
@@ -99571,7 +99650,7 @@
         "required": false,
         "public": false,
         "comments": [
-          " keyed by session/profile ID"
+          " keyed by client ID"
         ]
       },
       {
@@ -99595,17 +99674,6 @@
         "required": false,
         "public": false,
         "comments": []
-      },
-      {
-        "name": "stopCh",
-        "jsonName": "stopCh",
-        "goType": "",
-        "typescriptType": "any",
-        "required": true,
-        "public": false,
-        "comments": [
-          " Closed when the media player stops"
-        ]
       },
       {
         "name": "mediaPlayerPlaybackStatusCh",
@@ -99789,49 +99857,6 @@
         "typescriptType": "Torrentstream_Repository",
         "usedTypescriptType": "Torrentstream_Repository",
         "usedStructName": "torrentstream.Repository",
-        "required": false,
-        "public": true,
-        "comments": []
-      }
-    ],
-    "comments": []
-  },
-  {
-    "filepath": "../internal/torrentstream/collection.go",
-    "filename": "collection.go",
-    "name": "StreamCollection",
-    "formattedName": "Torrentstream_StreamCollection",
-    "package": "torrentstream",
-    "fields": [
-      {
-        "name": "ContinueWatchingList",
-        "jsonName": "continueWatchingList",
-        "goType": "[]anime.Episode",
-        "typescriptType": "Array\u003cAnime_Episode\u003e",
-        "usedTypescriptType": "Anime_Episode",
-        "usedStructName": "anime.Episode",
-        "required": false,
-        "public": true,
-        "comments": []
-      },
-      {
-        "name": "Anime",
-        "jsonName": "anime",
-        "goType": "[]anilist.BaseAnime",
-        "typescriptType": "Array\u003cAL_BaseAnime\u003e",
-        "usedTypescriptType": "AL_BaseAnime",
-        "usedStructName": "anilist.BaseAnime",
-        "required": false,
-        "public": true,
-        "comments": []
-      },
-      {
-        "name": "ListData",
-        "jsonName": "listData",
-        "goType": "map[int]anime.EntryListData",
-        "typescriptType": "Record\u003cnumber, Anime_EntryListData\u003e",
-        "usedTypescriptType": "Anime_EntryListData",
-        "usedStructName": "anime.EntryListData",
         "required": false,
         "public": true,
         "comments": []
@@ -100235,7 +100260,7 @@
         "required": true,
         "public": false,
         "comments": [
-          " None by default, set and refreshed by [SetSettings]"
+          " nil until set; replaced, never mutated (use getSettings)"
         ]
       },
       {
@@ -100342,18 +100367,31 @@
         "usedStructName": "mediaplayer.Repository",
         "required": false,
         "public": false,
-        "comments": []
+        "comments": [
+          " guarded by playback.listenerMu; read via mediaPlayer()"
+        ]
       },
       {
-        "name": "mediaPlayerRepositorySubscriber",
-        "jsonName": "mediaPlayerRepositorySubscriber",
-        "goType": "mediaplayer.RepositorySubscriber",
-        "typescriptType": "RepositorySubscriber",
-        "usedTypescriptType": "RepositorySubscriber",
-        "usedStructName": "mediaplayer.RepositorySubscriber",
-        "required": false,
+        "name": "mediaPlayerSubscriberID",
+        "jsonName": "mediaPlayerSubscriberID",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
         "public": false,
-        "comments": []
+        "comments": [
+          " unique per repository, since all share one media player"
+        ]
+      },
+      {
+        "name": "streamTokenFunc",
+        "jsonName": "streamTokenFunc",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": [
+          " see NewRepositoryOptions.StreamTokenFunc"
+        ]
       },
       {
         "name": "directStreamManager",
@@ -100660,6 +100698,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "StreamTokenFunc",
+        "jsonName": "StreamTokenFunc",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
@@ -100919,72 +100966,6 @@
     "comments": [
       " PlaybackFailureResponse is RetryAfterPlaybackFailure's result."
     ]
-  },
-  {
-    "filepath": "../internal/torrentstream/stream.go",
-    "filename": "stream.go",
-    "name": "StartUntrackedStreamOptions",
-    "formattedName": "Torrentstream_StartUntrackedStreamOptions",
-    "package": "torrentstream",
-    "fields": [
-      {
-        "name": "Magnet",
-        "jsonName": "Magnet",
-        "goType": "string",
-        "typescriptType": "string",
-        "required": true,
-        "public": true,
-        "comments": []
-      },
-      {
-        "name": "FileIndex",
-        "jsonName": "FileIndex",
-        "goType": "int",
-        "typescriptType": "number",
-        "required": true,
-        "public": true,
-        "comments": []
-      },
-      {
-        "name": "WindowTitle",
-        "jsonName": "WindowTitle",
-        "goType": "string",
-        "typescriptType": "string",
-        "required": true,
-        "public": true,
-        "comments": []
-      },
-      {
-        "name": "UserAgent",
-        "jsonName": "UserAgent",
-        "goType": "string",
-        "typescriptType": "string",
-        "required": true,
-        "public": true,
-        "comments": []
-      },
-      {
-        "name": "ClientId",
-        "jsonName": "ClientId",
-        "goType": "string",
-        "typescriptType": "string",
-        "required": true,
-        "public": true,
-        "comments": []
-      },
-      {
-        "name": "PlaybackType",
-        "jsonName": "PlaybackType",
-        "goType": "PlaybackType",
-        "typescriptType": "Torrentstream_PlaybackType",
-        "usedTypescriptType": "Torrentstream_PlaybackType",
-        "usedStructName": "torrentstream.PlaybackType",
-        "required": true,
-        "public": true,
-        "comments": []
-      }
-    ],
-    "comments": []
   },
   {
     "filepath": "../internal/updater/announcement.go",
@@ -104180,6 +104161,89 @@
     "comments": []
   },
   {
+    "filepath": "../internal/videocore/router.go",
+    "filename": "router.go",
+    "name": "ClientRouter",
+    "formattedName": "VideoCore_ClientRouter",
+    "package": "videocore",
+    "fields": [
+      {
+        "name": "ws",
+        "jsonName": "ws",
+        "goType": "events.WSEventManagerInterface",
+        "typescriptType": "Events_WSEventManagerInterface",
+        "usedTypescriptType": "Events_WSEventManagerInterface",
+        "usedStructName": "events.WSEventManagerInterface",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "logger",
+        "jsonName": "logger",
+        "goType": "zerolog.Logger",
+        "typescriptType": "Logger",
+        "usedTypescriptType": "Logger",
+        "usedStructName": "zerolog.Logger",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "mu",
+        "jsonName": "mu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "fallback",
+        "jsonName": "fallback",
+        "goType": "VideoCore",
+        "typescriptType": "VideoCore_VideoCore",
+        "usedTypescriptType": "VideoCore_VideoCore",
+        "usedStructName": "videocore.VideoCore",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "byProfile",
+        "jsonName": "byProfile",
+        "goType": "map[string]VideoCore",
+        "typescriptType": "Record\u003cstring, VideoCore_VideoCore\u003e",
+        "usedTypescriptType": "VideoCore_VideoCore",
+        "usedStructName": "videocore.VideoCore",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "bound",
+        "jsonName": "bound",
+        "goType": "map[string]VideoCore",
+        "typescriptType": "Record\u003cstring, VideoCore_VideoCore\u003e",
+        "usedTypescriptType": "VideoCore_VideoCore",
+        "usedStructName": "videocore.VideoCore",
+        "required": false,
+        "public": false,
+        "comments": [
+          " client ID -\u003e core that sent the client its current stream"
+        ]
+      }
+    ],
+    "comments": [
+      " ClientRouter is the single subscriber to browser player events, delivering each one to the",
+      " VideoCore responsible for that client: the core that sent the client its current stream, else",
+      " the client's profile session core, else the app-wide core. Cores can't subscribe themselves -",
+      " the websocket manager keys subscribers by name, so only the last one would hear anything."
+    ]
+  },
+  {
     "filepath": "../internal/videocore/subtitles.go",
     "filename": "subtitles.go",
     "name": "GenerateSubtitleFileOptions",
@@ -106191,6 +106255,17 @@
         "comments": []
       },
       {
+        "name": "router",
+        "jsonName": "router",
+        "goType": "ClientRouter",
+        "typescriptType": "VideoCore_ClientRouter",
+        "usedTypescriptType": "VideoCore_ClientRouter",
+        "usedStructName": "videocore.ClientRouter",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
         "name": "clientPlayerEventSubscriber",
         "jsonName": "clientPlayerEventSubscriber",
         "goType": "events.ClientEventSubscriber",
@@ -106199,7 +106274,9 @@
         "usedStructName": "events.ClientEventSubscriber",
         "required": false,
         "public": false,
-        "comments": []
+        "comments": [
+          " fed by router"
+        ]
       },
       {
         "name": "translatorService",
@@ -106474,6 +106551,17 @@
         "typescriptType": "Events_WSEventManagerInterface",
         "usedTypescriptType": "Events_WSEventManagerInterface",
         "usedStructName": "events.WSEventManagerInterface",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Router",
+        "jsonName": "Router",
+        "goType": "ClientRouter",
+        "typescriptType": "VideoCore_ClientRouter",
+        "usedTypescriptType": "VideoCore_ClientRouter",
+        "usedStructName": "videocore.ClientRouter",
         "required": false,
         "public": true,
         "comments": []
