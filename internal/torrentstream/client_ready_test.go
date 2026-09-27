@@ -54,7 +54,7 @@ func TestReadyToStreamFalseForFreshlyAddedTorrent(t *testing.T) {
 	repo := &Repository{logger: util.NewLogger()}
 	c := NewClient(repo)
 	t.Cleanup(func() { unregisterClient(c) })
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 	c.currentTorrent = mo.Some(tor)
 	c.currentFile = mo.Some(file)
 

@@ -3,7 +3,6 @@ package torrentstream
 import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/events"
-	"seanime/internal/mediaplayers/mediaplayer"
 	"seanime/internal/nativeplayer"
 	"seanime/internal/util"
 	"seanime/internal/videocore"
@@ -70,7 +69,7 @@ func TestGetActiveStreamInfoResolvesTitleFromCache(t *testing.T) {
 	c := NewClient(repo)
 	repo.client = c
 	t.Cleanup(func() { unregisterClient(c) })
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 	c.currentTorrent = mo.Some(tor)
 	c.currentTorrentStatus = TorrentStatus{ProgressPercentage: 42, Seeders: 3}
 
@@ -121,23 +120,10 @@ func TestStopStreamClearsActiveStreamInfo(t *testing.T) {
 	logger := util.NewLogger()
 	wsEventManager := events.NewMockWSEventManager(logger)
 
-	// StopStream reaches into these dependencies beyond currentTorrent/currentFile:
-	//   - wsEventManager: sendStateEvent(eventTorrentStopped) sends through it directly (not
-	//     through a nil-safe wrapper), so a nil manager would panic.
-	//   - mediaPlayerRepository: StopStream unconditionally calls .Stop() on it; a nil
-	//     *mediaplayer.Repository would panic on the mutex lock inside Stop(). Default is left
-	//     as "" (not "mpv"/"iina") so Stop() doesn't try to reach a real player process.
-	//   - nativePlayer: StopStream's post-unlock goroutine calls
-	//     r.nativePlayer.VideoCore().GetCurrentPlaybackType() unconditionally when StopStream is
-	//     called with no arguments (the admin path's calling convention). A nil *NativePlayer, or
-	//     one built with a nil VideoCore, would panic; a zero-value *videocore.VideoCore reports
-	//     ok=false safely, which is all this test needs.
+	// StopStream sends through wsEventManager and asks the native player's VideoCore what it's
+	// playing; a zero-value VideoCore safely reports nothing.
 	repo := &Repository{
 		logger: logger,
-		mediaPlayerRepository: mediaplayer.NewRepository(&mediaplayer.NewRepositoryOptions{
-			Logger:         logger,
-			WSEventManager: wsEventManager,
-		}),
 		nativePlayer: nativeplayer.New(nativeplayer.NewNativePlayerOptions{
 			VideoCore: &videocore.VideoCore{},
 		}),
@@ -148,7 +134,7 @@ func TestStopStreamClearsActiveStreamInfo(t *testing.T) {
 	c := NewClient(repo)
 	repo.client = c
 	t.Cleanup(func() { unregisterClient(c) })
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 	c.currentTorrent = mo.Some(tor)
 	c.currentTorrentStatus = TorrentStatus{ProgressPercentage: 42, Seeders: 3}
 	c.SetActiveStream(repo.currentClientId, tor, nil)

@@ -16,14 +16,6 @@ import (
 )
 
 type (
-	// StreamCollection is used to "complete" the anime.LibraryCollection if the user chooses
-	// to include torrent streams in the library view.
-	StreamCollection struct {
-		ContinueWatchingList []*anime.Episode             `json:"continueWatchingList"`
-		Anime                []*anilist.BaseAnime         `json:"anime"`
-		ListData             map[int]*anime.EntryListData `json:"listData"`
-	}
-
 	HydrateStreamCollectionOptions struct {
 		AnimeCollection     *anilist.AnimeCollection
 		LibraryCollection   *anime.LibraryCollection
@@ -46,11 +38,10 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 	opts.AnimeCollection = reqEvent.AnimeCollection
 	opts.LibraryCollection = reqEvent.LibraryCollection
 
+	metadataProvider := opts.MetadataProviderRef.Get()
 	lists := opts.AnimeCollection.MediaListCollection.GetLists()
 	// Get the anime that are currently being watched
 	var currentlyWatching *anilist.AnimeCollection_MediaListCollection_Lists
-	//var pausedList *anilist.AnimeCollection_MediaListCollection_Lists
-	//var planningList *anilist.AnimeCollection_MediaListCollection_Lists
 	for _, list := range lists {
 		if list.Status == nil {
 			continue
@@ -64,46 +55,20 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 					Entries:      make([]*anilist.AnimeCollection_MediaListCollection_Lists_Entries, 0),
 				}
 			}
-			//currentlyWatching.Entries = append(currentlyWatching.Entries, list.Entries...)
 			for _, entry := range list.Entries {
 				if entry == nil || entry.GetMedia() == nil {
 					continue
 				}
 				currentlyWatching.Entries = append(currentlyWatching.Entries, entry)
 			}
-			continue
 		}
-		//if *list.Status == anilist.MediaListStatusPaused {
-		//	if pausedList == nil {
-		//		pausedList = &anilist.AnimeCollection_MediaListCollection_Lists{
-		//			Status:       new(anilist.MediaListStatusPaused),
-		//			Name:         new("PAUSED"),
-		//			IsCustomList: new(false),
-		//			Entries:      make([]*anilist.AnimeCollection_MediaListCollection_Lists_Entries, 0),
-		//		}
-		//	}
-		//	pausedList.Entries = append(pausedList.Entries, list.Entries...)
-		//	continue
-		//}
-		//if *list.Status == anilist.MediaListStatusPlanning {
-		//	if planningList == nil {
-		//		planningList = &anilist.AnimeCollection_MediaListCollection_Lists{
-		//			Status:       new(anilist.MediaListStatusPlanning),
-		//			Name:         new("PLANNING"),
-		//			IsCustomList: new(false),
-		//			Entries:      make([]*anilist.AnimeCollection_MediaListCollection_Lists_Entries, 0),
-		//		}
-		//	}
-		//	planningList.Entries = append(planningList.Entries, list.Entries...)
-		//	continue
-		//}
 	}
 
 	if currentlyWatching == nil {
 		return
 	}
 
-	ret := &StreamCollection{
+	ret := &anime.StreamCollection{
 		ContinueWatchingList: make([]*anime.Episode, 0),
 		Anime:                make([]*anilist.BaseAnime, 0),
 		ListData:             make(map[int]*anime.EntryListData),
@@ -153,16 +118,12 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 			}
 
 			// Get the media info
-			animeMetadata, err := opts.MetadataProviderRef.Get().GetAnimeMetadata(metadata.AnilistPlatform, mediaId)
+			animeMetadata, err := metadataProvider.GetAnimeMetadata(metadata.AnilistPlatform, mediaId)
 			if err != nil {
 				animeMetadata = anime.NewAnimeMetadataFromEpisodeCount(entry.GetMedia(), lo.RangeFrom(1, entry.GetMedia().GetCurrentEpisodeCount()))
 			}
 
 			_, found := animeMetadata.FindEpisode(strconv.Itoa(nextEpisodeToWatch))
-			//if !found {
-			//	r.logger.Error().Msg("torrentstream: could not find episode in AniDB")
-			//	return
-			//}
 
 			progressOffset := 0
 			anidbEpisode := strconv.Itoa(nextEpisodeToWatch)
@@ -173,7 +134,7 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 				}
 			}
 
-			mediaWrapper := opts.MetadataProviderRef.Get().GetAnimeMetadataWrapper(entry.Media, animeMetadata)
+			mediaWrapper := metadataProvider.GetAnimeMetadataWrapper(entry.Media, animeMetadata)
 
 			// Add the anime & episode
 			episode := anime.NewEpisode(&anime.NewEpisodeOptions{
@@ -183,9 +144,13 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 				Media:                entry.GetMedia(),
 				ProgressOffset:       progressOffset,
 				IsDownloaded:         false,
-				MetadataProvider:     r.metadataProviderRef.Get(),
+				MetadataProvider:     metadataProvider,
 				MetadataWrapper:      mediaWrapper,
 			})
+			if episode == nil {
+				r.logger.Error().Msg("torrentstream: could not get anime entry episode")
+				return
+			}
 			if !found {
 				episode.EpisodeTitle = entry.GetMedia().GetPreferredTitle()
 				episode.DisplayTitle = fmt.Sprintf("Episode %d", nextEpisodeToWatch)
@@ -194,11 +159,6 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 				episode.EpisodeMetadata = &anime.EpisodeMetadata{
 					Image: entry.GetMedia().GetBannerImageSafe(),
 				}
-			}
-
-			if episode == nil {
-				r.logger.Error().Msg("torrentstream: could not get anime entry episode")
-				return
 			}
 
 			mu.Lock()
@@ -227,7 +187,7 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 		if _, found := libraryAnimeMap[entry.GetMedia().GetID()]; found {
 			continue
 		}
-		if *entry.GetMedia().GetStatus() == anilist.MediaStatusNotYetReleased {
+		if status := entry.GetMedia().GetStatus(); status == nil || *status == anilist.MediaStatusNotYetReleased {
 			continue
 		}
 		animeAdded[entry.GetMedia().GetID()] = entry
@@ -249,15 +209,9 @@ func (r *Repository) HydrateStreamCollection(ctx context.Context, opts *HydrateS
 		return
 	}
 
-	sc := &anime.StreamCollection{
-		ContinueWatchingList: ret.ContinueWatchingList,
-		Anime:                ret.Anime,
-		ListData:             ret.ListData,
-	}
-
 	event := new(anime.AnimeLibraryStreamCollectionEvent)
 	event.ProfileID = profileID
-	event.StreamCollection = sc
+	event.StreamCollection = ret
 	err = hook.GlobalHookManager.OnAnimeLibraryStreamCollection().Trigger(event)
 	if err != nil {
 		return

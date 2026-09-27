@@ -1,7 +1,6 @@
 package torrentstream
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"os"
@@ -26,6 +25,7 @@ import (
 	"sync/atomic"
 
 	itorrent "github.com/anacrolix/torrent"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/samber/mo"
 )
@@ -35,7 +35,7 @@ type (
 		client   *Client
 		handler  *handler
 		playback playback
-		settings mo.Option[Settings] // None by default, set and refreshed by [SetSettings]
+		settings atomic.Pointer[Settings] // nil until set; replaced, never mutated (use getSettings)
 
 		selectionHistoryMap *result.Map[int, *hibiketorrent.AnimeTorrent] // Key: AniList media ID
 
@@ -49,8 +49,8 @@ type (
 		wsEventManager                  events.WSEventManagerInterface
 		metadataProviderRef             *util.Ref[metadata_provider.Provider]
 		playbackManager                 *playbackmanager.PlaybackManager
-		mediaPlayerRepository           *mediaplayer.Repository
-		mediaPlayerRepositorySubscriber *mediaplayer.RepositorySubscriber
+		mediaPlayerRepository           *mediaplayer.Repository // guarded by playback.listenerMu; read via mediaPlayer()
+		mediaPlayerSubscriberID         string                  // unique per repository, since all share one media player
 		directStreamManager             *directstream.Manager
 		nativePlayer                    *nativeplayer.NativePlayer
 		logger                          *zerolog.Logger
@@ -95,9 +95,8 @@ type (
 	preloadedStream struct {
 		Torrent    *itorrent.Torrent
 		File       *itorrent.File
-		Options    *StartStreamOptions
-		CancelFunc context.CancelFunc
-		Release    string
+		Options *StartStreamOptions
+		Release string
 	}
 
 	NewRepositoryOptions struct {
@@ -120,7 +119,6 @@ func NewRepository(opts *NewRepositoryOptions) *Repository {
 	ret := &Repository{
 		client:                          nil,
 		handler:                         nil,
-		settings:                        mo.Option[Settings]{},
 		selectionHistoryMap:             result.NewMap[int, *hibiketorrent.AnimeTorrent](),
 		torrentRepository:               opts.TorrentRepository,
 		baseAnimeCache:                  opts.BaseAnimeCache,
@@ -129,8 +127,7 @@ func NewRepository(opts *NewRepositoryOptions) *Repository {
 		wsEventManager:                  opts.WSEventManager,
 		metadataProviderRef:             opts.MetadataProviderRef,
 		playbackManager:                 opts.PlaybackManager,
-		mediaPlayerRepository:           nil,
-		mediaPlayerRepositorySubscriber: nil,
+		mediaPlayerSubscriberID:         "torrentstream-" + uuid.NewString(),
 		logger:                          opts.Logger,
 		db:                              opts.Database,
 		directStreamManager:             opts.DirectStreamManager,
@@ -177,17 +174,16 @@ func (r *Repository) takePreloadedStream() (*preloadedStream, bool) {
 	return ps, ok
 }
 
-// cancelAndMaybeDropPreloaded cancels a taken-out preloaded stream's prepare context and drops
-// its torrent from the shared engine, unless some session is streaming it.
-func (r *Repository) cancelAndMaybeDropPreloaded(prepared *preloadedStream) {
-	if prepared.CancelFunc != nil {
-		prepared.CancelFunc()
-	}
-	r.client.dropIfUnclaimed(prepared.Torrent)
+func (r *Repository) IsEnabled() bool {
+	settings, ok := r.getSettings()
+	return ok && settings.Enabled && r.client != nil
 }
 
-func (r *Repository) IsEnabled() bool {
-	return r.settings.IsPresent() && r.settings.MustGet().Enabled && r.client != nil
+func (r *Repository) getSettings() (Settings, bool) {
+	if s := r.settings.Load(); s != nil {
+		return *s, true
+	}
+	return Settings{}, false
 }
 
 // GetClient returns the underlying torrent client wrapper.
@@ -208,7 +204,7 @@ func (r *Repository) SetSettings(settings *models.TorrentstreamSettings, host st
 		if s.DownloadDir == "" {
 			s.DownloadDir = r.getDefaultDownloadPath()
 		}
-		r.settings = mo.Some(Settings{
+		r.settings.Store(&Settings{
 			TorrentstreamSettings: s,
 			Host:                  host,
 			Port:                  port,
@@ -296,13 +292,16 @@ func (r *Repository) GetActiveStreamInfo() (ActiveStreamInfo, bool) {
 	return info, true
 }
 
-// SetMediaPlayerRepository sets the mediaplayer repository and listens to events.
-// This MUST be called after instantiating the repository and will run even if the module is disabled.
-//
-// // Note: This is also used for Debrid streaming
+// SetMediaPlayerRepository sets the desktop media player and listens to its events. Must be called
+// after instantiating the repository, even if the module is disabled.
 func (r *Repository) SetMediaPlayerRepository(mediaPlayerRepository *mediaplayer.Repository) {
+	r.playback.listenerMu.Lock()
+	defer r.playback.listenerMu.Unlock()
+	if r.mediaPlayerRepository != nil && r.mediaPlayerRepository != mediaPlayerRepository {
+		r.mediaPlayerRepository.Unsubscribe(r.mediaPlayerSubscriberID)
+	}
 	r.mediaPlayerRepository = mediaPlayerRepository
-	r.listenToMediaPlayerEvents()
+	r.listenToMediaPlayerEventsLocked()
 }
 
 // InitModules sets the settings for the torrentstream module.
@@ -314,16 +313,15 @@ func (r *Repository) InitModules(settings *models.TorrentstreamSettings, host st
 
 	if settings == nil {
 		r.logger.Error().Msg("torrentstream: Cannot initialize module, no settings provided")
-		r.settings = mo.None[Settings]()
+		r.settings.Store(nil)
 		return errors.New("torrentstream: Cannot initialize module, no settings provided")
 	}
 
 	s := *settings
 
-	if s.Enabled == false {
+	if !s.Enabled {
 		r.logger.Info().Msg("torrentstream: Module is disabled")
-		r.Shutdown()
-		r.settings = mo.None[Settings]()
+		r.settings.Store(nil)
 		return nil
 	}
 
@@ -332,10 +330,6 @@ func (r *Repository) InitModules(settings *models.TorrentstreamSettings, host st
 		s.DownloadDir = r.getDefaultDownloadPath()
 		_ = os.MkdirAll(s.DownloadDir, os.ModePerm) // Create the directory if it doesn't exist
 	}
-
-	// DEVNOTE: Commented code below causes error log after initializing the client
-	//// Empty the download directory
-	//_ = os.RemoveAll(s.DownloadDir)
 
 	if s.StreamingServerPort == 0 {
 		s.StreamingServerPort = 43214
@@ -348,7 +342,7 @@ func (r *Repository) InitModules(settings *models.TorrentstreamSettings, host st
 	}
 
 	// Set the settings
-	r.settings = mo.Some(Settings{
+	r.settings.Store(&Settings{
 		TorrentstreamSettings: s,
 		Host:                  host,
 		Port:                  port,
@@ -371,15 +365,16 @@ func (r *Repository) HTTPStreamHandler() http.Handler {
 	return r.handler
 }
 
+var errNoSettings = errors.New("torrentstream: no settings provided, the module is dormant")
+
 func (r *Repository) FailIfNoSettings() error {
-	if r.settings.IsAbsent() {
-		return errors.New("torrentstream: no settings provided, the module is dormant")
+	if r.settings.Load() == nil {
+		return errNoSettings
 	}
 	return nil
 }
 
-// Shutdown closes the torrent client and streaming server
-// TEST-ONLY
+// Shutdown closes the engine. Only for the app-wide repository that owns it.
 func (r *Repository) Shutdown() {
 	r.logger.Debug().Msg("torrentstream: Shutting down module")
 	r.client.Shutdown()
@@ -410,6 +405,7 @@ func (r *Repository) CleanupSession() {
 	if r.nativePlayer != nil {
 		r.nativePlayer.VideoCore().Unsubscribe("torrentstream")
 	}
+	r.stopMediaPlayerListener()
 
 	r.client.mu.Lock()
 	defer r.client.mu.Unlock()
@@ -426,17 +422,11 @@ func (r *Repository) CleanupSession() {
 	r.client.currentTorrent = mo.None[*itorrent.Torrent]()
 	r.client.currentFile = mo.None[*itorrent.File]()
 
-	// Cancel any preloaded stream for this session
-	if ps, ok := r.takePreloadedStream(); ok && ps.CancelFunc != nil {
-		ps.CancelFunc()
-	}
+	// Unclaim this session's preloaded stream, so the drop below releases it
+	r.takePreloadedStream()
 
-	// Reset per-session playback state
-	r.playback.currentVideoDuration = 0
-	if r.playback.mediaPlayerCtxCancelFunc != nil {
-		r.playback.mediaPlayerCtxCancelFunc()
-		r.playback.mediaPlayerCtxCancelFunc = nil
-	}
+	r.playback.currentVideoDuration.Store(0)
+	r.playback.desktopPlayerStream.Store(false)
 
 	// Stop this wrapper's monitor goroutine (previously leaked on every
 	// session eviction) and remove it from the shared registry so its
@@ -455,13 +445,10 @@ func (r *Repository) CleanupSession() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (r *Repository) GetDownloadDir() string {
-	if r.settings.IsAbsent() {
-		return r.getDefaultDownloadPath()
+	if settings, ok := r.getSettings(); ok && settings.DownloadDir != "" {
+		return settings.DownloadDir
 	}
-	if r.settings.MustGet().DownloadDir == "" {
-		return r.getDefaultDownloadPath()
-	}
-	return r.settings.MustGet().DownloadDir
+	return r.getDefaultDownloadPath()
 }
 
 func (r *Repository) getDefaultDownloadPath() string {

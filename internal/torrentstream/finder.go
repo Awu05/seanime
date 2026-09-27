@@ -41,7 +41,8 @@ func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode 
 
 	r.logger.Debug().Msgf("torrentstream: Finding best torrent for %s, Episode %d", media.GetTitleSafe(), episodeNumber)
 
-	if r.settings.IsAbsent() {
+	settings, ok := r.getSettings()
+	if !ok {
 		return nil, fmt.Errorf("torrent streaming is disabled")
 	}
 
@@ -49,7 +50,7 @@ func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode 
 
 	profile, found := db_bridge.FindAutoSelectProfile(r.db)
 	if !found {
-		resolution := r.settings.MustGet().PreferredResolution
+		resolution := settings.PreferredResolution
 		if resolution == "" {
 			resolution = "1080p"
 		}
@@ -199,7 +200,6 @@ func (r *Repository) findBestTorrentFromManualSelection(t *hibiketorrent.AnimeTo
 			f.SetPriority(torrent.PiecePriorityNone)
 		}
 	}
-	//selectedTorrent.Files()[fileIndex].SetPriority(torrent.PiecePriorityNormal)
 	r.logger.Debug().Msgf("torrentstream: Selected torrent %s", selectedTorrent.Files()[fileIndex].DisplayPath())
 
 	tFile := selectedTorrent.Files()[fileIndex]

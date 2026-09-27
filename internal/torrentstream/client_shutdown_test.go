@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/torrent"
-	"github.com/samber/mo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,13 +26,13 @@ func TestClientShutdownCancelsMonitorLoopAndResetsState(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 	c.cancelFunc = cancel
 
 	errs := c.Shutdown()
 	require.Empty(t, errs)
 
-	require.True(t, c.torrentClient.IsAbsent(), "expected torrentClient to be reset to None after Shutdown")
+	require.True(t, c.torrentClient.Load() == nil, "expected torrentClient to be reset to None after Shutdown")
 	require.True(t, c.currentTorrent.IsAbsent(), "expected currentTorrent to be reset after Shutdown")
 	require.Error(t, ctx.Err(), "expected Shutdown to cancel the monitor-loop context so it stops polling the closed client")
 }

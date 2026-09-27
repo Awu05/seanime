@@ -11,7 +11,6 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/samber/mo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,14 +47,12 @@ func TestDropUnclaimedTorrentsDeletesTheTorrentsData(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dataDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, tor.Name()), []byte("data"), 0o644))
 
-	repo := &Repository{
-		logger:   util.NewLogger(),
-		settings: mo.Some(Settings{TorrentstreamSettings: models.TorrentstreamSettings{DownloadDir: downloadDir}}),
-	}
+	repo := &Repository{logger: util.NewLogger()}
+	repo.settings.Store(&Settings{TorrentstreamSettings: models.TorrentstreamSettings{DownloadDir: downloadDir}})
 	c := NewClient(repo)
 	repo.client = c
 	t.Cleanup(func() { unregisterClient(c) })
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 
 	c.dropUnclaimedTorrents()
 
@@ -89,7 +86,7 @@ func TestDropIfUnclaimedSparesTorrentsOtherSessionsAreStreaming(t *testing.T) {
 		repo := &Repository{logger: util.NewLogger()}
 		c := NewClient(repo)
 		repo.client = c
-		c.torrentClient = mo.Some(tc)
+		c.torrentClient.Store(tc)
 		t.Cleanup(func() { unregisterClient(c) })
 		return c
 	}

@@ -12,7 +12,6 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/samber/mo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,11 +44,11 @@ func TestAddTorrentFromDownloadURLTimesOutOnHangingServer(t *testing.T) {
 	tc, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { tc.Close() })
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := c.addTorrentFromDownloadURL(srv.URL)
+		_, err := c.addTorrentFromDownloadURL(tc, srv.URL)
 		done <- err
 	}()
 
@@ -94,9 +93,9 @@ func TestAddTorrentFromDownloadURLCleansUpTempFile(t *testing.T) {
 	tc, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { tc.Close() })
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 
-	_, err = c.addTorrentFromDownloadURL(srv.URL + "/" + basename)
+	_, err = c.addTorrentFromDownloadURL(tc, srv.URL + "/" + basename)
 	require.NoError(t, err)
 
 	leftover, err := filepath.Glob(filepath.Join(os.TempDir(), "*"+basename+"*"))

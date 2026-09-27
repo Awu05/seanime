@@ -15,6 +15,7 @@ import (
 	"seanime/internal/util/torrentutil"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	alog "github.com/anacrolix/log"
@@ -29,17 +30,17 @@ type (
 	Client struct {
 		repository *Repository
 
-		torrentClient        mo.Option[*torrent.Client]
+		// torrentClient is read without mu, including by code that already holds it.
+		torrentClient        atomic.Pointer[torrent.Client]
 		currentTorrent       mo.Option[*torrent.Torrent]
 		currentFile          mo.Option[*torrent.File]
 		currentTorrentStatus TorrentStatus
-		cancelFunc           context.CancelFunc
+		cancelFunc           context.CancelFunc // stops monitorLoop; guarded by mu
 
-		activeStreams map[string]*ActiveStream // keyed by session/profile ID
+		activeStreams map[string]*ActiveStream // keyed by client ID
 		streamsMu     sync.RWMutex
 
 		mu                          sync.Mutex
-		stopCh                      chan struct{}                    // Closed when the media player stops
 		mediaPlayerPlaybackStatusCh chan *mediaplayer.PlaybackStatus // Continuously receives playback status
 		timeSinceLoggedSeeding      time.Time
 	}
@@ -135,11 +136,9 @@ func clearRecentlyAdded(h metainfo.Hash) {
 func NewClient(repository *Repository) *Client {
 	ret := &Client{
 		repository:                  repository,
-		torrentClient:               mo.None[*torrent.Client](),
 		currentFile:                 mo.None[*torrent.File](),
 		currentTorrent:              mo.None[*torrent.Torrent](),
 		activeStreams:               make(map[string]*ActiveStream),
-		stopCh:                      make(chan struct{}),
 		mediaPlayerPlaybackStatusCh: make(chan *mediaplayer.PlaybackStatus, 1),
 	}
 
@@ -244,51 +243,36 @@ func claimedHashes(selfHeld *Client) map[metainfo.Hash]bool {
 	return keep
 }
 
-// GetTorrentClient returns the underlying anacrolix torrent client (if initialized).
-func (c *Client) GetTorrentClient() mo.Option[*torrent.Client] {
-	return c.torrentClient
-}
-
-// SyncSharedTorrentClient re-syncs this repository's torrent client wrapper to reference the same
-// underlying anacrolix engine as source, if source has one and this repository isn't already
-// pointing at that same instance. Safe to call repeatedly (e.g. on every settings broadcast):
-// it's a no-op once in sync, so it doesn't needlessly restart the per-session monitor goroutine.
-//
-// This exists because UseSharedTorrentClient (see below) is otherwise only wired up once, at
-// per-profile session creation (session_factory.go) - if that ran before the app singleton's own
-// engine had finished initializing, or the singleton's engine was later torn down and recreated
-// (e.g. a settings change), the session's reference went stale or stayed permanently absent, with
-// no retry: every torrent-stream action for that profile then failed with "torrent client is not
-// initialized" indefinitely, even though nothing else in the app was affected.
+// SyncSharedTorrentClient points this repository at source's engine. It's called on every
+// settings broadcast, not just at session creation, so a session created before the engine
+// existed - or kept after it was recreated - picks up the current one instead of staying stale.
 func (r *Repository) SyncSharedTorrentClient(source *Repository) {
 	if source == nil || source.client == nil || r.client == nil {
 		return
 	}
-	tc, ok := source.client.torrentClient.Get()
-	if !ok {
-		return
+	if tc := source.client.torrentClient.Load(); tc != nil {
+		r.client.UseSharedTorrentClient(tc)
 	}
-	if current, currentOk := r.client.torrentClient.Get(); currentOk && current == tc {
-		return
-	}
-	r.client.UseSharedTorrentClient(tc)
 }
 
-// UseSharedTorrentClient sets this client wrapper to use an existing anacrolix torrent client
-// instead of creating its own. This allows multiple session wrappers to share a single engine.
-// Starts the monitoring goroutine for this wrapper's active streams.
+// UseSharedTorrentClient makes this wrapper use an existing engine and (re)starts its monitor
+// loop. A no-op if it already uses tc.
 func (c *Client) UseSharedTorrentClient(tc *torrent.Client) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.torrentClient.Load() == tc {
+		return
+	}
+	c.torrentClient.Store(tc)
+	c.restartMonitorLoopLocked()
+}
+
+func (c *Client) restartMonitorLoopLocked() {
 	if c.cancelFunc != nil {
 		c.cancelFunc()
 	}
-
 	var ctx context.Context
 	ctx, c.cancelFunc = context.WithCancel(context.Background())
-
-	c.mu.Lock()
-	c.torrentClient = mo.Some(tc)
-	c.mu.Unlock()
-
 	go c.monitorLoop(ctx)
 }
 
@@ -296,31 +280,16 @@ func (c *Client) UseSharedTorrentClient(tc *torrent.Client) {
 // The client is designed to support only one torrent at a time, and seed it.
 // Upon initialization, the client will drop all torrents.
 func (c *Client) initializeClient() error {
-	// Fail if no settings
-	if err := c.repository.FailIfNoSettings(); err != nil {
-		return err
+	settings, ok := c.repository.getSettings()
+	if !ok {
+		return errNoSettings
 	}
-
-	// Cancel the previous context, terminating the goroutine if it's running
-	if c.cancelFunc != nil {
-		c.cancelFunc()
-	}
-
-	// Context for the client's goroutine
-	var ctx context.Context
-	ctx, c.cancelFunc = context.WithCancel(context.Background())
-
-	// Get the settings
-	settings := c.repository.settings.MustGet()
 
 	// Define torrent client settings
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.Seed = true
 	cfg.DisableIPv6 = settings.DisableIPV6
 	cfg.Logger = alog.Logger{}
-
-	// TEST ONLY: Limit download speed to 1mb/s
-	// cfg.DownloadRateLimiter = rate.NewLimiter(rate.Limit(1<<20), 1<<20)
 
 	if settings.SlowSeeding {
 		cfg.DialRateLimiter = rate.NewLimiter(rate.Limit(1), 1)
@@ -347,118 +316,110 @@ func (c *Client) initializeClient() error {
 		return fmt.Errorf("error creating a new torrent client: %v", err)
 	}
 	c.repository.logger.Info().Msgf("torrentstream: Initialized torrent client on port %d", settings.TorrentClientPort)
-	c.torrentClient = mo.Some(client)
+	c.torrentClient.Store(client)
 	c.dropUnclaimedTorrentsLocked()
+	c.restartMonitorLoopLocked()
 	c.mu.Unlock()
-
-	go c.monitorLoop(ctx)
 
 	return nil
 }
 
-// monitorLoop runs the background monitoring goroutine that tracks torrent download/upload
-// progress for all active streams.
+// monitorLoop reports each active stream's download progress to its client, and tells the client
+// when an external media player has started playing.
 func (c *Client) monitorLoop(ctx context.Context) {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			c.repository.logger.Debug().Msg("torrentstream: Context cancelled, stopping monitor loop")
 			return
-
 		case status := <-c.mediaPlayerPlaybackStatusCh:
 			_, fileOpt := c.currentTorrentAndFile()
-			if status != nil && fileOpt.IsPresent() && c.repository.playback.currentVideoDuration == 0 {
-				if c.repository.playback.currentVideoDuration == 0 && status.Duration > 0 {
-					c.repository.logger.Debug().Msg("torrentstream: Media player started playing the video, sending event")
-					c.repository.sendStateEvent(eventTorrentStartedPlaying)
-					c.repository.playback.currentVideoDuration = status.Duration
-				}
+			if fileOpt.IsPresent() && status.Duration > 0 && c.repository.playback.currentVideoDuration.CompareAndSwap(0, int64(status.Duration)) {
+				c.repository.logger.Debug().Msg("torrentstream: Media player started playing the video, sending event")
+				c.repository.sendStateEvent(eventTorrentStartedPlaying)
 			}
-		default:
-			c.mu.Lock()
-			// Monitor all active streams
-			c.streamsMu.RLock()
-			for _, stream := range c.activeStreams {
-				if stream.Torrent == nil || stream.File == nil {
-					continue
-				}
-				t := stream.Torrent
-				f := stream.File
-
-				now := time.Now()
-				elapsed := now.Sub(stream.LastSpeedCheck).Seconds()
-
-				downloadProgress := t.BytesCompleted()
-
-				downloadSpeed := ""
-				if elapsed > 0 {
-					bytesPerSecond := float64(downloadProgress-stream.LastBytesCompleted) / elapsed
-					if bytesPerSecond > 0 {
-						downloadSpeed = fmt.Sprintf("%s/s", util.Bytes(uint64(bytesPerSecond)))
-					}
-				}
-				size := util.Bytes(uint64(f.Length()))
-
-				bytesWrittenData := t.Stats().BytesWrittenData
-				uploadSpeed := ""
-				if elapsed > 0 {
-					bytesPerSecond := float64((&bytesWrittenData).Int64()-stream.LastBytesWrittenData) / elapsed
-					if bytesPerSecond > 0 {
-						uploadSpeed = fmt.Sprintf("%s/s", util.Bytes(uint64(bytesPerSecond)))
-					}
-				}
-
-				stream.LastBytesCompleted = downloadProgress
-				stream.LastBytesWrittenData = (&bytesWrittenData).Int64()
-				stream.LastSpeedCheck = now
-
-				stream.Status = TorrentStatus{
-					Size:               size,
-					UploadProgress:     (&bytesWrittenData).Int64(),
-					DownloadSpeed:      downloadSpeed,
-					UploadSpeed:        uploadSpeed,
-					DownloadProgress:   downloadProgress,
-					ProgressPercentage: c.getTorrentPercentage(mo.Some(t), mo.Some(f)),
-					Seeders:            t.Stats().ConnectedSeeders,
-				}
-
-				c.currentTorrentStatus = stream.Status
-			}
-			c.streamsMu.RUnlock()
-
-			// Send state event only if there is an active torrent being streamed
-			c.streamsMu.RLock()
-			hasStreams := len(c.activeStreams) > 0
-			c.streamsMu.RUnlock()
-			hasTorrent := c.currentTorrent.IsPresent() && c.currentFile.IsPresent()
-			if hasStreams || hasTorrent {
-				c.repository.sendStateEvent(eventTorrentStatus, c.currentTorrentStatus)
-			} else if c.currentTorrentStatus.ProgressPercentage > 0 {
-				// Stream was stopped but status wasn't cleared — reset it
-				c.currentTorrentStatus = TorrentStatus{}
-				c.repository.sendStateEvent(eventTorrentStopped, nil)
-				c.repository.logger.Trace().Msgf("torrentstream: Progress: %.2f%%, Download speed: %s, Upload speed: %s, Size: %s",
-					c.currentTorrentStatus.ProgressPercentage,
-					c.currentTorrentStatus.DownloadSpeed,
-					c.currentTorrentStatus.UploadSpeed,
-					c.currentTorrentStatus.Size)
-				c.timeSinceLoggedSeeding = time.Now()
-			}
-
-			c.mu.Unlock()
-			if c.torrentClient.IsPresent() {
-				if time.Since(c.timeSinceLoggedSeeding) > 20*time.Second {
-					c.timeSinceLoggedSeeding = time.Now()
-					for _, t := range c.torrentClient.MustGet().Torrents() {
-						if t.Seeding() {
-							c.repository.logger.Trace().Msgf("torrentstream: Seeding torrent, %d peers", t.Stats().ActivePeers)
-						}
-					}
-				}
-			}
-			time.Sleep(3 * time.Second)
+		case <-ticker.C:
+			c.reportStreamStatuses()
+			c.logSeedingTorrents()
 		}
 	}
+}
+
+func (c *Client) reportStreamStatuses() {
+	c.mu.Lock()
+	current, hasCurrent := c.currentTorrent.Get()
+	statuses := make(map[string]TorrentStatus)
+	now := time.Now()
+	c.streamsMu.Lock()
+	for clientId, stream := range c.activeStreams {
+		if stream.Torrent == nil || stream.File == nil {
+			continue
+		}
+		stream.refreshStatus(now)
+		statuses[clientId] = stream.Status
+		if hasCurrent && stream.Torrent == current {
+			c.currentTorrentStatus = stream.Status
+		}
+	}
+	c.streamsMu.Unlock()
+	stopped := len(statuses) == 0 && !hasCurrent && c.currentTorrentStatus != (TorrentStatus{})
+	if stopped {
+		c.currentTorrentStatus = TorrentStatus{}
+	}
+	c.mu.Unlock()
+
+	for clientId, status := range statuses {
+		c.repository.sendStateEventTo(clientId, eventTorrentStatus, status)
+	}
+	if stopped {
+		c.repository.sendStateEvent(eventTorrentStopped, nil)
+	}
+}
+
+func (c *Client) logSeedingTorrents() {
+	tc := c.torrentClient.Load()
+	if tc == nil || time.Since(c.timeSinceLoggedSeeding) <= 20*time.Second {
+		return
+	}
+	c.timeSinceLoggedSeeding = time.Now()
+	for _, t := range tc.Torrents() {
+		if t.Seeding() {
+			c.repository.logger.Trace().Msgf("torrentstream: Seeding torrent, %d peers", t.Stats().ActivePeers)
+		}
+	}
+}
+
+// refreshStatus recomputes s.Status, measuring speeds since the previous refresh.
+func (s *ActiveStream) refreshStatus(now time.Time) {
+	stats := s.Torrent.Stats()
+	downloaded := s.Torrent.BytesCompleted()
+	uploaded := stats.BytesWrittenData.Int64()
+	elapsed := now.Sub(s.LastSpeedCheck).Seconds()
+
+	progress := 0.0
+	if length := s.File.Length(); length > 0 {
+		progress = float64(s.File.BytesCompleted()) / float64(length) * 100
+	}
+
+	s.Status = TorrentStatus{
+		Size:               util.Bytes(uint64(s.File.Length())),
+		UploadProgress:     uploaded,
+		DownloadSpeed:      formatSpeed(downloaded-s.LastBytesCompleted, elapsed),
+		UploadSpeed:        formatSpeed(uploaded-s.LastBytesWrittenData, elapsed),
+		DownloadProgress:   downloaded,
+		ProgressPercentage: progress,
+		Seeders:            stats.ConnectedSeeders,
+	}
+	s.LastBytesCompleted, s.LastBytesWrittenData, s.LastSpeedCheck = downloaded, uploaded, now
+}
+
+func formatSpeed(bytes int64, seconds float64) string {
+	if bytes <= 0 || seconds <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s/s", util.Bytes(uint64(float64(bytes)/seconds)))
 }
 
 // GetStreamingUrl returns the URL for the legacy external-player HTTP stream endpoint.
@@ -467,14 +428,14 @@ func (c *Client) monitorLoop(ctx context.Context) {
 // "current" for the profile - which, without it, two devices/tabs on the same profile playing
 // different episodes could cross-wire.
 func (c *Client) GetStreamingUrl(clientId string) string {
-	if c.torrentClient.IsAbsent() {
+	if c.torrentClient.Load() == nil {
 		return ""
 	}
 	_, fileOpt := c.currentTorrentAndFile()
 	if fileOpt.IsAbsent() {
 		return ""
 	}
-	settings, ok := c.repository.settings.Get()
+	settings, ok := c.repository.getSettings()
 	if !ok {
 		return ""
 	}
@@ -501,7 +462,7 @@ func (c *Client) GetStreamingUrl(clientId string) string {
 // GetExternalPlayerStreamingUrl returns the URL template used by the desktop/systray external
 // player integration. See GetStreamingUrl for why clientId is embedded.
 func (c *Client) GetExternalPlayerStreamingUrl(clientId string) string {
-	if c.torrentClient.IsAbsent() {
+	if c.torrentClient.Load() == nil {
 		return ""
 	}
 	_, fileOpt := c.currentTorrentAndFile()
@@ -518,7 +479,8 @@ func (c *Client) GetExternalPlayerStreamingUrl(clientId string) string {
 }
 
 func (c *Client) AddTorrent(ctx context.Context, id string) (*torrent.Torrent, error) {
-	if c.torrentClient.IsAbsent() {
+	tc := c.torrentClient.Load()
+	if tc == nil {
 		return nil, errors.New("torrent client is not initialized")
 	}
 
@@ -526,22 +488,18 @@ func (c *Client) AddTorrent(ctx context.Context, id string) (*torrent.Torrent, e
 	c.dropUnclaimedTorrents()
 
 	if strings.HasPrefix(id, "magnet") {
-		return c.addTorrentMagnet(id)
+		return c.addTorrentMagnet(tc, id)
 	}
 
 	if strings.HasPrefix(id, "http") {
-		return c.addTorrentFromDownloadURL(id)
+		return c.addTorrentFromDownloadURL(tc, id)
 	}
 
-	return c.addTorrentFromFile(id)
+	return c.addTorrentFromFile(tc, id)
 }
 
-func (c *Client) addTorrentMagnet(magnet string) (*torrent.Torrent, error) {
-	if c.torrentClient.IsAbsent() {
-		return nil, errors.New("torrent client is not initialized")
-	}
-
-	t, err := c.torrentClient.MustGet().AddMagnet(magnet)
+func (c *Client) addTorrentMagnet(tc *torrent.Client, magnet string) (*torrent.Torrent, error) {
+	t, err := tc.AddMagnet(magnet)
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +510,6 @@ func (c *Client) addTorrentMagnet(magnet string) (*torrent.Torrent, error) {
 	case <-t.GotInfo():
 		break
 	case <-t.Closed():
-		//t.Drop()
 		return nil, errors.New("torrent closed")
 	case <-time.After(1 * time.Minute):
 		t.Drop()
@@ -562,12 +519,8 @@ func (c *Client) addTorrentMagnet(magnet string) (*torrent.Torrent, error) {
 	return t, nil
 }
 
-func (c *Client) addTorrentFromFile(fp string) (*torrent.Torrent, error) {
-	if c.torrentClient.IsAbsent() {
-		return nil, errors.New("torrent client is not initialized")
-	}
-
-	t, err := c.torrentClient.MustGet().AddTorrentFromFile(fp)
+func (c *Client) addTorrentFromFile(tc *torrent.Client, fp string) (*torrent.Torrent, error) {
+	t, err := tc.AddTorrentFromFile(fp)
 	if err != nil {
 		return nil, err
 	}
@@ -583,11 +536,7 @@ func (c *Client) addTorrentFromFile(fp string) (*torrent.Torrent, error) {
 // waiting out the real deadline.
 var torrentURLFetchTimeout = 1 * time.Minute
 
-func (c *Client) addTorrentFromDownloadURL(url string) (*torrent.Torrent, error) {
-	if c.torrentClient.IsAbsent() {
-		return nil, errors.New("torrent client is not initialized")
-	}
-
+func (c *Client) addTorrentFromDownloadURL(tc *torrent.Client, url string) (*torrent.Torrent, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), torrentURLFetchTimeout)
 	defer cancel()
 
@@ -618,7 +567,7 @@ func (c *Client) addTorrentFromDownloadURL(url string) (*torrent.Torrent, error)
 		return nil, err
 	}
 
-	t, err := c.torrentClient.MustGet().AddTorrentFromFile(file.Name())
+	t, err := tc.AddTorrentFromFile(file.Name())
 	if err != nil {
 		return nil, err
 	}
@@ -638,57 +587,41 @@ func (c *Client) addTorrentFromDownloadURL(url string) (*torrent.Torrent, error)
 	return t, nil
 }
 
-// Shutdown closes the torrent client and drops all torrents.
-// This SHOULD NOT be called if you don't intend to reinitialize the client.
+// Shutdown drops unclaimed torrents, stops the monitor loop and closes the engine. Only for the
+// wrapper that owns the engine; sessions sharing it use Repository.CleanupSession instead.
 func (c *Client) Shutdown() (errs []error) {
-	if c.torrentClient.IsAbsent() {
+	if c.torrentClient.Load() == nil {
 		return
 	}
 	c.dropUnclaimedTorrents()
 
-	// Stop monitorLoop (started by initializeClient/UseSharedTorrentClient) so it doesn't
-	// keep polling a closed torrent client every 3s, and take the same lock monitorLoop uses
-	// so this doesn't race its reads/writes of currentTorrent/currentTorrentStatus.
+	c.mu.Lock()
 	if c.cancelFunc != nil {
 		c.cancelFunc()
+		c.cancelFunc = nil
 	}
-
-	c.mu.Lock()
 	c.currentTorrent = mo.None[*torrent.Torrent]()
 	c.currentTorrentStatus = TorrentStatus{}
-	tc := c.torrentClient
-	c.torrentClient = mo.None[*torrent.Client]()
+	tc := c.torrentClient.Swap(nil)
 	c.mu.Unlock()
 
+	if tc == nil {
+		return
+	}
 	c.repository.logger.Debug().Msg("torrentstream: Closing torrent client")
-	return tc.MustGet().Close()
-}
-
-func (c *Client) FindTorrent(infoHash string) (*torrent.Torrent, error) {
-	if c.torrentClient.IsAbsent() {
-		return nil, errors.New("torrent client is not initialized")
-	}
-
-	torrents := c.torrentClient.MustGet().Torrents()
-	for _, t := range torrents {
-		if t.InfoHash().AsString() == infoHash {
-			c.repository.logger.Debug().Msgf("torrentstream: Found torrent: %s", infoHash)
-			return t, nil
-		}
-	}
-	return nil, fmt.Errorf("no torrent found")
+	return tc.Close()
 }
 
 // RemoveTorrent drops a torrent the caller no longer needs, unless a session is streaming it.
 func (c *Client) RemoveTorrent(infoHash string) error {
-	if c.torrentClient.IsAbsent() {
+	tc := c.torrentClient.Load()
+	if tc == nil {
 		return errors.New("torrent client is not initialized")
 	}
 
 	c.repository.logger.Trace().Msgf("torrentstream: Removing torrent: %s", infoHash)
 
-	torrents := c.torrentClient.MustGet().Torrents()
-	for _, t := range torrents {
+	for _, t := range tc.Torrents() {
 		if t.InfoHash().AsString() == infoHash {
 			if c.dropIfUnclaimed(t) {
 				c.repository.logger.Debug().Msgf("torrentstream: Removed torrent: %s", infoHash)
@@ -699,31 +632,26 @@ func (c *Client) RemoveTorrent(infoHash string) error {
 	return fmt.Errorf("no torrent found")
 }
 
-// dropUnclaimedTorrents drops torrents that NO live session claims (across
-// every wrapper sharing the engine) and deletes only those torrents'
-// directories. Torrents another session is streaming are left untouched.
-// dropUnclaimedTorrents drops any torrent this client's shared engine holds that no session
-// (this one or any other sharing the engine) still claims. Must NOT be called while already
-// holding c.mu - use dropUnclaimedTorrentsLocked for that case, or this deadlocks (claimedHashes
-// would try to re-lock c.mu for this same client while reading its currentTorrent).
+// dropUnclaimedTorrents drops every torrent in the shared engine that no session claims, and
+// deletes their data. Must not be called while holding c.mu (claimedHashes would re-lock it) -
+// use dropUnclaimedTorrentsLocked instead.
 func (c *Client) dropUnclaimedTorrents() {
 	c.dropUnclaimedTorrentsWithClaims(claimedHashes(nil))
 }
 
-// dropUnclaimedTorrentsLocked is dropUnclaimedTorrents for callers that already hold c.mu (e.g.
-// initializeClient, StopStream, CleanupSession, all mid-critical-section when they need to drop
-// unclaimed torrents).
+// dropUnclaimedTorrentsLocked is dropUnclaimedTorrents for callers that hold c.mu.
 func (c *Client) dropUnclaimedTorrentsLocked() {
 	c.dropUnclaimedTorrentsWithClaims(claimedHashes(c))
 }
 
 func (c *Client) dropUnclaimedTorrentsWithClaims(keepHashes map[metainfo.Hash]bool) {
-	if c.torrentClient.IsAbsent() {
+	tc := c.torrentClient.Load()
+	if tc == nil {
 		return
 	}
 
 	droppedCount := 0
-	for _, t := range c.torrentClient.MustGet().Torrents() {
+	for _, t := range tc.Torrents() {
 		infoHash := t.InfoHash()
 		if keepHashes[infoHash] {
 			continue
@@ -761,7 +689,7 @@ func (c *Client) dropTorrentAndData(t *torrent.Torrent) {
 	t.Drop()
 	// Data lives in DownloadDir/<infohash> (storage.NewFileByInfoHash), never under the torrent's
 	// name, which comes from untrusted metadata.
-	if settings, ok := c.repository.settings.Get(); ok {
+	if settings, ok := c.repository.getSettings(); ok {
 		_ = os.RemoveAll(filepath.Join(settings.DownloadDir, infoHash.HexString()))
 	}
 }
@@ -810,20 +738,6 @@ func (c *Client) RemoveActiveStream(sessionID string) {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// getTorrentPercentage returns the percentage of the current torrent file
-// If no torrent is selected, it returns -1
-func (c *Client) getTorrentPercentage(t mo.Option[*torrent.Torrent], f mo.Option[*torrent.File]) float64 {
-	if t.IsAbsent() || f.IsAbsent() {
-		return -1
-	}
-
-	if f.MustGet().Length() == 0 {
-		return 0
-	}
-
-	return float64(f.MustGet().BytesCompleted()) / float64(f.MustGet().Length()) * 100
-}
 
 // readyToStream determines if enough of the file has been downloaded to begin streaming
 // Uses both absolute size (minimum buffer) and a percentage-based approach

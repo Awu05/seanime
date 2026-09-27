@@ -8,11 +8,8 @@ import (
 	hibiketorrent "seanime/internal/extension/hibike/torrent"
 	"seanime/internal/util"
 	"seanime/internal/util/comparison"
-	"slices"
-	"sync"
 
 	"github.com/5rahim/habari"
-	"github.com/anacrolix/torrent"
 )
 
 type (
@@ -50,87 +47,39 @@ func (r *Repository) GetTorrentFilePreviewsFromManualSelection(opts *GetTorrentF
 		return nil, err
 	}
 
-	fileMetadataMap := make(map[string]*habari.Metadata)
-	wg := sync.WaitGroup{}
-	mu := sync.RWMutex{}
-	wg.Add(len(selectedTorrent.Files()))
-	for _, file := range selectedTorrent.Files() {
-		go func(file *torrent.File) {
-			defer wg.Done()
-			defer util.HandlePanicInModuleThen("debridstream/GetTorrentFilePreviewsFromManualSelection", func() {})
-
-			metadata := habari.Parse(filepath.Base(file.Path()))
-			mu.Lock()
-			fileMetadataMap[file.Path()] = metadata
-			mu.Unlock()
-		}(file)
-	}
-	wg.Wait()
-
+	files := selectedTorrent.Files()
+	fileMetadata := make([]*habari.Metadata, len(files))
 	containsAbsoluteEps := false
-	for _, metadata := range fileMetadataMap {
-		if len(metadata.EpisodeNumber) == 1 {
-			ep := util.StringToIntMust(metadata.EpisodeNumber[0])
-			if ep > opts.Media.GetTotalEpisodeCount() {
-				containsAbsoluteEps = true
-				break
-			}
+	for i, file := range files {
+		fileMetadata[i] = habari.Parse(filepath.Base(file.Path()))
+		if len(fileMetadata[i].EpisodeNumber) == 1 && util.StringToIntMust(fileMetadata[i].EpisodeNumber[0]) > opts.Media.GetTotalEpisodeCount() {
+			containsAbsoluteEps = true
 		}
 	}
 
-	wg = sync.WaitGroup{}
-	mu2 := sync.Mutex{}
+	ret = make([]*FilePreview, len(files))
+	for i, file := range files {
+		metadata := fileMetadata[i]
+		displayTitle := filepath.Base(file.Path())
+		parsedEpisodeNumber := -1
 
-	for i, file := range selectedTorrent.Files() {
-		wg.Add(1)
-		go func(i int, file *torrent.File) {
-			defer wg.Done()
-			defer util.HandlePanicInModuleThen("torrentstream/GetTorrentFilePreviewsFromManualSelection", func() {})
-
-			mu.RLock()
-			metadata := fileMetadataMap[file.Path()]
-			mu.RUnlock()
-
-			displayTitle := filepath.Base(file.Path())
-
-			isLikely := false
-			parsedEpisodeNumber := -1
-
-			if metadata != nil && !comparison.ValueContainsSpecial(displayTitle) && !comparison.ValueContainsNC(displayTitle) {
-				if len(metadata.EpisodeNumber) == 1 {
-					ep := util.StringToIntMust(metadata.EpisodeNumber[0])
-					parsedEpisodeNumber = ep
-					displayTitle = fmt.Sprintf("Episode %d", ep)
-					if metadata.EpisodeTitle != "" {
-						displayTitle = fmt.Sprintf("%s - %s", displayTitle, metadata.EpisodeTitle)
-					}
-				}
+		if len(metadata.EpisodeNumber) == 1 && !comparison.ValueContainsSpecial(displayTitle) && !comparison.ValueContainsNC(displayTitle) {
+			parsedEpisodeNumber = util.StringToIntMust(metadata.EpisodeNumber[0])
+			displayTitle = fmt.Sprintf("Episode %d", parsedEpisodeNumber)
+			if metadata.EpisodeTitle != "" {
+				displayTitle = fmt.Sprintf("%s - %s", displayTitle, metadata.EpisodeTitle)
 			}
+		}
 
-			if !containsAbsoluteEps {
-				isLikely = parsedEpisodeNumber == opts.EpisodeNumber
-			}
-
-			mu2.Lock()
-			// Get the file preview
-			ret = append(ret, &FilePreview{
-				Path:          file.Path(),
-				DisplayPath:   filepath.Base(file.Path()),
-				DisplayTitle:  displayTitle,
-				EpisodeNumber: parsedEpisodeNumber,
-				IsLikely:      isLikely,
-				Index:         i,
-			})
-			mu2.Unlock()
-		}(i, file)
+		ret[i] = &FilePreview{
+			Path:          file.Path(),
+			DisplayPath:   filepath.Base(file.Path()),
+			DisplayTitle:  displayTitle,
+			EpisodeNumber: parsedEpisodeNumber,
+			IsLikely:      !containsAbsoluteEps && parsedEpisodeNumber == opts.EpisodeNumber,
+			Index:         i,
+		}
 	}
-
-	wg.Wait()
-
-	// sort by index
-	slices.SortFunc(ret, func(a, b *FilePreview) int {
-		return a.Index - b.Index
-	})
 
 	r.logger.Debug().Str("hash", opts.Torrent.InfoHash).Msg("torrentstream: Got file previews for torrent selection, dropping torrent")
 	go r.client.dropIfUnclaimed(selectedTorrent)

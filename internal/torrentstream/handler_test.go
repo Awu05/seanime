@@ -44,7 +44,7 @@ func newTestHandler(t *testing.T) (*handler, *torrent.Client) {
 	tc, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { tc.Close() })
-	repo.client.torrentClient = mo.Some(tc)
+	repo.client.torrentClient.Store(tc)
 
 	return repo.handler, tc
 }

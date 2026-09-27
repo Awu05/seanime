@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/torrent"
-	"github.com/samber/mo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,12 +42,13 @@ func TestRepositorySyncSharedTorrentClient(t *testing.T) {
 	t.Run("adopts the source's engine when it has none of its own", func(t *testing.T) {
 		source := newTestRepository(t)
 		tc := newTestTorrentClient(t)
-		source.client.torrentClient = mo.Some(tc)
+		source.client.torrentClient.Store(tc)
 
 		target := newTestRepository(t)
 		target.SyncSharedTorrentClient(source)
 
-		got, ok := target.client.torrentClient.Get()
+		got := target.client.torrentClient.Load()
+		ok := got != nil
 		require.True(t, ok, "expected the target to adopt the source's engine")
 		require.Same(t, tc, got)
 	})
@@ -59,23 +59,24 @@ func TestRepositorySyncSharedTorrentClient(t *testing.T) {
 
 		target.SyncSharedTorrentClient(source)
 
-		require.True(t, target.client.torrentClient.IsAbsent())
+		require.True(t, target.client.torrentClient.Load() == nil)
 	})
 
 	t.Run("re-adopts a new engine after the source's was reinitialized", func(t *testing.T) {
 		source := newTestRepository(t)
 		oldTc := newTestTorrentClient(t)
-		source.client.torrentClient = mo.Some(oldTc)
+		source.client.torrentClient.Store(oldTc)
 
 		target := newTestRepository(t)
 		target.SyncSharedTorrentClient(source)
 
 		newTc := newTestTorrentClient(t)
-		source.client.torrentClient = mo.Some(newTc)
+		source.client.torrentClient.Store(newTc)
 
 		target.SyncSharedTorrentClient(source)
 
-		got, ok := target.client.torrentClient.Get()
+		got := target.client.torrentClient.Load()
+		ok := got != nil
 		require.True(t, ok)
 		require.Same(t, newTc, got, "expected the target to pick up the source's reinitialized engine")
 	})
@@ -85,6 +86,6 @@ func TestRepositorySyncSharedTorrentClient(t *testing.T) {
 		require.NotPanics(t, func() {
 			target.SyncSharedTorrentClient(nil)
 		})
-		require.True(t, target.client.torrentClient.IsAbsent())
+		require.True(t, target.client.torrentClient.Load() == nil)
 	})
 }

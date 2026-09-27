@@ -56,7 +56,7 @@ func TestWaitUntilReadyToStreamReturnsSupersededWhenGenerationChanges(t *testing
 	file := tor.Files()[0]
 
 	repo := newTestRepositoryWithClient(t)
-	repo.client.torrentClient = mo.Some(tc)
+	repo.client.torrentClient.Store(tc)
 	repo.client.currentTorrent = mo.Some(tor)
 	repo.client.currentFile = mo.Some(file)
 
@@ -134,7 +134,7 @@ func TestWaitUntilReadyToStreamReturnsErrorOnStall(t *testing.T) {
 	file := tor.Files()[0]
 
 	repo := newTestRepositoryWithClient(t)
-	repo.client.torrentClient = mo.Some(tc)
+	repo.client.torrentClient.Store(tc)
 	repo.client.currentTorrent = mo.Some(tor)
 	repo.client.currentFile = mo.Some(file)
 

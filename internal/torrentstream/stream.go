@@ -47,7 +47,7 @@ func (r *Repository) waitUntilReadyToStream(generation int64) error {
 			return errStreamSuperseded
 		}
 		torrentOpt, fileOpt := r.client.currentTorrentAndFile()
-		if r.client.torrentClient.IsAbsent() || torrentOpt.IsAbsent() {
+		if r.client.torrentClient.Load() == nil || torrentOpt.IsAbsent() {
 			return errors.New("torrentstream: torrent was dropped before it became ready to stream")
 		}
 		if r.client.readyToStream() {
@@ -151,8 +151,6 @@ func (r *Repository) RetryAfterPlaybackFailure(clientId string) *PlaybackFailure
 // StartStream is called by the client to start streaming a torrent
 func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) (err error) {
 	defer util.HandlePanicInModuleWithError("torrentstream/stream/StartStream", &err)
-	// DEVNOTE: Do not
-	//r.Shutdown()
 
 	r.setPreviousStreamOptions(opts)
 
@@ -201,15 +199,9 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 				Release: prepared.Release,
 			}
 			usedPreparedStream = true
-
-			// Cancel the prepared stream context - it's now the active stream, not just prepared
-			if prepared.CancelFunc != nil {
-				prepared.CancelFunc()
-			}
 		} else {
-			// Different episode requested, cancel and drop the prepared stream
 			r.logger.Debug().Msg("torrentstream: Prepared stream doesn't match request, cancelling it")
-			r.cancelAndMaybeDropPreloaded(prepared)
+			r.client.dropIfUnclaimed(prepared.Torrent)
 		}
 	}
 
@@ -310,7 +302,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 				Torrent:       torrentToStream.Torrent,
 				File:          torrentToStream.File,
 				OnTerminate: func() {
-					_ = r.StopStream(true)
+					r.stopStream(false)
 				},
 			})
 			if err != nil {
@@ -391,6 +383,7 @@ func (r *Repository) sendStreamToExternalPlayer(generation int64, opts *StartStr
 	//
 	case PlaybackTypeExternal:
 		r.logger.Debug().Msgf("torrentstream: Starting the media player %s", streamURL)
+		r.playback.desktopPlayerStream.Store(true)
 		err = r.playbackManager.StartStreamingUsingMediaPlayer(windowTitle, &playbackmanager.StartPlayingOptions{
 			Payload:   streamURL,
 			UserAgent: opts.UserAgent,
@@ -402,12 +395,8 @@ func (r *Repository) sendStreamToExternalPlayer(generation int64, opts *StartStr
 			_ = r.StopStream()
 			r.logger.Error().Err(err).Msg("torrentstream: Failed to start the stream")
 			r.wsEventManager.SendEventTo(opts.ClientId, events.ErrorToast, err.Error())
+			return
 		}
-
-		r.wsEventManager.SendEvent(events.ShowIndefiniteLoader, "torrentstream")
-		defer func() {
-			r.wsEventManager.SendEvent(events.HideIndefiniteLoader, "torrentstream")
-		}()
 
 		r.playbackManager.RegisterMediaPlayerCallback(func(event playbackmanager.PlaybackEvent) bool {
 			switch event.(type) {
@@ -444,18 +433,14 @@ func (r *Repository) sendStreamToExternalPlayer(generation int64, opts *StartStr
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type StartUntrackedStreamOptions struct {
-	Magnet       string
-	FileIndex    int
-	WindowTitle  string
-	UserAgent    string
-	ClientId     string
-	PlaybackType PlaybackType
+// StopStream stops this repository's stream, releasing its torrent and closing the player showing it.
+func (r *Repository) StopStream() error {
+	r.stopStream(true)
+	return nil
 }
 
-// StopStream stops the stream and closes the server.
-// If fromNativePlayer is true, it will not stop the native player again.
-func (r *Repository) StopStream(fromNativePlayer ...bool) error {
+// stopStream is StopStream; stopNativePlayer is false when the native player itself ended the stream.
+func (r *Repository) stopStream(stopNativePlayer bool) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logRecoveredPanic(r.logger, "StopStream", rec)
@@ -463,12 +448,7 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	}()
 	r.logger.Info().Msg("torrentstream: Stopping stream")
 
-	// Stop the client
-	// This will stop the stream and close the server
-	// This also sends the eventTorrentStopped event
 	r.client.mu.Lock()
-	r.client.repository.logger.Debug().Msg("torrentstream: Stopping stream and freeing this session's resources")
-
 	hadTorrent := r.client.currentTorrent.IsPresent()
 
 	// Release this session's claims FIRST so the drop below only sees
@@ -485,30 +465,25 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	r.client.currentFile = mo.None[*torrent.File]()
 	r.client.currentTorrentStatus = TorrentStatus{}
 
-	// Clear preloaded/prepared stream
-	if ps, ok := r.takePreloadedStream(); ok && ps.CancelFunc != nil {
-		ps.CancelFunc()
-	}
+	// Unclaim the preloaded stream too, so the drop below releases it
+	_, hadPreload := r.takePreloadedStream()
 
 	// Drop torrents no session claims any more — stops seeding and frees disk
 	// without touching torrents other users are still streaming
-	if hadTorrent {
+	if hadTorrent || hadPreload {
 		r.client.dropUnclaimedTorrentsLocked()
 	}
 
-	// Reset playback state
-	r.playback.currentVideoDuration = 0
-	if r.playback.mediaPlayerCtxCancelFunc != nil {
-		r.playback.mediaPlayerCtxCancelFunc()
-		r.playback.mediaPlayerCtxCancelFunc = nil
-	}
-
-	// Send stopped event and stop media player
-	r.client.repository.sendStateEvent(eventTorrentStopped, nil)
-	r.client.repository.mediaPlayerRepository.Stop()
+	r.playback.currentVideoDuration.Store(0)
+	onDesktopPlayer := r.playback.desktopPlayerStream.Swap(false)
 	r.client.mu.Unlock()
 
-	if len(fromNativePlayer) == 0 || fromNativePlayer[0] == false {
+	r.sendStateEvent(eventTorrentStopped, nil)
+	// The desktop media player is shared by every profile: only stop it if it's showing this stream.
+	if onDesktopPlayer {
+		r.mediaPlayer().Stop()
+	}
+	if stopNativePlayer {
 		go func() {
 			if playbackType, ok := r.nativePlayer.VideoCore().GetCurrentPlaybackType(); ok && playbackType == videocore.PlaybackTypeTorrent {
 				r.nativePlayer.Stop()
@@ -517,23 +492,12 @@ func (r *Repository) StopStream(fromNativePlayer ...bool) error {
 	}
 
 	r.logger.Info().Msg("torrentstream: Stream stopped, all resources freed")
-
-	return nil
 }
 
+// DropTorrent drops every torrent no session is streaming, freeing their disk space.
 func (r *Repository) DropTorrent() error {
 	r.logger.Info().Msg("torrentstream: Dropping unclaimed torrents")
-
-	if r.client.torrentClient.IsAbsent() {
-		return nil
-	}
-
 	r.client.dropUnclaimedTorrents()
-
-	r.mediaPlayerRepository.Stop()
-
-	r.logger.Info().Msg("torrentstream: Dropped last torrent")
-
 	return nil
 }
 
@@ -559,7 +523,6 @@ func (r *Repository) GetMediaInfo(ctx context.Context, mediaId int) (media *anil
 	// Get the media
 	animeMetadata, err = r.metadataProviderRef.Get().GetAnimeMetadata(metadata.AnilistPlatform, mediaId)
 	if err != nil {
-		//return nil, nil, fmt.Errorf("torrentstream: Could not fetch AniDB media: %w", err)
 		animeMetadata = &metadata.AnimeMetadata{
 			Titles:       make(map[string]string),
 			Episodes:     make(map[string]*metadata.EpisodeMetadata),
@@ -589,7 +552,8 @@ func streamOptionsMatch(a, b *StartStreamOptions) bool {
 	return a.MediaId == b.MediaId && a.EpisodeNumber == b.EpisodeNumber
 }
 
-// PreloadStream starts pre-downloading a stream at reduced speed to avoid interfering with current playback
+// PreloadStream selects the next episode's torrent and starts downloading it ahead of time, so the
+// StartStream call for that episode can use it immediately.
 func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions) (err error) {
 	defer util.HandlePanicInModuleWithError("torrentstream/stream/PreloadStream", &err)
 
@@ -598,12 +562,10 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 		Int("episodeNumber", opts.EpisodeNumber).
 		Msg("torrentstream: Preloading stream for future playback")
 
-	// Cancel any existing prepared stream
+	// Replace any existing preload. Its torrent is dropped only once the new one is stored, so
+	// preloading from the same torrent (e.g. the next episode of a batch) doesn't drop and re-add it.
 	if prepared, ok := r.takePreloadedStream(); ok {
-		r.logger.Debug().Msg("torrentstream: Cancelling existing preloaded stream")
-		if prepared.CancelFunc != nil {
-			prepared.CancelFunc()
-		}
+		defer r.client.dropIfUnclaimed(prepared.Torrent)
 	}
 
 	// Get media info
@@ -635,35 +597,24 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 		return fmt.Errorf("torrentstream: No torrent selected for preloading")
 	}
 
-	// Create a cancellable context for this prepared stream
-	prepareCtx, cancelFunc := context.WithCancel(ctx)
-
 	r.logger.Info().
 		Str("torrent", torrentToStream.Torrent.Name()).
 		Msg("torrentstream: Started preloading stream")
 
-	// Store prepared stream info
 	r.setPreloadedStream(&preloadedStream{
-		Torrent:    torrentToStream.Torrent,
-		File:       torrentToStream.File,
-		Options:    opts,
-		CancelFunc: cancelFunc,
-		Release:    torrentToStream.Release,
+		Torrent: torrentToStream.Torrent,
+		File:    torrentToStream.File,
+		Options: opts,
+		Release: torrentToStream.Release,
 	})
-
-	// Start downloading in background
-	go func() {
-		<-prepareCtx.Done()
-		r.logger.Debug().Msg("torrentstream: Prepared stream context cancelled")
-	}()
 
 	return nil
 }
 
-// CancelPreparedStream cancels any ongoing stream preloading
+// CancelPreparedStream discards any preloaded stream.
 func (r *Repository) CancelPreparedStream() {
 	if prepared, ok := r.takePreloadedStream(); ok {
 		r.logger.Debug().Msg("torrentstream: Cancelling prepared stream")
-		r.cancelAndMaybeDropPreloaded(prepared)
+		r.client.dropIfUnclaimed(prepared.Torrent)
 	}
 }

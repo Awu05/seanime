@@ -29,9 +29,17 @@ type TorrentStreamState struct {
 	State string `json:"state"`
 }
 
+// sendStateEvent sends to the client of the most recently started stream.
 func (r *Repository) sendStateEvent(event string, data ...interface{}) {
-	var dataToSend interface{}
+	r.currentClientIdMu.RLock()
+	clientId := r.currentClientId
+	r.currentClientIdMu.RUnlock()
+	r.sendStateEventTo(clientId, event, data...)
+}
 
+// sendStateEventTo sends to clientId, or broadcasts if it's empty.
+func (r *Repository) sendStateEventTo(clientId string, event string, data ...interface{}) {
+	var dataToSend interface{}
 	if len(data) > 0 {
 		dataToSend = data[0]
 	}
@@ -42,20 +50,9 @@ func (r *Repository) sendStateEvent(event string, data ...interface{}) {
 		State: event,
 		Data:  dataToSend,
 	}
-	// Send to the specific client if we have a client ID, otherwise broadcast
-	r.currentClientIdMu.RLock()
-	clientId := r.currentClientId
-	r.currentClientIdMu.RUnlock()
 	if clientId != "" {
 		r.wsEventManager.SendEventTo(clientId, events.TorrentStreamState, payload)
 	} else {
 		r.wsEventManager.SendEvent(events.TorrentStreamState, payload)
 	}
 }
-
-//func (r *Repository) sendTorrentLoadingStatus(event TorrentLoadingStatusState, checking string) {
-//	r.wsEventManager.SendEvent(eventTorrentLoadingStatus, &TorrentLoadingStatus{
-//		TorrentBeingChecked: checking,
-//		State:               event,
-//	})
-//}

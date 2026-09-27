@@ -179,7 +179,7 @@ func TestSetActiveStreamClearsAddGracePeriod(t *testing.T) {
 	tc, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { tc.Close() })
-	c.torrentClient = mo.Some(tc)
+	c.torrentClient.Store(tc)
 
 	tor := addTestTorrent(t, tc, "grace-period-clear.mkv")
 	hash := tor.InfoHash()

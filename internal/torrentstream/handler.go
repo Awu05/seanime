@@ -75,7 +75,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tr.SetResponsive()
 	// Read ahead 5MB for better streaming performance
-	// DEVNOTE: Not sure if dynamic prioritization overwrites this but whatever
 	tr.SetReadahead(5 * 1024 * 1024)
 
 	// If this is a range request for a later part of the file, prioritize those pieces
@@ -87,12 +86,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.repository.logger.Trace().Str("file", file.DisplayPath()).Msg("torrentstream: Serving file content")
 	w.Header().Set("Content-Type", "video/mp4")
-	http.ServeContent(
-		w,
-		r,
-		file.DisplayPath(),
-		time.Now(),
-		tr,
-	)
+	// Zero modtime omits Last-Modified: the file never changes, and a per-request timestamp made
+	// every If-Range resume mismatch and restart from byte 0.
+	http.ServeContent(w, r, file.DisplayPath(), time.Time{}, tr)
 	h.repository.logger.Trace().Msg("torrentstream: File content served")
 }
