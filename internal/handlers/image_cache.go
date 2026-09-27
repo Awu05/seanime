@@ -48,6 +48,12 @@ func (h *Handler) HandleGetCachedImage(c echo.Context) error {
 		return c.Redirect(http.StatusFound, rawURL)
 	}
 
+	return writeCachedImage(c, contentType, body)
+}
+
+// writeCachedImage writes a successfully fetched/cached image with the headers that make the
+// browser treat it correctly.
+func writeCachedImage(c echo.Context, contentType string, body []byte) error {
 	header := c.Response().Header()
 	// private + a week: the browser comes back about weekly so the store's 24h access refresh sees
 	// real use and trimming doesn't delete the most-viewed covers; private so shared proxies don't

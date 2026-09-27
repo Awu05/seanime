@@ -75,3 +75,20 @@ func TestHandleGetCachedImageRejectsNavigations(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Empty(t, rec.Header().Get(echo.HeaderLocation))
 }
+
+// The success path can't be reached from this package (imagecache.New only fetches public
+// addresses), so this exercises the response helper directly instead.
+func TestWriteCachedImageSetsHeaders(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/image-cache?url=https://s4.anilist.co/cover.jpg", nil)
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+
+	body := []byte("fake-image-bytes")
+	require.NoError(t, writeCachedImage(c, "image/jpeg", body))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "private, max-age=604800", rec.Header().Get(echo.HeaderCacheControl))
+	require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+	require.Equal(t, "image/jpeg", rec.Header().Get(echo.HeaderContentType))
+	require.Equal(t, body, rec.Body.Bytes())
+}
