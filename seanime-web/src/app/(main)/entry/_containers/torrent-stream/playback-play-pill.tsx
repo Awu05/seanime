@@ -22,7 +22,6 @@ import { toast } from "sonner"
 export const enum TorrentStreamEvents {
     TorrentLoading = "loading",
     TorrentLoadingFailed = "loading-failed",
-    TorrentLoadingStatus = "loading-status",
     TorrentLoaded = "loaded",
     TorrentStartedPlaying = "started-playing",
     TorrentStatus = "status",
@@ -385,16 +384,10 @@ export function PlaybackPlayPill({ isNativePlayerComponent, show }: {
     const loadingStateStr = React.useMemo(() => {
         if (!loadingState) return ""
         switch (loadingState) {
-            case "LOADING":
-                return "Loading..."
             case "SEARCHING_TORRENTS":
                 return "Selecting file..."
             case "ADDING_TORRENT":
                 return torrentBeingLoaded ? `Adding torrent "${torrentBeingLoaded}"` : "Adding torrent..."
-            case "CHECKING_TORRENT":
-                return torrentBeingLoaded ? `Checking torrent "${torrentBeingLoaded}"` : "Checking torrent..."
-            case "SELECTING_FILE":
-                return "Selecting file..."
             case "SENDING_STREAM_TO_MEDIA_PLAYER":
                 return "Sending stream to player..."
             default:

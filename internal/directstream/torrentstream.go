@@ -40,7 +40,7 @@ func (s *TorrentStream) LoadContentType() string {
 	s.contentTypeOnce.Do(func() {
 		r := s.file.NewReader()
 		defer r.Close()
-		s.contentType = loadContentType(s.file.DisplayPath(), r)
+		s.contentType = ContentTypeFromPath(s.file.DisplayPath(), r)
 	})
 
 	return s.contentType

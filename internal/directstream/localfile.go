@@ -48,7 +48,7 @@ func (s *LocalFileStream) LoadContentType() string {
 	s.contentTypeOnce.Do(func() {
 		// No need to pass a reader because we are not going to read the file
 		// Get the mime type from the file extension
-		s.contentType = loadContentType(s.localFile.Path)
+		s.contentType = ContentTypeFromPath(s.localFile.Path)
 	})
 
 	return s.contentType

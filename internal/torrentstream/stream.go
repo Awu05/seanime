@@ -164,7 +164,9 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 		Any("playbackType", opts.PlaybackType).
 		Int("mediaId", opts.MediaId).Msgf("torrentstream: Starting stream for episode %s", opts.AniDBEpisode)
 
-	r.sendStateEvent(eventLoading)
+	// Until the stream is set up below, the "current" client is still the previous stream's, so
+	// progress goes straight to the requesting client.
+	r.sendStateEventTo(opts.ClientId, eventLoading)
 	r.wsEventManager.SendEvent(events.ShowIndefiniteLoader, "torrentstream")
 	defer func() {
 		r.wsEventManager.SendEvent(events.HideIndefiniteLoader, "torrentstream")
@@ -210,24 +212,26 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	//
 	if !usedPreparedStream {
 		if opts.AutoSelect {
+			r.sendLoadingStatus(opts.ClientId, TLSStateSearchingTorrents, "")
 			torrentToStream, err = r.findBestTorrent(media, aniDbEpisode, episodeNumber, opts.clientConstraints())
 			if err != nil {
 				if opts.PlaybackType == PlaybackTypeNativePlayer {
 					r.directStreamManager.AbortOpen(opts.ClientId, err)
 				}
-				r.sendStateEvent(eventLoadingFailed)
+				r.sendStateEventTo(opts.ClientId, eventLoadingFailed)
 				return err
 			}
 		} else {
 			if opts.Torrent == nil {
 				return fmt.Errorf("torrentstream: No torrent provided")
 			}
+			r.sendLoadingStatus(opts.ClientId, TLSStateAddingTorrent, opts.Torrent.Name)
 			torrentToStream, err = r.findBestTorrentFromManualSelection(opts.Torrent, media, aniDbEpisode, opts.FileIndex)
 			if err != nil {
 				if opts.PlaybackType == PlaybackTypeNativePlayer {
 					r.directStreamManager.AbortOpen(opts.ClientId, err)
 				}
-				r.sendStateEvent(eventLoadingFailed)
+				r.sendStateEventTo(opts.ClientId, eventLoadingFailed)
 				return err
 			}
 		}
@@ -237,7 +241,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 		if opts.PlaybackType == PlaybackTypeNativePlayer {
 			r.directStreamManager.AbortOpen(opts.ClientId, fmt.Errorf("torrentstream: No torrent found"))
 		}
-		r.sendStateEvent(eventLoadingFailed)
+		r.sendStateEventTo(opts.ClientId, eventLoadingFailed)
 		return fmt.Errorf("torrentstream: No torrent selected")
 	}
 
@@ -256,7 +260,7 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	r.client.mu.Unlock()
 	r.client.SetActiveStream(opts.ClientId, torrentToStream.Torrent, torrentToStream.File)
 
-	r.sendStateEvent(eventLoading, TLSStateSendingStreamToMediaPlayer)
+	r.sendLoadingStatus(opts.ClientId, TLSStateSendingStreamToMediaPlayer, "")
 
 	// Add the torrent to the history if it is a batch & manually selected
 	if len(torrentToStream.Torrent.Files()) > 1 && opts.Torrent != nil && opts.Torrent.IsBatch {

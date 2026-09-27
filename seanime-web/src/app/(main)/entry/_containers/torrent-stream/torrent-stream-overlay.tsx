@@ -21,7 +21,6 @@ import { BiDownArrow, BiGroup, BiStop, BiUpArrow } from "react-icons/bi"
 export const enum TorrentStreamEvents {
     TorrentLoading = "loading",
     TorrentLoadingFailed = "loading-failed",
-    TorrentLoadingStatus = "loading-status",
     TorrentLoaded = "loaded",
     TorrentStartedPlaying = "started-playing",
     TorrentStatus = "status",
@@ -231,11 +230,8 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
                         <div className="lg:max-w-[50%] w-fit h-14 px-6 flex gap-2 items-center text-sm lg:text-base pointer-events-auto">
                             <Spinner className="w-4 h-4" />
                             <div className="truncate max-w-[500px]">
-                                {loadingState === "LOADING" ? "Loading..." : ""}
                                 {loadingState === "SEARCHING_TORRENTS" ? "Selecting file..." : ""}
                                 {loadingState === "ADDING_TORRENT" ? `Adding torrent "${torrentBeingLoaded}"` : ""}
-                                {loadingState === "CHECKING_TORRENT" ? `Checking torrent "${torrentBeingLoaded}"` : ""}
-                                {loadingState === "SELECTING_FILE" ? `Selecting file...` : ""}
                                 {loadingState === "SENDING_STREAM_TO_MEDIA_PLAYER" ? "Getting metadata..." : ""}
                             </div>
                         </div>
@@ -301,11 +297,8 @@ export function TorrentStreamOverlay({ isNativePlayerComponent, show }: {
                 <div className="bg-gray-950 rounded-full border lg:max-w-[50%] w-fit h-14 px-6 flex gap-2 items-center text-sm lg:text-base pointer-events-auto">
                     <Spinner className="w-4 h-4" />
                     <div className="truncate max-w-[500px]">
-                        {loadingState === "LOADING" ? "Loading..." : ""}
                         {loadingState === "SEARCHING_TORRENTS" ? "Selecting file..." : ""}
                         {loadingState === "ADDING_TORRENT" ? `Adding torrent "${torrentBeingLoaded}"` : ""}
-                        {loadingState === "CHECKING_TORRENT" ? `Checking torrent "${torrentBeingLoaded}"` : ""}
-                        {loadingState === "SELECTING_FILE" ? `Selecting file...` : ""}
                         {loadingState === "SENDING_STREAM_TO_MEDIA_PLAYER" ? "Sending stream to media player" : ""}
                     </div>
                 </div>

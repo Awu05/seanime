@@ -1,7 +1,10 @@
 package torrentstream
 
 import (
+	"mime"
 	"net/http"
+	"path"
+	"seanime/internal/directstream"
 	"seanime/internal/util/torrentutil"
 	"strconv"
 	"time"
@@ -53,10 +56,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Labelled by container: an MKV sent as MP4 made strict players refuse it, and the watch party
+	// relay skipped MKV subtitle extraction. Unknown types are left for ServeContent to sniff.
+	if contentType := directstream.ContentTypeFromPath(file.DisplayPath()); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+
 	if r.Method == http.MethodHead {
-		w.Header().Set("Content-Type", "video/mp4")
 		w.Header().Set("Content-Length", strconv.FormatInt(file.Length(), 10))
-		w.Header().Set("Content-Disposition", "inline; filename="+file.DisplayPath())
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": path.Base(file.DisplayPath())}))
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Pragma", "no-cache")
@@ -85,7 +93,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.repository.logger.Trace().Str("file", file.DisplayPath()).Msg("torrentstream: Serving file content")
-	w.Header().Set("Content-Type", "video/mp4")
 	// Zero modtime omits Last-Modified: the file never changes, and a per-request timestamp made
 	// every If-Range resume mismatch and restart from byte 0.
 	http.ServeContent(w, r, file.DisplayPath(), time.Time{}, tr)

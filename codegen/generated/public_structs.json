@@ -31301,6 +31301,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "StreamToken",
+        "jsonName": "StreamToken",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
@@ -31364,6 +31373,17 @@
         "required": false,
         "public": false,
         "comments": []
+      },
+      {
+        "name": "keepAlive",
+        "jsonName": "keepAlive",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": false,
+        "comments": [
+          " guarded by mu; see SetKeepAlive"
+        ]
       }
     ],
     "comments": []
@@ -75787,6 +75807,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "StreamToken",
+        "jsonName": "StreamToken",
+        "goType": "",
+        "typescriptType": "any",
+        "required": true,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": [
@@ -99916,12 +99945,8 @@
       "goType": "string",
       "typescriptType": "string",
       "declaredValues": [
-        "\"LOADING\"",
         "\"SEARCHING_TORRENTS\"",
-        "\"CHECKING_TORRENT\"",
         "\"ADDING_TORRENT\"",
-        "\"SELECTING_FILE\"",
-        "\"STARTING_SERVER\"",
         "\"SENDING_STREAM_TO_MEDIA_PLAYER\""
       ]
     },
@@ -99930,21 +99955,34 @@
   {
     "filepath": "../internal/torrentstream/events.go",
     "filename": "events.go",
-    "name": "TorrentStreamState",
-    "formattedName": "Torrentstream_TorrentStreamState",
+    "name": "TorrentLoadingStatus",
+    "formattedName": "Torrentstream_TorrentLoadingStatus",
     "package": "torrentstream",
     "fields": [
       {
         "name": "State",
         "jsonName": "state",
+        "goType": "TorrentLoadingStatusState",
+        "typescriptType": "Torrentstream_TorrentLoadingStatusState",
+        "usedTypescriptType": "Torrentstream_TorrentLoadingStatusState",
+        "usedStructName": "torrentstream.TorrentLoadingStatusState",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "TorrentBeingLoaded",
+        "jsonName": "torrentBeingLoaded",
         "goType": "string",
         "typescriptType": "string",
-        "required": true,
+        "required": false,
         "public": true,
         "comments": []
       }
     ],
-    "comments": []
+    "comments": [
+      " TorrentLoadingStatus is the data of a \"loading\" event, shown by the client's loading overlay."
+    ]
   },
   {
     "filepath": "../internal/torrentstream/history.go",

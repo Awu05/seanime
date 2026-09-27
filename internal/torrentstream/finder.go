@@ -46,8 +46,6 @@ func (r *Repository) findBestTorrent(media *anilist.CompleteAnime, aniDbEpisode 
 		return nil, fmt.Errorf("torrent streaming is disabled")
 	}
 
-	r.sendStateEvent(eventLoading, TLSStateSearchingTorrents)
-
 	profile, found := db_bridge.FindAutoSelectProfile(r.db)
 	if !found {
 		resolution := settings.PreferredResolution

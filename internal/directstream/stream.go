@@ -437,10 +437,10 @@ func (s *BaseStream) GetSubtitleEventCache() *result.Map[string, *mkvparser.Subt
 // Helpers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// loadContentType loads the content type of the file.
+// ContentTypeFromPath returns the content type a browser accepts for the video file.
 // If the content type cannot be determined from the file extension,
 // the first reader will be used to determine the content type.
-func loadContentType(path string, reader ...io.ReadSeekCloser) string {
+func ContentTypeFromPath(path string, reader ...io.ReadSeekCloser) string {
 	ext := filepath.Ext(path)
 
 	switch ext {

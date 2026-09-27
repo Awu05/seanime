@@ -5706,6 +5706,25 @@ export type Torrentstream_StartStreamOptions = {
 }
 
 /**
+ * - Filepath: internal/torrentstream/events.go
+ * - Filename: events.go
+ * - Package: torrentstream
+ * @description
+ *  TorrentLoadingStatus is the data of a "loading" event, shown by the client's loading overlay.
+ */
+export type Torrentstream_TorrentLoadingStatus = {
+    state: Torrentstream_TorrentLoadingStatusState
+    torrentBeingLoaded?: string
+}
+
+/**
+ * - Filepath: internal/torrentstream/events.go
+ * - Filename: events.go
+ * - Package: torrentstream
+ */
+export type Torrentstream_TorrentLoadingStatusState = "SEARCHING_TORRENTS" | "ADDING_TORRENT" | "SENDING_STREAM_TO_MEDIA_PLAYER"
+
+/**
  * - Filepath: internal/torrentstream/client.go
  * - Filename: client.go
  * - Package: torrentstream
