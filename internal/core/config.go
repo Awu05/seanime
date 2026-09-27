@@ -44,8 +44,9 @@ type Config struct {
 		Dir string
 	}
 	Cache struct {
-		Dir          string
-		TranscodeDir string
+		Dir             string
+		TranscodeDir    string
+		ImageCacheMaxMB int // Size limit of the image cache that keeps images available during outages
 	}
 	Offline struct {
 		Dir      string
@@ -160,6 +161,7 @@ func NewConfig(options *ConfigOptions, logger *zerolog.Logger) (*Config, error) 
 	viper.SetDefault("web.assetDir", "$SEANIME_DATA_DIR/assets")
 	viper.SetDefault("cache.dir", "$SEANIME_DATA_DIR/cache")
 	viper.SetDefault("cache.transcodeDir", "$SEANIME_DATA_DIR/cache/transcode")
+	viper.SetDefault("cache.imageCacheMaxMB", 1024)
 	viper.SetDefault("manga.downloadDir", "$SEANIME_DATA_DIR/manga")
 	viper.SetDefault("manga.localDir", "$SEANIME_DATA_DIR/manga-local")
 	viper.SetDefault("logs.dir", "$SEANIME_DATA_DIR/logs")

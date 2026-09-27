@@ -21,6 +21,7 @@ import (
 	"seanime/internal/extension_playground"
 	"seanime/internal/extension_repo"
 	"seanime/internal/hook"
+	"seanime/internal/imagecache"
 	"seanime/internal/library/anime"
 	"seanime/internal/library/autodownloader"
 	"seanime/internal/library/autoscanner"
@@ -151,6 +152,8 @@ type (
 		ReportRepository *report.Repository
 		// EpisodeInfoStore keeps saved episode info for outages; see metadata_provider.
 		EpisodeInfoStore *diskstore.Store
+		// ImageCache keeps images available during outages; served at /api/v1/image-cache.
+		ImageCache *imagecache.Cache
 
 		// Integrations
 		DiscordPresence *discordrpc_presence.Presence
@@ -322,6 +325,12 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		logger.Fatal().Err(err).Msgf("app: Failed to initialize saved episode info")
 	}
 
+	// Initialize the on-disk image cache, served when an image fetch fails during an outage
+	imageCache, err := imagecache.New(filepath.Join(cfg.Cache.Dir, "offline-copies", "images"), cfg.Cache.ImageCacheMaxMB, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msgf("app: Failed to initialize image cache")
+	}
+
 	// Initialize the extension bank that will be shared across modules
 	extensionBankRef := util.NewRef(extension.NewUnifiedBank())
 
@@ -452,6 +461,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		Updater:                       updater.New(constants.Version, logger, wsEventManager),
 		FileCacher:                    fileCacher,
 		EpisodeInfoStore:              episodeInfoStore,
+		ImageCache:                    imageCache,
 		OnlinestreamRepository:        onlinestreamRepository,
 		MetadataProviderRef:           metadataProviderRef,
 		MangaRepository:               mangaRepository,

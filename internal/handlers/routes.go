@@ -73,6 +73,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 		"/icons",
 		"/events",
 		"/api/v1/image-proxy",
+		"/api/v1/image-cache",
 		"/api/v1/mediastream/transcode/",
 		"/api/v1/torrent-client/list",
 		"/api/v1/proxy",
@@ -158,6 +159,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 
 	imageProxy := &util.ImageProxy{}
 	v1.GET("/image-proxy", imageProxy.ProxyImage)
+	v1.GET("/image-cache", h.HandleGetCachedImage)
 
 	v1.GET("/internal/docs", h.HandleGetDocs)
 
