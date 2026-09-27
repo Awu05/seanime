@@ -20,6 +20,30 @@ function getStoredServerPasswordHash(): string | undefined {
     }
 }
 
+// createServerPasswordHMACAuth's tokens last 24h (see hmac-auth.ts). cachedImageUrl runs on every
+// getImageUrl call, including inside render, so signing a fresh token each time would change the
+// URL every second (it embeds iat/exp) and defeat the browser's URL-keyed cache. Instead the signed
+// query param is cached until it's within an hour of expiring, and regenerated immediately if the
+// stored password hash changes.
+const IMAGE_CACHE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+const IMAGE_CACHE_TOKEN_REFRESH_WINDOW_MS = 60 * 60 * 1000
+
+let cachedImageCacheToken: { hash: string; param: string; expiresAt: number } | undefined
+
+function getImageCacheAuthParam(passwordHash: string): string {
+    const now = Date.now()
+    if (!cachedImageCacheToken
+        || cachedImageCacheToken.hash !== passwordHash
+        || cachedImageCacheToken.expiresAt - now <= IMAGE_CACHE_TOKEN_REFRESH_WINDOW_MS) {
+        cachedImageCacheToken = {
+            hash: passwordHash,
+            param: createServerPasswordHMACAuth(passwordHash).generateQueryParamSync(IMAGE_CACHE_PATH, "&"),
+            expiresAt: now + IMAGE_CACHE_TOKEN_TTL_MS,
+        }
+    }
+    return cachedImageCacheToken.param
+}
+
 // Routes an outside image through the server's image cache, which keeps a copy on disk so the
 // image still shows during an internet outage. Anything else is returned unchanged, including
 // URLs already on the server, so applying it twice is harmless. When a server password is set, an
@@ -34,7 +58,7 @@ export function cachedImageUrl(path: string, serverBaseUrl: string): string {
     if (!passwordHash) {
         return url
     }
-    return `${url}${createServerPasswordHMACAuth(passwordHash).generateQueryParamSync(IMAGE_CACHE_PATH, "&")}`
+    return `${url}${getImageCacheAuthParam(passwordHash)}`
 }
 
 export function getImageUrl(path: string) {

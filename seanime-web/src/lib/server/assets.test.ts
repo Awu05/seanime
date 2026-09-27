@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/api/client/server-url", () => ({
     getServerBaseUrl: () => "http://server:43211",
@@ -59,6 +59,52 @@ describe("cachedImageUrl with a server password", () => {
     it("omits the token when no password is stored", () => {
         stubServerPassword(undefined)
         expect(cachedImageUrl("https://s4.anilist.co/cover.jpg", base)).not.toContain("token=")
+    })
+})
+
+describe("cachedImageUrl token caching", () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    // Each test gets its own fresh copy of the module, so the module-level token cache doesn't leak
+    // between tests (or from the tests above, which share the statically imported module).
+    async function freshCachedImageUrl() {
+        vi.resetModules()
+        const mod = await import("./assets")
+        return mod.cachedImageUrl
+    }
+
+    it("returns the same URL for calls a few seconds apart", async () => {
+        stubServerPassword("abc123hash")
+        const cachedImageUrl = await freshCachedImageUrl()
+        const first = cachedImageUrl("https://s4.anilist.co/cover.jpg", base)
+        vi.advanceTimersByTime(5_000)
+        const second = cachedImageUrl("https://s4.anilist.co/cover.jpg", base)
+        expect(second).toBe(first)
+    })
+
+    it("regenerates the token once it's within an hour of the 24h expiry", async () => {
+        stubServerPassword("abc123hash")
+        const cachedImageUrl = await freshCachedImageUrl()
+        const first = cachedImageUrl("https://s4.anilist.co/cover.jpg", base)
+        vi.advanceTimersByTime(23 * 60 * 60 * 1000 + 60 * 1000) // 23h1m: within the 1h refresh window
+        const second = cachedImageUrl("https://s4.anilist.co/cover.jpg", base)
+        expect(second).not.toBe(first)
+    })
+
+    it("regenerates immediately when the stored password hash changes", async () => {
+        stubServerPassword("abc123hash")
+        const cachedImageUrl = await freshCachedImageUrl()
+        const first = cachedImageUrl("https://s4.anilist.co/cover.jpg", base)
+        stubServerPassword("a-different-hash")
+        const second = cachedImageUrl("https://s4.anilist.co/cover.jpg", base)
+        expect(second).not.toBe(first)
     })
 })
 
