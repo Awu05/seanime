@@ -101,7 +101,7 @@ func (h *Handler) HandleDeleteProfile(c echo.Context) error {
 		h.App.AnilistPool.InvalidateProfile(id)
 	}
 	if h.App.StreamSessionManager != nil {
-		h.App.StreamSessionManager.EvictSession(id)
+		h.evictStreamSession(id, h.App.NakamaManager.DefaultPlayback)
 	}
 	db_bridge.ClearAllLocalFilesCache()
 

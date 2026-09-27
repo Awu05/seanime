@@ -2243,7 +2243,7 @@
     "name": "isExternalStreamPath",
     "trimmedName": "isExternalStreamPath",
     "comments": [
-      "isExternalStreamPath reports whether path serves a torrent stream to an external player - the",
+      "isExternalStreamPath reports whether path serves a stream an external player may fetch - the",
       "only thing a core.StreamScope token authorizes.",
       ""
     ],
@@ -11767,6 +11767,28 @@
       "returns": "[]summary.ScanSummaryItem",
       "returnGoType": "summary.ScanSummaryItem",
       "returnTypescriptType": "Array\u003cSummary_ScanSummaryItem\u003e"
+    }
+  },
+  {
+    "name": "evictStreamSession",
+    "trimmedName": "evictStreamSession",
+    "comments": [
+      "evictStreamSession drops the profile's stream session so the next request rebuilds it. A watch",
+      "party playing through it is moved to rebind()'s playback instead of staying on shut-down players.",
+      ""
+    ],
+    "filepath": "internal/handlers/session_helper.go",
+    "filename": "session_helper.go",
+    "api": {
+      "summary": "",
+      "descriptions": [],
+      "endpoint": "",
+      "methods": null,
+      "params": [],
+      "bodyFields": [],
+      "returns": "bool",
+      "returnGoType": "bool",
+      "returnTypescriptType": "boolean"
     }
   },
   {

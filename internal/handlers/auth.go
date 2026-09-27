@@ -6,6 +6,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/core"
 	"seanime/internal/database/models"
+	"seanime/internal/nakama"
 	"seanime/internal/platforms/anilist_platform"
 	"seanime/internal/util"
 	"time"
@@ -114,7 +115,7 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 			h.App.AnilistPool.InvalidateProfile(profileID)
 		}
 		if h.App.StreamSessionManager != nil {
-			h.App.StreamSessionManager.EvictSession(profileID)
+			h.evictStreamSession(profileID, func() nakama.PlaybackContext { return h.sessionPlayback(c) })
 		}
 		return h.RespondWithData(c, h.NewStatus(c))
 	}
@@ -158,7 +159,7 @@ func (h *Handler) HandleLogout(c echo.Context) error {
 			h.App.AnilistPool.InvalidateProfile(profileID)
 		}
 		if h.App.StreamSessionManager != nil {
-			h.App.StreamSessionManager.EvictSession(profileID)
+			h.evictStreamSession(profileID, func() nakama.PlaybackContext { return h.sessionPlayback(c) })
 		}
 	} else {
 		h.App.LogoutFromAnilist()
