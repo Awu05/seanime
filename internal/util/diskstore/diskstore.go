@@ -62,15 +62,13 @@ func (s *Store) path(key string) string {
 	return filepath.Join(s.dir, hex.EncodeToString(sum[:]))
 }
 
-// Get returns the entry for key. An entry that exists but can't be read is deleted.
+// Get returns the entry for key, or false if there is none or it can't currently be read. A read
+// error is treated as a miss rather than a deletion, since it may just be transient (e.g. a
+// concurrent write on Windows); trimming clears out anything genuinely bad over time.
 func (s *Store) Get(key string) ([]byte, bool) {
 	p := s.path(key)
 	data, err := os.ReadFile(p)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			s.logger.Warn().Err(err).Msg("diskstore: Removing unreadable entry")
-			s.Delete(key)
-		}
 		return nil, false
 	}
 	if info, err := os.Stat(p); err == nil && time.Since(info.ModTime()) > touchInterval {
@@ -176,7 +174,7 @@ func (s *Store) Size() int64 {
 	return s.total
 }
 
-// Clear deletes every entry.
+// Clear deletes every entry. If it returns early on an error, total still matches what's left on disk.
 func (s *Store) Clear() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -188,10 +186,14 @@ func (s *Store) Clear() error {
 		if e.IsDir() {
 			continue
 		}
-		if err := os.Remove(filepath.Join(s.dir, e.Name())); err != nil && !os.IsNotExist(err) {
-			return err
+		info, infoErr := e.Info()
+		if err := os.Remove(filepath.Join(s.dir, e.Name())); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+		} else if infoErr == nil {
+			s.total -= info.Size()
 		}
 	}
-	s.total = 0
 	return nil
 }
