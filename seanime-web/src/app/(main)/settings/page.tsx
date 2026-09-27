@@ -38,6 +38,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter, useSearchParams } from "@/lib/navigation"
+import { getImageUrl } from "@/lib/server/assets"
 import { ANILIST_PIN_URL } from "@/lib/server/config"
 import { DEFAULT_TORRENT_CLIENT, DEFAULT_TORRENT_PROVIDER, settingsSchema, TORRENT_PROVIDER } from "@/lib/server/settings"
 import { THEME_DEFAULT_VALUES } from "@/lib/theme/theme-hooks"
@@ -779,7 +780,7 @@ export default function Page() {
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
                                                         <img
-                                                            src={currentUser.viewer?.avatar?.medium || ""}
+                                                            src={getImageUrl(currentUser.viewer?.avatar?.medium || "")}
                                                             alt=""
                                                             className="w-10 h-10 rounded-full"
                                                         />

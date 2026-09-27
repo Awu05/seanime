@@ -1,3 +1,4 @@
+import { getImageUrl } from "@/lib/server/assets"
 import { HIDE_IMAGES } from "@/types/constants"
 import React, { forwardRef, useEffect, useState } from "react"
 
@@ -51,12 +52,12 @@ export const SeaImage = forwardRef<HTMLImageElement, ImageProps & { isExternal?:
         return <Image
             ref={ref}
             {...props}
-            src={props.src || ""}
+            src={getImageUrl(props.src || "")}
             alt={props.alt || ""}
             fill={fill}
             priority={priority}
             placeholder={placeholder}
-            overrideSrc={effectiveOverride}
+            overrideSrc={effectiveOverride && getImageUrl(effectiveOverride)}
             onError={handleError}
         />
     },
