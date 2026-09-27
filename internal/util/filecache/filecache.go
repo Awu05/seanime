@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -540,20 +541,29 @@ func (c *Cacher) GetMediastreamVideoFilesTotalSize() (int64, error) {
 	return totalSize, nil
 }
 
-// GetTotalSize returns the total size of all files in the cache directory that match the given filter.
-// The size is in bytes.
-func (c *Cacher) GetTotalSize() (int64, error) {
+// GetTotalSize returns the total size in bytes of all files in the cache directory, not descending
+// into any directory whose path equals one of skipDirs.
+func (c *Cacher) GetTotalSize(skipDirs ...string) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	cleanSkipDirs := make([]string, len(skipDirs))
+	for i, dir := range skipDirs {
+		cleanSkipDirs[i] = filepath.Clean(dir)
+	}
+
 	var totalSize int64
-	err := filepath.Walk(c.dir, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() {
-			totalSize += info.Size()
+		if info.IsDir() {
+			if slices.Contains(cleanSkipDirs, filepath.Clean(path)) {
+				return filepath.SkipDir
+			}
+			return nil
 		}
+		totalSize += info.Size()
 		return nil
 	})
 

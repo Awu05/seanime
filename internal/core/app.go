@@ -214,6 +214,10 @@ type (
 // episodeInfoMaxBytes caps saved episode info: one small file per title, roughly 2,000-10,000 titles.
 const episodeInfoMaxBytes = 150 << 20
 
+// OfflineCopiesDirName is the cache subdirectory holding saved episode info and cached images,
+// excluded from the regular file cache's reported size since it has its own "Offline copies" card.
+const OfflineCopiesDirName = "offline-copies"
+
 func (a *App) WithEpisodeAvailability(episodes []*anime.Episode) []*anime.Episode {
 	if a.episodeAvailability == nil {
 		return episodes
@@ -320,13 +324,13 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	}
 
 	// Initialize saved episode info, served when a metadata fetch fails during an outage
-	episodeInfoStore, err := diskstore.New(filepath.Join(cfg.Cache.Dir, "offline-copies", "episode-info"), func() int64 { return episodeInfoMaxBytes }, logger)
+	episodeInfoStore, err := diskstore.New(filepath.Join(cfg.Cache.Dir, OfflineCopiesDirName, "episode-info"), func() int64 { return episodeInfoMaxBytes }, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msgf("app: Failed to initialize saved episode info")
 	}
 
-	// Initialize the on-disk image cache, served when an image fetch fails during an outage
-	imageCache, err := imagecache.New(filepath.Join(cfg.Cache.Dir, "offline-copies", "images"), cfg.Cache.ImageCacheMaxMB, logger)
+	// Image cache behind /api/v1/image-cache; keeps images available during outages
+	imageCache, err := imagecache.New(filepath.Join(cfg.Cache.Dir, OfflineCopiesDirName, "images"), cfg.Cache.ImageCacheMaxMB, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msgf("app: Failed to initialize image cache")
 	}

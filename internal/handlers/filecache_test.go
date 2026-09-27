@@ -75,11 +75,13 @@ func TestHandleGetFileCacheTotalSizeExcludesOfflineCopies(t *testing.T) {
 	regularContents := []byte("regular-cache-file-contents")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "somebucket_a-key.json"), regularContents, 0o644))
 
-	episodeInfoStore, err := diskstore.New(filepath.Join(dir, "offline-copies", "episode-info"), func() int64 { return 1 << 30 }, util.NewLogger())
+	episodeInfoStore, err := diskstore.New(filepath.Join(dir, core.OfflineCopiesDirName, "episode-info"), func() int64 { return 1 << 30 }, util.NewLogger())
 	require.NoError(t, err)
 	require.NoError(t, episodeInfoStore.Put("anime-1", []byte("saved-episode-info-bytes")))
 
-	h := &Handler{App: &core.App{FileCacher: fileCacher, EpisodeInfoStore: episodeInfoStore}}
+	cfg := &core.Config{}
+	cfg.Cache.Dir = dir
+	h := &Handler{App: &core.App{FileCacher: fileCacher, EpisodeInfoStore: episodeInfoStore, Config: cfg}}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/filecache/total-size", nil)
 	rec := httptest.NewRecorder()

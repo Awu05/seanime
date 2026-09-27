@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"path/filepath"
 	"seanime/internal/core"
 	"seanime/internal/util"
 	"strings"
@@ -16,22 +17,11 @@ import (
 //	@route /api/v1/filecache/total-size [GET]
 //	@returns string
 func (h *Handler) HandleGetFileCacheTotalSize(c echo.Context) error {
-	// Get the cache size
-	size, err := h.App.FileCacher.GetTotalSize()
-	if err != nil {
-		return h.RespondWithError(c, err)
-	}
-
 	// The saved episode info and cached images live under the same cache directory but are shown
 	// and cleared from their own "Offline copies" card, so exclude them here.
-	if h.App.EpisodeInfoStore != nil {
-		size -= h.App.EpisodeInfoStore.Size()
-	}
-	if h.App.ImageCache != nil {
-		size -= h.App.ImageCache.Size()
-	}
-	if size < 0 {
-		size = 0
+	size, err := h.App.FileCacher.GetTotalSize(filepath.Join(h.App.Config.Cache.Dir, core.OfflineCopiesDirName))
+	if err != nil {
+		return h.RespondWithError(c, err)
 	}
 
 	// Return the cache size
