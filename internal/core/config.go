@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"seanime/internal/constants"
+	"seanime/internal/imagecache"
 	"seanime/internal/util"
 	"strconv"
 
@@ -161,7 +162,7 @@ func NewConfig(options *ConfigOptions, logger *zerolog.Logger) (*Config, error) 
 	viper.SetDefault("web.assetDir", "$SEANIME_DATA_DIR/assets")
 	viper.SetDefault("cache.dir", "$SEANIME_DATA_DIR/cache")
 	viper.SetDefault("cache.transcodeDir", "$SEANIME_DATA_DIR/cache/transcode")
-	viper.SetDefault("cache.imageCacheMaxMB", 1024)
+	viper.SetDefault("cache.imageCacheMaxMB", imagecache.DefaultMaxMB)
 	viper.SetDefault("manga.downloadDir", "$SEANIME_DATA_DIR/manga")
 	viper.SetDefault("manga.localDir", "$SEANIME_DATA_DIR/manga-local")
 	viper.SetDefault("logs.dir", "$SEANIME_DATA_DIR/logs")
