@@ -50,6 +50,17 @@ func (m *recordingWSEventManager) GetClientIds() []string { return m.clientIds }
 
 func (m *recordingWSEventManager) GetClientPlatform(string) string { return "" }
 
+func (m *recordingWSEventManager) GetClientProfileID(string) (string, bool) { return "", false }
+
+// newTestVideoCore wires vc as its router's fallback, so client events a test pushes through ws
+// reach it the same way they do in production.
+func newTestVideoCore(ws events.WSEventManagerInterface, logger *zerolog.Logger) *VideoCore {
+	router := NewClientRouter(ws, logger)
+	vc := New(NewVideoCoreOptions{WsEventManager: ws, Router: router, Logger: logger})
+	router.SetFallback(vc)
+	return vc
+}
+
 func (m *recordingWSEventManager) SubscribeToClientEvents(string) *events.ClientEventSubscriber {
 	return &events.ClientEventSubscriber{Channel: make(chan *events.WebsocketClientEvent, 1)}
 }
@@ -120,10 +131,7 @@ func newPlaybackState(playbackID string) *PlaybackState {
 func TestVideoTerminatedEventUsesPayloadClientIDWithoutPlaybackState(t *testing.T) {
 	logger := util.NewLogger()
 	ws := events.NewMockWSEventManager(logger)
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 	sub := vc.Subscribe("test")
 	t.Cleanup(func() {
 		vc.Unsubscribe("test")
@@ -153,10 +161,7 @@ func TestVideoTerminatedEventUsesPayloadClientIDWithoutPlaybackState(t *testing.
 func TestSetSkipDataSendsSanitizedOverride(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 
 	t.Cleanup(vc.Shutdown)
 
@@ -183,10 +188,7 @@ func TestSetSkipDataSendsSanitizedOverride(t *testing.T) {
 func TestSetSkipDataKeepsExplicitEmptyOverride(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 
 	t.Cleanup(vc.Shutdown)
 
@@ -203,10 +205,7 @@ func TestSetSkipDataKeepsExplicitEmptyOverride(t *testing.T) {
 func TestClearSkipDataSendsNilOverride(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 
 	t.Cleanup(vc.Shutdown)
 
@@ -226,10 +225,7 @@ func TestClearSkipDataSendsNilOverride(t *testing.T) {
 func TestGetSkipDataReturnsClientOwnedState(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 
 	t.Cleanup(vc.Shutdown)
 
@@ -275,10 +271,7 @@ func TestGetSkipDataReturnsClientOwnedState(t *testing.T) {
 func TestGetSkipDataAllowsEmptyClientState(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 
 	t.Cleanup(vc.Shutdown)
 
@@ -322,10 +315,7 @@ func TestPlayerStateRequestsTimeout(t *testing.T) {
 
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 
 	t.Cleanup(vc.Shutdown)
 
@@ -392,10 +382,7 @@ func TestPlayerStateRequestsTimeout(t *testing.T) {
 func TestVideoStatusRecoversAfterZeroDurationLoadedMetadata(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{
-		WsEventManager: ws,
-		Logger:         logger,
-	})
+	vc := newTestVideoCore(ws, logger)
 
 	t.Cleanup(vc.Shutdown)
 
@@ -468,7 +455,7 @@ func TestConnectedPlaybackOwnerBlocksAnotherClient(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
 	ws.clientIds = []string{"owner-client", "new-client"}
-	vc := New(NewVideoCoreOptions{WsEventManager: ws, Logger: logger})
+	vc := newTestVideoCore(ws, logger)
 	t.Cleanup(vc.Shutdown)
 
 	ownerState := newPlaybackState("owner-playback")
@@ -493,7 +480,7 @@ func TestVideoLoadedTakesOverFromDisconnectedOwner(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
 	ws.clientIds = []string{"new-client"}
-	vc := New(NewVideoCoreOptions{WsEventManager: ws, Logger: logger})
+	vc := newTestVideoCore(ws, logger)
 	t.Cleanup(vc.Shutdown)
 
 	ownerState := newPlaybackState("owner-playback")
@@ -528,7 +515,7 @@ func TestNonLoadEventCannotClaimDisconnectedPlayback(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
 	ws.clientIds = []string{"new-client"}
-	vc := New(NewVideoCoreOptions{WsEventManager: ws, Logger: logger})
+	vc := newTestVideoCore(ws, logger)
 	t.Cleanup(vc.Shutdown)
 
 	ownerState := newPlaybackState("owner-playback")
@@ -572,7 +559,7 @@ func TestNonLoadEventCannotClaimDisconnectedPlayback(t *testing.T) {
 func TestPushEventLogsWarningWhenNoPlaybackState(t *testing.T) {
 	var buf bytes.Buffer
 	ws := newRecordingWSEventManager()
-	vc := New(NewVideoCoreOptions{WsEventManager: ws, Logger: newCapturingLogger(&buf)})
+	vc := newTestVideoCore(ws, newCapturingLogger(&buf))
 	t.Cleanup(vc.Shutdown)
 
 	vc.PushEvent(&VideoCompletedEvent{CurrentTime: 100, Duration: 120})
@@ -588,7 +575,7 @@ func TestOwnershipMismatchDropLogsWarning(t *testing.T) {
 	var buf bytes.Buffer
 	ws := newRecordingWSEventManager()
 	ws.clientIds = []string{"owner-client", "new-client"}
-	vc := New(NewVideoCoreOptions{WsEventManager: ws, Logger: newCapturingLogger(&buf)})
+	vc := newTestVideoCore(ws, newCapturingLogger(&buf))
 	t.Cleanup(vc.Shutdown)
 
 	ownerState := newPlaybackState("owner-playback")

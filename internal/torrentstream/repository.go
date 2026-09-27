@@ -361,7 +361,7 @@ func (r *Repository) InitModules(settings *models.TorrentstreamSettings, host st
 	}
 
 	// Start listening to native player events
-	r.listenToNativePlayerEvents()
+	r.ListenToNativePlayerEvents()
 
 	r.logger.Info().Msg("torrentstream: Module initialized")
 	return nil
@@ -405,6 +405,10 @@ func (r *Repository) CleanupSession() {
 
 	if r.client == nil {
 		return
+	}
+
+	if r.nativePlayer != nil {
+		r.nativePlayer.VideoCore().Unsubscribe("torrentstream")
 	}
 
 	r.client.mu.Lock()

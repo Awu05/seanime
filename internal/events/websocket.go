@@ -18,6 +18,7 @@ type WSEventManagerInterface interface {
 	SendToProfile(profileID string, t string, payload interface{})
 	GetClientIds() []string
 	GetClientPlatform(clientId string) string
+	GetClientProfileID(clientId string) (string, bool)
 	SubscribeToClientEvents(id string) *ClientEventSubscriber
 	SubscribeToClientNativePlayerEvents(id string) *ClientEventSubscriber
 	SubscribeToClientVideoCoreEvents(id string) *ClientEventSubscriber
@@ -66,6 +67,13 @@ func (w *GlobalWSEventManagerWrapper) GetClientPlatform(clientId string) string 
 		return ""
 	}
 	return w.WSEventManager.GetClientPlatform(clientId)
+}
+
+func (w *GlobalWSEventManagerWrapper) GetClientProfileID(clientId string) (string, bool) {
+	if w.WSEventManager == nil {
+		return "", false
+	}
+	return w.WSEventManager.GetClientProfileID(clientId)
 }
 
 type (
@@ -311,6 +319,19 @@ func (m *WSEventManager) GetClientPlatform(clientId string) string {
 	return ""
 }
 
+// GetClientProfileID returns the profile the client's websocket connection is authenticated as.
+func (m *WSEventManager) GetClientProfileID(clientId string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, conn := range m.Conns {
+		if conn != nil && conn.ID == clientId {
+			return conn.ProfileID, true
+		}
+	}
+	return "", false
+}
+
 // GetConnections returns a safe snapshot of every live connection, for admin-facing views.
 func (m *WSEventManager) GetConnections() []WSConnDTO {
 	m.mu.Lock()
@@ -339,15 +360,8 @@ func (m *WSEventManager) OnClientEvent(event *WebsocketClientEvent) {
 	onEvent := func(key string, subscriber *ClientEventSubscriber) bool {
 		go func() {
 			defer util.HandlePanicInModuleThen("events/OnClientEvent/clientNativePlayerEventSubscribers", func() {})
-			subscriber.mu.RLock()
-			defer subscriber.mu.RUnlock()
-			if !subscriber.closed {
-				select {
-				case subscriber.Channel <- event:
-				default:
-					// Channel is blocked, skip sending
-					m.Logger.Warn().Msgf("ws: Client event channel is blocked, event dropped, %v", subscriber)
-				}
+			if !subscriber.Send(event) {
+				m.Logger.Warn().Msgf("ws: Client event channel is blocked, event dropped, %v", subscriber)
 			}
 		}()
 		return true
@@ -438,10 +452,37 @@ func (m *WSEventManager) UnsubscribeFromClientEvents(id string) {
 		if !ok {
 			continue
 		}
-		subscriber.mu.Lock()
-		subscriber.closed = true
-		close(subscriber.Channel)
-		subscriber.mu.Unlock()
+		subscriber.Close()
 		return
+	}
+}
+
+func NewClientEventSubscriber(buffer int) *ClientEventSubscriber {
+	return &ClientEventSubscriber{Channel: make(chan *WebsocketClientEvent, buffer)}
+}
+
+// Send delivers event without blocking. It returns false if the channel is full; sending to a
+// closed subscriber is a silent no-op.
+func (s *ClientEventSubscriber) Send(event *WebsocketClientEvent) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return true
+	}
+	select {
+	case s.Channel <- event:
+		return true
+	default:
+		return false
+	}
+}
+
+// Close closes the channel, ending the receiver's range loop. Safe to call more than once.
+func (s *ClientEventSubscriber) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
+		s.closed = true
+		close(s.Channel)
 	}
 }

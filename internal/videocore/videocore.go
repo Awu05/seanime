@@ -28,7 +28,8 @@ type (
 	// It can be the NativePlayer (Seanime Denshi player) or the WebPlayer.
 	VideoCore struct {
 		wsEventManager              events.WSEventManagerInterface
-		clientPlayerEventSubscriber *events.ClientEventSubscriber
+		router                      *ClientRouter
+		clientPlayerEventSubscriber *events.ClientEventSubscriber // fed by router
 
 		translatorService *TranslatorService
 
@@ -68,6 +69,7 @@ type (
 
 	NewVideoCoreOptions struct {
 		WsEventManager             events.WSEventManagerInterface
+		Router                     *ClientRouter
 		Logger                     *zerolog.Logger
 		MetadataProviderRef        *util.Ref[metadata_provider.Provider]
 		ContinuityManager          *continuity.Manager
@@ -78,10 +80,12 @@ type (
 	}
 )
 
-// New returns a new instance of VideoCore. There should be only one for the lifetime of the app.
+// New returns a new VideoCore. It only receives browser player events once registered with its
+// router (ClientRouter.SetFallback/RegisterProfile) or once it claims a client (ClaimClient).
 func New(opts NewVideoCoreOptions) *VideoCore {
 	vc := &VideoCore{
 		wsEventManager:              opts.WsEventManager,
+		router:                      opts.Router,
 		continuityManager:           opts.ContinuityManager,
 		discordPresence:             opts.DiscordPresence,
 		metadataProviderRef:         opts.MetadataProviderRef,
@@ -89,7 +93,7 @@ func New(opts NewVideoCoreOptions) *VideoCore {
 		refreshAnimeCollectionFunc:  opts.RefreshAnimeCollectionFunc,
 		isOfflineRef:                opts.IsOfflineRef,
 		subscribers:                 result.NewMap[string, *Subscriber](),
-		clientPlayerEventSubscriber: opts.WsEventManager.SubscribeToClientVideoCoreEvents("videocore"),
+		clientPlayerEventSubscriber: events.NewClientEventSubscriber(100),
 		logger:                      opts.Logger,
 		eventBus:                    make(chan VideoEvent, 100),
 		dispatcherStop:              make(chan struct{}),

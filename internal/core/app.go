@@ -125,6 +125,7 @@ type (
 		// Players
 		NativePlayer         *nativeplayer.NativePlayer
 		VideoCore            *videocore.VideoCore
+		VideoCoreRouter      *videocore.ClientRouter
 		MediacoreCoordinator *mediacore.Coordinator
 		MediaPlayer          struct {
 			VLC   *vlc.VLC

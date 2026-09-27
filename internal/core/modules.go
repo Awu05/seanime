@@ -173,8 +173,10 @@ func (a *App) initModulesOnce() {
 	// |     Video Core      |
 	// +---------------------+
 
+	a.VideoCoreRouter = videocore.NewClientRouter(a.WSEventManager, a.Logger)
 	a.VideoCore = videocore.New(videocore.NewVideoCoreOptions{
 		WsEventManager:      a.WSEventManager,
+		Router:              a.VideoCoreRouter,
 		Logger:              a.Logger,
 		ContinuityManager:   a.ContinuityManager,
 		MetadataProviderRef: a.MetadataProviderRef,
@@ -185,6 +187,7 @@ func (a *App) initModulesOnce() {
 		},
 		IsOfflineRef: a.IsOfflineRef(),
 	})
+	a.VideoCoreRouter.SetFallback(a.VideoCore)
 
 	// +---------------------+
 	// |    Native Player    |

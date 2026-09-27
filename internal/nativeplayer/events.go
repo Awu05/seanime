@@ -17,6 +17,7 @@ const (
 
 // OpenAndAwait opens the player and waits for the client to send the watch event.
 func (p *NativePlayer) OpenAndAwait(clientId string, loadingState string) {
+	p.videoCore.ClaimClient(clientId)
 	p.sendPlayerEventTo(clientId, string(ServerEventOpenAndAwait), loadingState)
 }
 
@@ -27,7 +28,7 @@ func (p *NativePlayer) AbortOpen(clientId string, reason string) {
 
 // Watch sends the watch event to the client.
 func (p *NativePlayer) Watch(clientId string, playbackInfo *PlaybackInfo) {
-	// Store the playback info
+	p.videoCore.ClaimClient(clientId)
 	p.sendPlayerEventTo(clientId, string(ServerEventWatch), playbackInfo, true)
 }
 

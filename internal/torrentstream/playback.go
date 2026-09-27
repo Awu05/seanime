@@ -70,7 +70,9 @@ func (r *Repository) listenToMediaPlayerEvents() {
 	}(ctx)
 }
 
-func (r *Repository) listenToNativePlayerEvents() {
+// ListenToNativePlayerEvents reacts to the native player this repository streams through. Each
+// profile session has its own player, so each session's repository must call this for itself.
+func (r *Repository) ListenToNativePlayerEvents() {
 	r.nativePlayer.VideoCore().Unsubscribe("torrentstream")
 	r.logger.Trace().Msg("torrentstream: Subscribing to video core events")
 	videoCoreSubscriber := r.nativePlayer.VideoCore().Subscribe("torrentstream")

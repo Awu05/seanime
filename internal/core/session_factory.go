@@ -29,6 +29,9 @@ func (a *App) sessionPlatform(profileID string) (platform.Platform, bool) {
 // by the idle cleanup loop. Safe to call multiple times.
 func (s *ProfileStreamSession) Shutdown() {
 	defer util.HandlePanicInModuleThen("core/ProfileStreamSession.Shutdown", func() {})
+	if s.VideoCore != nil {
+		s.VideoCore.DetachFromRouter()
+	}
 	if s.DirectStreamManager != nil {
 		s.DirectStreamManager.Shutdown()
 	}
@@ -85,6 +88,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	// Create VideoCore
 	vc := videocore.New(videocore.NewVideoCoreOptions{
 		WsEventManager:             a.WSEventManager,
+		Router:                     a.VideoCoreRouter,
 		Logger:                     a.Logger,
 		ContinuityManager:          a.ContinuityManager,
 		MetadataProviderRef:        a.MetadataProviderRef,
@@ -93,6 +97,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		RefreshAnimeCollectionFunc: refreshAnimeCollection,
 		IsOfflineRef:               a.IsOfflineRef(),
 	})
+	a.VideoCoreRouter.RegisterProfile(profileID, vc)
 
 	// Create NativePlayer (depends on VideoCore)
 	np := nativeplayer.New(nativeplayer.NewNativePlayerOptions{
@@ -161,6 +166,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	// InitOrRefreshTorrentstreamSettings re-attempts it on every settings broadcast so the
 	// reference self-heals instead of staying stale/absent forever.
 	tsr.SyncSharedTorrentClient(a.TorrentstreamRepository)
+	tsr.ListenToNativePlayerEvents()
 
 	// Copy settings from App singleton
 	if a.SecondarySettings.Torrentstream != nil {

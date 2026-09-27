@@ -15,7 +15,9 @@ type (
 		videoCoreSubscribers    *result.Map[string, *ClientEventSubscriber]
 		mpvCoreSubscribers      *result.Map[string, *ClientEventSubscriber]
 		nativePlayerSubscribers *result.Map[string, *ClientEventSubscriber]
-		mu                      sync.Mutex
+		// ClientProfileIDs backs GetClientProfileID: client ID -> profile ID.
+		ClientProfileIDs map[string]string
+		mu               sync.Mutex
 		sentEvents              []MockWSEvent
 	}
 
@@ -80,6 +82,11 @@ func (m *MockWSEventManager) GetClientIds() []string {
 
 func (m *MockWSEventManager) GetClientPlatform(clientId string) string {
 	return ""
+}
+
+func (m *MockWSEventManager) GetClientProfileID(clientId string) (string, bool) {
+	profileID, ok := m.ClientProfileIDs[clientId]
+	return profileID, ok
 }
 
 func (m *MockWSEventManager) SubscribeToClientEvents(id string) *ClientEventSubscriber {
