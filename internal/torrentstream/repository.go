@@ -51,6 +51,7 @@ type (
 		playbackManager                 *playbackmanager.PlaybackManager
 		mediaPlayerRepository           *mediaplayer.Repository // guarded by playback.listenerMu; read via mediaPlayer()
 		mediaPlayerSubscriberID         string                  // unique per repository, since all share one media player
+		streamTokenFunc                 func() string           // see NewRepositoryOptions.StreamTokenFunc
 		directStreamManager             *directstream.Manager
 		nativePlayer                    *nativeplayer.NativePlayer
 		logger                          *zerolog.Logger
@@ -111,6 +112,9 @@ type (
 		Database            *db.Database
 		DirectStreamManager *directstream.Manager
 		NativePlayer        *nativeplayer.NativePlayer
+		// StreamTokenFunc returns a token letting an external player fetch this repository's
+		// stream (see core.StreamScope), or "" when none is needed. Optional.
+		StreamTokenFunc func() string
 	}
 )
 
@@ -128,6 +132,7 @@ func NewRepository(opts *NewRepositoryOptions) *Repository {
 		metadataProviderRef:             opts.MetadataProviderRef,
 		playbackManager:                 opts.PlaybackManager,
 		mediaPlayerSubscriberID:         "torrentstream-" + uuid.NewString(),
+		streamTokenFunc:                 opts.StreamTokenFunc,
 		logger:                          opts.Logger,
 		db:                              opts.Database,
 		directStreamManager:             opts.DirectStreamManager,

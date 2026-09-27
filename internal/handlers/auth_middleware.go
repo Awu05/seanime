@@ -10,6 +10,12 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// isExternalStreamPath reports whether path serves a torrent stream to an external player - the
+// only thing a core.StreamScope token authorizes.
+func isExternalStreamPath(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/torrentstream/stream/")
+}
+
 var publicPaths = []string{
 	"/api/v1/status",
 	"/api/v1/auth/admin-login",
@@ -155,6 +161,19 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 			if _, err := h.App.Database.GetProfileByID(claims.ProfileID); err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "PROFILE_NOT_FOUND"})
 			}
+		}
+
+		// A stream token opens its profile's stream and nothing else, and is never renewed into a
+		// login cookie for the external player holding it.
+		if claims.Scope == core.StreamScope {
+			if !isExternalStreamPath(path) {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": "INSUFFICIENT_SCOPE"})
+			}
+			c.Set("profileId", claims.ProfileID)
+			c.Set("isAdmin", false)
+			c.Set("authScope", claims.Scope)
+			c.SetRequest(c.Request().WithContext(util.ContextWithProfileID(c.Request().Context(), claims.ProfileID)))
+			return next(c)
 		}
 
 		// Keep an actively-used session alive instead of hard-expiring it exactly

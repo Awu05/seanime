@@ -158,6 +158,16 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 		Database:            a.Database,
 		DirectStreamManager: dsm,
 		NativePlayer:        np,
+		StreamTokenFunc: func() string {
+			if !a.MultiUserEnabled {
+				return ""
+			}
+			token, err := GenerateStreamToken(a.JWTSecret, profileID)
+			if err != nil {
+				return ""
+			}
+			return token
+		},
 	})
 
 	// Share the anacrolix engine from the App's singleton instead of creating a new one.

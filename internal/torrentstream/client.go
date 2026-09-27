@@ -422,11 +422,23 @@ func formatSpeed(bytes int64, seconds float64) string {
 	return fmt.Sprintf("%s/s", util.Bytes(uint64(float64(bytes)/seconds)))
 }
 
-// GetStreamingUrl returns the URL for the legacy external-player HTTP stream endpoint.
-// clientId is embedded as a query param so the handler can serve this specific client's
-// active stream (via activeStreams) instead of falling back to whichever torrent happens to be
-// "current" for the profile - which, without it, two devices/tabs on the same profile playing
-// different episodes could cross-wire.
+// streamURLQuery authorizes an external player to fetch clientId's stream. clientId makes the
+// handler serve that client's own stream rather than the profile's latest one, which could be
+// another device's episode.
+func (c *Client) streamURLQuery(clientId string) string {
+	query := url.Values{}
+	if clientId != "" {
+		query.Set("clientId", clientId)
+	}
+	if c.repository.streamTokenFunc != nil {
+		if token := c.repository.streamTokenFunc(); token != "" {
+			query.Set("auth_token", token)
+		}
+	}
+	return "?" + query.Encode() + c.repository.directStreamManager.GetHMACTokenQueryParam("/api/v1/torrentstream/stream", "&")
+}
+
+// GetStreamingUrl returns the stream URL for an external player on the server's own network.
 func (c *Client) GetStreamingUrl(clientId string) string {
 	if c.torrentClient.Load() == nil {
 		return ""
@@ -452,15 +464,11 @@ func (c *Client) GetStreamingUrl(clientId string) string {
 	if strings.HasPrefix(ret, "http://http") {
 		ret = strings.Replace(ret, "http://http", "http", 1)
 	}
-	ret += c.repository.directStreamManager.GetHMACTokenQueryParam("/api/v1/torrentstream/stream", "?")
-	if clientId != "" {
-		ret += "&clientId=" + url.QueryEscape(clientId)
-	}
-	return ret
+	return ret + c.streamURLQuery(clientId)
 }
 
-// GetExternalPlayerStreamingUrl returns the URL template used by the desktop/systray external
-// player integration. See GetStreamingUrl for why clientId is embedded.
+// GetExternalPlayerStreamingUrl returns the stream URL template for external player links, whose
+// {{SCHEME}}/{{HOST}} the client fills in.
 func (c *Client) GetExternalPlayerStreamingUrl(clientId string) string {
 	if c.torrentClient.Load() == nil {
 		return ""
@@ -470,12 +478,8 @@ func (c *Client) GetExternalPlayerStreamingUrl(clientId string) string {
 		return ""
 	}
 
-	ret := fmt.Sprintf("{{SCHEME}}://{{HOST}}/api/v1/torrentstream/stream/%s", url.PathEscape(fileOpt.MustGet().DisplayPath()))
-	ret += c.repository.directStreamManager.GetHMACTokenQueryParam("/api/v1/torrentstream/stream", "?")
-	if clientId != "" {
-		ret += "&clientId=" + url.QueryEscape(clientId)
-	}
-	return ret
+	return fmt.Sprintf("{{SCHEME}}://{{HOST}}/api/v1/torrentstream/stream/%s", url.PathEscape(fileOpt.MustGet().DisplayPath())) +
+		c.streamURLQuery(clientId)
 }
 
 func (c *Client) AddTorrent(ctx context.Context, id string) (*torrent.Torrent, error) {

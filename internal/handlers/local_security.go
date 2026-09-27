@@ -77,8 +77,14 @@ func isAuthenticatedMultiUserSession(app *core.App, req *http.Request) bool {
 
 	// "access" is the intermediate scope issued after admin-login/access-code but before a
 	// profile is selected (see MultiUserAuthMiddleware) - still a real, credential-checked
-	// session, not an anonymous request.
-	return claims.Scope == "profile" || claims.Scope == "admin" || claims.Scope == "access"
+	// session, not an anonymous request. A stream token counts only where it's usable at all.
+	switch claims.Scope {
+	case "profile", "admin", "access":
+		return true
+	case core.StreamScope:
+		return req.URL != nil && isExternalStreamPath(req.URL.Path)
+	}
+	return false
 }
 
 // isMultiUserBootstrapPath reports whether path is one of the credential-checked, rate-limited

@@ -29,6 +29,14 @@ func GenerateJWTSecret() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+// StreamScope marks a token that only lets an external player (VLC, mpv) fetch one profile's
+// stream: those players can't send the login cookie.
+const StreamScope = "stream"
+
+func GenerateStreamToken(secret string, profileID string) (string, error) {
+	return GenerateToken(secret, profileID, false, StreamScope, 24*time.Hour)
+}
+
 func GenerateToken(secret string, profileID string, isAdmin bool, scope string, duration time.Duration) (string, error) {
 	return GenerateTokenWithRemember(secret, profileID, isAdmin, scope, duration, false)
 }
