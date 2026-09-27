@@ -145,17 +145,32 @@ func TestClear(t *testing.T) {
 }
 
 func TestConcurrentUse(t *testing.T) {
-	s, _ := newStore(t, 2000)
+	s, dir := newStore(t, 2000)
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			key := fmt.Sprintf("k%d", i%10)
+			// Errors are tolerated: on Windows, a rename over a file another goroutine
+			// is reading can legitimately fail. We verify size accounting instead.
 			_ = s.Put(key, make([]byte, 100))
 			s.Get(key)
 		}(i)
 	}
 	wg.Wait()
 	require.LessOrEqual(t, s.Size(), int64(2000))
+
+	// Verify size accounting is correct: s.Size() must equal the sum of entry file sizes on disk.
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var diskTotal int64
+	for _, e := range entries {
+		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".tmp") {
+			info, err := e.Info()
+			require.NoError(t, err)
+			diskTotal += info.Size()
+		}
+	}
+	require.Equal(t, diskTotal, s.Size(), "size accounting mismatch: Size() does not match disk contents")
 }
