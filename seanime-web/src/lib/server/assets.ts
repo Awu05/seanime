@@ -1,13 +1,11 @@
 import { getServerBaseUrl } from "@/api/client/server-url"
 import { SERVER_AUTH_TOKEN_STORAGE_KEY } from "@/app/(main)/_atoms/server-status.atoms"
-import { createServerPasswordHMACAuth } from "@/lib/server/hmac-auth"
+import { createServerPasswordHMACAuth, HMAC_TOKEN_TTL_SECONDS } from "@/lib/server/hmac-auth"
 
 const IMAGE_CACHE_PATH = "/api/v1/image-cache"
 
-// The server password's hash is both the app's HMAC secret and only ever stored once a password
-// was actually entered, so finding it here also means "a server password protects this instance".
-// Read directly (rather than through the jotai atom) since cachedImageUrl runs synchronously in
-// plain <img src> builders that aren't hooks.
+// A stored hash means a server password protects this instance. Read directly (not the jotai atom)
+// since cachedImageUrl runs synchronously in <img src> builders.
 function getStoredServerPasswordHash(): string | undefined {
     try {
         const raw = localStorage.getItem(SERVER_AUTH_TOKEN_STORAGE_KEY)
@@ -20,12 +18,9 @@ function getStoredServerPasswordHash(): string | undefined {
     }
 }
 
-// createServerPasswordHMACAuth's tokens last 24h (see hmac-auth.ts). cachedImageUrl runs on every
-// getImageUrl call, including inside render, so signing a fresh token each time would change the
-// URL every second (it embeds iat/exp) and defeat the browser's URL-keyed cache. Instead the signed
-// query param is cached until it's within an hour of expiring, and regenerated immediately if the
-// stored password hash changes.
-const IMAGE_CACHE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+// A fresh token every call would change the URL (it embeds iat/exp) and defeat the browser's
+// URL-keyed cache, so the query param is reused until it's within an hour of expiring.
+const IMAGE_CACHE_TOKEN_TTL_MS = HMAC_TOKEN_TTL_SECONDS * 1000
 const IMAGE_CACHE_TOKEN_REFRESH_WINDOW_MS = 60 * 60 * 1000
 
 let cachedImageCacheToken: { hash: string; param: string; expiresAt: number } | undefined
@@ -44,11 +39,8 @@ function getImageCacheAuthParam(passwordHash: string): string {
     return cachedImageCacheToken.param
 }
 
-// Routes an outside image through the server's image cache, which keeps a copy on disk so the
-// image still shows during an internet outage. Anything else is returned unchanged, including
-// URLs already on the server, so applying it twice is harmless. When a server password is set, an
-// HMAC token is attached the same way the manga reader authenticates /api/v1/image-proxy, since an
-// <img> load can't send the X-Seanime-Token header the server would otherwise require.
+// An HMAC token is attached when a server password is set, since an <img> load can't send the
+// X-Seanime-Token header the server would otherwise require (same approach as /api/v1/image-proxy).
 export function cachedImageUrl(path: string, serverBaseUrl: string): string {
     if (!/^https?:\/\//i.test(path) || path.startsWith(`${serverBaseUrl}/`)) {
         return path

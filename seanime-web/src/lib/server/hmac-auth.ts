@@ -1,5 +1,8 @@
 import * as CryptoJS from "crypto-js"
 
+// Shared by both HMAC-authenticated routes so their token lifetime can't drift apart.
+export const HMAC_TOKEN_TTL_SECONDS = 24 * 60 * 60
+
 interface TokenClaims {
     endpoint: string
     iat: number // issued at (unix timestamp)
@@ -15,8 +18,7 @@ class HMACAuth {
         this.ttl = ttl
     }
 
-    // The underlying signature (CryptoJS, not WebCrypto) is synchronous; generateToken stays async
-    // only to keep its existing public signature for callers that already await it.
+    // Async only to keep the existing signature for callers that already await it.
     async generateToken(endpoint: string): Promise<string> {
         return this.generateTokenSync(endpoint)
     }
@@ -25,8 +27,7 @@ class HMACAuth {
         return Promise.resolve(this.generateQueryParamSync(endpoint, symbol))
     }
 
-    // Synchronous variants for callers that build a URL synchronously (e.g. an <img src>) and can't
-    // await a token, such as the image cache's cachedImageUrl.
+    // For callers that build a URL synchronously (e.g. an <img src>) and can't await a token.
     generateTokenSync(endpoint: string): string {
         const now = Math.floor(Date.now() / 1000)
         const claims: TokenClaims = {
@@ -70,10 +71,10 @@ class HMACAuth {
 // HMAC auth instance using server password (for server endpoints)
 export function createServerPasswordHMACAuth(password: string): HMACAuth {
     const secret = password !== "" ? password : "seanime-default-secret"
-    return new HMACAuth(secret, 24 * 60 * 60)
+    return new HMACAuth(secret, HMAC_TOKEN_TTL_SECONDS)
 }
 
 // HMAC auth instance using Nakama password (for Nakama endpoints)
 export function createNakamaHMACAuth(nakamaPassword: string): HMACAuth {
-    return new HMACAuth(nakamaPassword, 24 * 60 * 60)
+    return new HMACAuth(nakamaPassword, HMAC_TOKEN_TTL_SECONDS)
 }
