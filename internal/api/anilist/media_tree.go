@@ -76,38 +76,31 @@ func (m *CompleteAnime) FetchMediaTree(ctx context.Context, rel FetchMediaTreeRe
 		return nil
 	}
 
-	doneCh := make(chan struct{})
-	processEdges(ctx, edges, rel, anilistClient, tree, cache, doneCh)
-
-	for {
-		select {
-		case <-doneCh:
-			return nil
-		default:
-		}
-	}
+	processEdges(ctx, edges, rel, anilistClient, tree, cache)
+	return nil
 }
 
-// processEdges fetches the next node(s) for each edge in parallel.
-func processEdges(ctx context.Context, edges []*CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache, doneCh chan struct{}) {
-	var wg sync.WaitGroup
-	wg.Add(len(edges))
-
-	for i, item := range edges {
-		go func(edge *CompleteAnime_Relations_Edges, _ int) {
-			defer wg.Done()
-			if edge == nil {
-				return
-			}
-			processEdge(ctx, edge, rel, anilistClient, tree, cache)
-		}(item, i)
+// processEdges fetches the level's unknown nodes in one request, then walks each edge in parallel.
+// processEdge still fetches a node on its own if the batch didn't return it.
+func processEdges(ctx context.Context, edges []*CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) {
+	missing := make([]int, 0, len(edges))
+	for _, edge := range edges {
+		if _, ok := cache.Get(edge.GetNode().ID); !ok {
+			missing = append(missing, edge.GetNode().ID)
+		}
+	}
+	if len(missing) > 0 {
+		media, _ := anilistClient.CompleteAnimeByIDs(ctx, missing)
+		for _, m := range media {
+			cache.Set(m.ID, m)
+		}
 	}
 
+	var wg sync.WaitGroup
+	for _, edge := range edges {
+		wg.Go(func() { processEdge(ctx, edge, rel, anilistClient, tree, cache) })
+	}
 	wg.Wait()
-
-	go func() {
-		close(doneCh)
-	}()
 }
 
 func processEdge(ctx context.Context, edge *CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) {

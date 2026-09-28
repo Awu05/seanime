@@ -7,6 +7,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
 	"seanime/internal/api/metadata_provider"
+	"seanime/internal/customsource"
 	"seanime/internal/hook"
 	"seanime/internal/library/anime"
 	"seanime/internal/library/summary"
@@ -86,6 +87,8 @@ func (fh *FileHydrator) HydrateMetadata(ctx context.Context) {
 	// Remove the group with unmatched media
 	delete(groups, 0)
 
+	fh.prefetchCompleteAnime(ctx, lo.Keys(groups))
+
 	if fh.ScanLogger != nil {
 		fh.ScanLogger.LogFileHydrator(zerolog.InfoLevel).
 			Int("entryCount", len(groups)).
@@ -113,6 +116,26 @@ func (fh *FileHydrator) HydrateMetadata(ctx context.Context) {
 		fh.ScanLogger.LogFileHydrator(zerolog.InfoLevel).
 			Int64("ms", time.Since(start).Milliseconds()).
 			Msg("Finished metadata hydration")
+	}
+}
+
+// prefetchCompleteAnime fetches the matched titles the scan doesn't hold yet in one batch, so
+// per-group hydration finds them in the cache instead of fetching each one.
+func (fh *FileHydrator) prefetchCompleteAnime(ctx context.Context, mediaIDs []int) {
+	missing := lo.Filter(mediaIDs, func(id int, _ int) bool {
+		_, cached := fh.CompleteAnimeCache.Get(id)
+		return !cached && !customsource.IsExtensionId(id)
+	})
+	client := fh.PlatformRef.Get().GetAnilistClient()
+	if len(missing) == 0 || client == nil {
+		return
+	}
+	media, err := client.CompleteAnimeByIDs(ctx, missing)
+	if err != nil {
+		fh.Logger.Warn().Err(err).Msg("hydrator: Failed to prefetch media")
+	}
+	for _, m := range media {
+		fh.CompleteAnimeCache.Set(m.ID, m)
 	}
 }
 
