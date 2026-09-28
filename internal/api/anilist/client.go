@@ -396,8 +396,8 @@ func getRetryWindow(resp *http.Response, remaining string) (time.Time, time.Time
 }
 
 var (
-	sentRateLimitWarningTime              = time.Now().Add(-10 * time.Second)
-	sharedAniListPacer       requestPacer = newAniListPacer()
+	sentRateLimitWarningTime = time.Now().Add(-10 * time.Second)
+	sharedAniListPacer       = newAniListPacer()
 )
 
 func doAniListRequestWithRetries(

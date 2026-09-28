@@ -101,6 +101,36 @@ func TestPacerServesBothLanesAtVeryLowLimits(t *testing.T) {
 	}
 }
 
+// A custom endpoint may have no limit at all, so it isn't paced until it reports one.
+func TestPacerDoesNotPaceEndpointUntilItReportsALimit(t *testing.T) {
+	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
+	p := newTestPacer(clock)
+	p.Reset(false)
+	var delays []time.Duration
+
+	for range 20 {
+		require.NoError(t, p.Wait(context.Background(), recordSleep(clock, &delays)))
+	}
+	require.Empty(t, delays)
+
+	p.Observe(rateHeaders("30", "29"))
+	for range 6 {
+		require.NoError(t, p.Wait(context.Background(), recordSleep(clock, &delays)))
+	}
+	require.NotEmpty(t, delays, "a reported limit is paced")
+}
+
+func TestSwitchingEndpointResetsPacer(t *testing.T) {
+	prevProvider := CurrentRequestProvider()
+	t.Cleanup(func() { require.NoError(t, SetRequestProvider(prevProvider)) })
+
+	require.NoError(t, UseCustomAPI(CustomClientConfig{Name: "mirror", Endpoint: "https://mirror.example.com/graphql"}))
+	require.Zero(t, sharedAniListPacer.limit)
+
+	UseOfficialAPI()
+	require.EqualValues(t, defaultAniListLimit, sharedAniListPacer.limit)
+}
+
 func TestPacerLowersTokensToRemaining(t *testing.T) {
 	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
 	p := newTestPacer(clock)

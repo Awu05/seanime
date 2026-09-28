@@ -80,6 +80,7 @@ func (r *requestProviderRegistry) set(provider RequestProvider) error {
 	defer r.mu.Unlock()
 
 	r.current = provider
+	sharedAniListPacer.Reset(provider.Name() == OfficialRequestProviderName)
 	return nil
 }
 

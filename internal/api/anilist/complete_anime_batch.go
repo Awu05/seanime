@@ -2,7 +2,9 @@ package anilist
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -10,9 +12,9 @@ import (
 // query complexity limit.
 const completeAnimeBatchSize = 50
 
-// CompleteAnimeByIDsDocument reuses the generated fragments so it stays in step with them.
-var CompleteAnimeByIDsDocument = `query CompleteAnimeByIds ($ids: [Int]) {
-	Page(perPage: 50) {
+// completeAnimeByIDsDocument reuses the generated fragments so it stays in step with them.
+var completeAnimeByIDsDocument = `query CompleteAnimeByIds ($ids: [Int]) {
+	Page(perPage: ` + strconv.Itoa(completeAnimeBatchSize) + `) {
 		media(id_in: $ids, type: ANIME) {
 			... completeAnime
 		}
@@ -42,15 +44,19 @@ func (t *CompleteAnimeByIDs_Page) GetMedia() []*CompleteAnime {
 	return t.Media
 }
 
+// CompleteAnimeByIDs returns what AniList has for ids. A failed batch doesn't stop the rest; the
+// error reports every failed batch.
 func (ac *AnilistClientImpl) CompleteAnimeByIDs(ctx context.Context, ids []int) ([]*CompleteAnime, error) {
 	ac.logger.Debug().Int("count", len(ids)).Msg("anilist: Fetching complete media batch")
 	ret := make([]*CompleteAnime, 0, len(ids))
+	var errs []error
 	for batch := range slices.Chunk(ids, completeAnimeBatchSize) {
 		var res CompleteAnimeByIDs
-		if err := ac.Client.Client.Post(ctx, "CompleteAnimeByIds", CompleteAnimeByIDsDocument, &res, map[string]any{"ids": batch}); err != nil {
-			return ret, err
+		if err := ac.Client.Client.Post(ctx, "CompleteAnimeByIds", completeAnimeByIDsDocument, &res, map[string]any{"ids": batch}); err != nil {
+			errs = append(errs, err)
+			continue
 		}
 		ret = append(ret, res.GetPage().GetMedia()...)
 	}
-	return ret, nil
+	return ret, errors.Join(errs...)
 }

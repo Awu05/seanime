@@ -164,8 +164,8 @@ func TestListAnime(t *testing.T) {
 
 func TestDoAniListRequestWithRetriesWaitsBetweenRateLimitedAttempts(t *testing.T) {
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)}
-	rateBlocker := newAniListPacer()
-	rateBlocker.now = clock.Now
+	pacer := newAniListPacer()
+	pacer.now = clock.Now
 	requestBody := `{"query":"test"}`
 	requestBodies := make([]string, 0, 2)
 	sleepDurations := make([]time.Duration, 0, 1)
@@ -197,7 +197,7 @@ func TestDoAniListRequestWithRetriesWaitsBetweenRateLimitedAttempts(t *testing.T
 	resp, rlRemainingStr, err := doAniListRequestWithRetries(
 		client,
 		req,
-		rateBlocker,
+		pacer,
 		func(ctx context.Context, delay time.Duration) error {
 			sleepDurations = append(sleepDurations, delay)
 			clock.Advance(delay)
@@ -287,8 +287,8 @@ func TestDoAniListRequestWithRetriesHeaders(t *testing.T) {
 
 func TestDoAniListRequestWithRetriesExhaustsRetries(t *testing.T) {
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)}
-	rateBlocker := newAniListPacer()
-	rateBlocker.now = clock.Now
+	pacer := newAniListPacer()
+	pacer.now = clock.Now
 	requestBody := `{"query":"test"}`
 	attempt := 0
 
@@ -306,7 +306,7 @@ func TestDoAniListRequestWithRetriesExhaustsRetries(t *testing.T) {
 	resp, _, err := doAniListRequestWithRetries(
 		client,
 		req,
-		rateBlocker,
+		pacer,
 		func(ctx context.Context, delay time.Duration) error {
 			clock.Advance(delay)
 			return nil
@@ -350,12 +350,12 @@ func TestUseCustomAPIUsesRuntimeConfig(t *testing.T) {
 func TestPacerWaitsUntilBlockExpires(t *testing.T) {
 	// once blocked, later requests should wait until the shared block expires.
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 10, 0, time.UTC)}
-	rateBlocker := newAniListPacer()
-	rateBlocker.now = clock.Now
-	require.True(t, rateBlocker.BlockUntil(clock.Now().Add(18*time.Second)))
+	pacer := newAniListPacer()
+	pacer.now = clock.Now
+	require.True(t, pacer.BlockUntil(clock.Now().Add(18*time.Second)))
 
 	sleepDurations := make([]time.Duration, 0, 1)
-	err := rateBlocker.Wait(context.Background(), func(ctx context.Context, delay time.Duration) error {
+	err := pacer.Wait(context.Background(), func(ctx context.Context, delay time.Duration) error {
 		sleepDurations = append(sleepDurations, delay)
 		clock.Advance(delay)
 		return nil
@@ -368,12 +368,12 @@ func TestPacerWaitsUntilBlockExpires(t *testing.T) {
 func TestPacerIgnoresDuplicateOrShorterBlocks(t *testing.T) {
 	// concurrent 429s with the same reset should not re-announce the same block repeatedly.
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 20, 0, time.UTC)}
-	rateBlocker := newAniListPacer()
-	rateBlocker.now = clock.Now
+	pacer := newAniListPacer()
+	pacer.now = clock.Now
 	blockedUntil := clock.Now().Add(18 * time.Second)
 
-	assert.True(t, rateBlocker.BlockUntil(blockedUntil))
-	assert.False(t, rateBlocker.BlockUntil(blockedUntil))
-	assert.False(t, rateBlocker.BlockUntil(clock.Now().Add(5*time.Second)))
-	assert.True(t, rateBlocker.BlockUntil(clock.Now().Add(25*time.Second)))
+	assert.True(t, pacer.BlockUntil(blockedUntil))
+	assert.False(t, pacer.BlockUntil(blockedUntil))
+	assert.False(t, pacer.BlockUntil(clock.Now().Add(5*time.Second)))
+	assert.True(t, pacer.BlockUntil(clock.Now().Add(25*time.Second)))
 }

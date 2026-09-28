@@ -36,6 +36,9 @@ func (m *BaseAnime) FetchMediaTree(ctx context.Context, rel FetchMediaTreeRelati
 
 	defer util.HandlePanicInModuleWithError("anilist/BaseAnime.FetchMediaTree", &err)
 
+	if complete, found := cache.Get(m.ID); found {
+		return complete.FetchMediaTree(ctx, rel, anilistClient, tree, cache)
+	}
 	res, err := anilistClient.CompleteAnimeByID(ctx, &m.ID)
 	if err != nil {
 		return err
@@ -80,7 +83,7 @@ func (m *CompleteAnime) FetchMediaTree(ctx context.Context, rel FetchMediaTreeRe
 	return nil
 }
 
-// processEdges fetches the level's unknown nodes in one request, then walks each edge in parallel.
+// processEdges fetches the unknown relations of this node in one request, then walks each edge in parallel.
 // processEdge still fetches a node on its own if the batch didn't return it.
 func processEdges(ctx context.Context, edges []*CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) {
 	missing := make([]int, 0, len(edges))

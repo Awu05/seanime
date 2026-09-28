@@ -13,6 +13,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// One failed batch must not cost the titles in the batches after it.
+func TestCompleteAnimeByIDsKeepsBatchesAfterAFailure(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"data":{"Page":{"media":[{"id":99}]}}}`)
+	}))
+	defer server.Close()
+
+	prevProvider := CurrentRequestProvider()
+	t.Cleanup(func() { require.NoError(t, SetRequestProvider(prevProvider)) })
+	require.NoError(t, UseCustomAPI(CustomClientConfig{Name: "batch-test", Endpoint: server.URL}))
+
+	media, err := NewAnilistClient("", t.TempDir()).CompleteAnimeByIDs(context.Background(), make([]int, 60))
+	require.Error(t, err)
+	require.Len(t, media, 1)
+	require.Equal(t, 2, requests)
+}
+
 func TestCompleteAnimeByIDsSplitsIntoBatchesOf50(t *testing.T) {
 	var batches [][]int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

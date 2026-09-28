@@ -45,7 +45,7 @@ type aniListPacer struct {
 	mu              sync.Mutex
 	now             func() time.Time
 	logger          *zerolog.Logger
-	limit           float64 // requests per minute
+	limit           float64 // requests per minute; 0 leaves an endpoint that reported none unpaced
 	tokens          float64
 	updatedAt       time.Time
 	blockedUntil    time.Time
@@ -98,6 +98,9 @@ func (p *aniListPacer) reserveLocked(background bool) time.Duration {
 	if now.Before(p.blockedUntil) {
 		return p.blockedUntil.Sub(now)
 	}
+	if p.limit == 0 {
+		return 0
+	}
 	p.refillLocked(now)
 
 	need := 1.0
@@ -147,6 +150,20 @@ func (p *aniListPacer) Observe(headers http.Header) {
 	if remaining, err := strconv.Atoi(headers.Get("X-RateLimit-Remaining")); err == nil {
 		p.tokens = min(p.tokens, float64(remaining-remainingMargin))
 	}
+}
+
+// Reset starts afresh for a new endpoint. AniList's own API is paced before its first response;
+// another endpoint may have no limit, so it waits until it reports one.
+func (p *aniListPacer) Reset(official bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.limit = 0
+	if official {
+		p.limit = defaultAniListLimit
+	}
+	p.tokens = 0
+	p.updatedAt = time.Time{}
+	p.blockedUntil = time.Time{}
 }
 
 // BlockUntil stops all requests until the time AniList gave in a rate-limited response.

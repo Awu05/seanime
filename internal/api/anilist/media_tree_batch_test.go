@@ -52,7 +52,7 @@ func treeTestAnime(id int, related ...int) *CompleteAnime {
 	return &CompleteAnime{ID: id, Relations: &CompleteAnime_Relations{Edges: edges}}
 }
 
-func TestFetchMediaTreeFetchesEachLevelInOneBatch(t *testing.T) {
+func TestFetchMediaTreeBatchesEachNodesRelations(t *testing.T) {
 	client := &treeTestClient{media: map[int]*CompleteAnime{2: treeTestAnime(2, 4), 3: treeTestAnime(3), 4: treeTestAnime(4)}}
 	tree := NewCompleteAnimeRelationTree()
 
@@ -63,6 +63,17 @@ func TestFetchMediaTreeFetchesEachLevelInOneBatch(t *testing.T) {
 	require.Equal(t, []int{4}, client.batches[1])
 	require.Zero(t, client.singles)
 	require.ElementsMatch(t, []int{1, 2, 3, 4}, tree.Keys())
+}
+
+func TestBaseAnimeFetchMediaTreeUsesCache(t *testing.T) {
+	client := &treeTestClient{}
+	cache := NewCompleteAnimeCache()
+	cache.Set(1, treeTestAnime(1))
+	tree := NewCompleteAnimeRelationTree()
+
+	require.NoError(t, (&BaseAnime{ID: 1}).FetchMediaTree(context.Background(), FetchMediaTreeAll, client, tree, cache))
+	require.Zero(t, client.singles)
+	require.True(t, tree.Has(1))
 }
 
 func TestFetchMediaTreeFallsBackToSingleLookupsWhenBatchFails(t *testing.T) {
