@@ -388,8 +388,8 @@ func FetchMediaFromLocalFiles(
 		return true
 	})
 
-	// Fetch all media from the AniList IDs
-	anilistMedia, err := fetchCompleteAnime(ctx, platform.GetAnilistClient(), anilistIds)
+	// Fetch all media from the AniList IDs; MAL-only titles map to 0
+	anilistMedia, err := fetchCompleteAnime(ctx, platform.GetAnilistClient(), lo.Uniq(lo.Without(anilistIds, 0)))
 	if err != nil && scanLogger != nil {
 		scanLogger.LogMediaFetcher(zerolog.WarnLevel).
 			Str("module", "Enhanced").

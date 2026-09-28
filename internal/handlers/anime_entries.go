@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -418,7 +419,8 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 		ForceMediaId:        media.GetID(),
 	}
 
-	fh.HydrateMetadata(c.Request().Context())
+	// The files are saved afterwards, so leaving the page must not cut hydration short.
+	fh.HydrateMetadata(context.WithoutCancel(c.Request().Context()))
 
 	// Hydrate the summary logger before merging files
 	fh.ScanSummaryLogger.HydrateData(selectedLfs, normalizedMedia, animeCollectionWithRelations)

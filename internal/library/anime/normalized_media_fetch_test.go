@@ -30,3 +30,14 @@ func TestFetchNormalizedMediaUsesScanCache(t *testing.T) {
 	require.Zero(t, client.calls)
 	require.Equal(t, 1, m.ID)
 }
+
+func TestNormalizedMediaFetchMediaTreeUsesScanCache(t *testing.T) {
+	client := &countingCompleteAnimeClient{}
+	cache := anilist.NewCompleteAnimeCache()
+	cache.Set(1, &anilist.CompleteAnime{ID: 1})
+	tree := anilist.NewCompleteAnimeRelationTree()
+
+	require.NoError(t, NewNormalizedMedia(&anilist.BaseAnime{ID: 1}).FetchMediaTree(context.Background(), anilist.FetchMediaTreeAll, client, tree, cache))
+	require.Zero(t, client.calls)
+	require.True(t, tree.Has(1))
+}

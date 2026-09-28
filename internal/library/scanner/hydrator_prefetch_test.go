@@ -54,7 +54,7 @@ func TestPrefetchCompleteAnimeFetchesOnlyUncachedAniListIDs(t *testing.T) {
 	require.True(t, ok)
 }
 
-// Enhanced mode and title matching share this, so neither panics on a platform without a client.
+// Enhanced mode and the hydration prefetch share this, so neither panics on a platform without a client.
 func TestFetchCompleteAnimeSkipsMissingClient(t *testing.T) {
 	media, err := fetchCompleteAnime(context.Background(), nil, []int{1})
 	require.NoError(t, err)

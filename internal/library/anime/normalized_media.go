@@ -158,7 +158,6 @@ func FetchNormalizedMedia(ctx context.Context, anilistClient anilist.AnilistClie
 	if cache != nil {
 		if complete, found := cache.Get(m.ID); found {
 			*m = *NewNormalizedMedia(complete.ToBaseAnime())
-			m.fetched = true
 			return nil
 		}
 	}
@@ -172,7 +171,6 @@ func FetchNormalizedMedia(ctx context.Context, anilistClient anilist.AnilistClie
 		cache.Set(m.ID, complete.GetMedia())
 	}
 	*m = *NewNormalizedMedia(complete.GetMedia().ToBaseAnime())
-	m.fetched = true
 	return nil
 }
 
@@ -262,6 +260,9 @@ func (m *NormalizedMedia) FetchMediaTree(
 		return nil
 	}
 
+	if complete, found := cache.Get(m.ID); found {
+		return complete.FetchMediaTree(ctx, rel, anilistClient, tree, cache)
+	}
 	res, err := anilistClient.CompleteAnimeByID(ctx, &m.ID)
 	if err != nil {
 		return err
