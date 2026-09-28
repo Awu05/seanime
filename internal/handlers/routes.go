@@ -615,7 +615,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 	//
 	// Sync
 	//
-	v1Local := v1.Group("/local")
+	v1Local := v1.Group("/local", h.singleUserOnlyMiddleware)
 	v1Local.GET("/track", h.HandleLocalGetTrackedMediaItems)
 	v1Local.POST("/track", h.HandleLocalAddTrackedMedia)
 	v1Local.DELETE("/track", h.HandleLocalRemoveTrackedMedia)
