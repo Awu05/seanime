@@ -131,11 +131,9 @@ const (
 	AnimeCollectionRelationsBucket = "anime-collection-relations"
 	MangaCollectionBucket          = "manga-collection"
 	MangaCollectionTagsBucket      = "manga-collection-tags"
-	BaseAnimeBucket                = "base-anime"
 	BaseAnimeMalBucket             = "base-anime-mal"
 	CompleteAnimeBucket            = "complete-anime"
 	AnimeDetailsBucket             = "anime-details"
-	BaseMangaBucket                = "base-manga"
 	MangaDetailsBucket             = "manga-details"
 	ViewerBucket                   = "viewer"
 	ViewerStatsBucket              = "viewer-stats"
@@ -239,11 +237,9 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	buckets[AnimeCollectionRelationsBucket] = filecache.NewPermanentBucket(AnimeCollectionRelationsBucket)
 	buckets[MangaCollectionBucket] = filecache.NewPermanentBucket(MangaCollectionBucket)
 	buckets[MangaCollectionTagsBucket] = filecache.NewPermanentBucket(MangaCollectionTagsBucket)
-	buckets[BaseAnimeBucket] = filecache.NewPermanentBucket(BaseAnimeBucket)
 	buckets[BaseAnimeMalBucket] = filecache.NewPermanentBucket(BaseAnimeMalBucket)
 	buckets[CompleteAnimeBucket] = filecache.NewPermanentBucket(CompleteAnimeBucket)
 	buckets[AnimeDetailsBucket] = filecache.NewPermanentBucket(AnimeDetailsBucket)
-	buckets[BaseMangaBucket] = filecache.NewPermanentBucket(BaseMangaBucket)
 	buckets[MangaDetailsBucket] = filecache.NewPermanentBucket(MangaDetailsBucket)
 	buckets[ViewerBucket] = filecache.NewPermanentBucket(ViewerBucket)
 	buckets[ViewerStatsBucket] = filecache.NewPermanentBucket(ViewerStatsBucket)
@@ -264,11 +260,9 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 		AnimeCollectionRelationsBucket: collectionCacheTTL,
 		MangaCollectionBucket:          collectionCacheTTL,
 		MangaCollectionTagsBucket:      mediumCacheTTL,
-		BaseAnimeBucket:                longCacheTTL,
 		BaseAnimeMalBucket:             longCacheTTL,
 		CompleteAnimeBucket:            longCacheTTL,
 		AnimeDetailsBucket:             longCacheTTL,
-		BaseMangaBucket:                longCacheTTL,
 		MangaDetailsBucket:             longCacheTTL,
 		ViewerBucket:                   mediumCacheTTL,
 		ViewerStatsBucket:              mediumCacheTTL,
@@ -646,6 +640,33 @@ func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, n
 	return &cached, nil
 }
 
+// titleFirstGet serves a single-title lookup from the shared title cache, refreshing it from the
+// network when stale. A stale copy beats an error when AniList is failing.
+func titleFirstGet[T any](c *CacheLayer, cached *T, fresh bool, networkFn func() (*T, error), save func(*T), fallback func() *T) (*T, error) {
+	if cached != nil && fresh {
+		return cached, nil
+	}
+
+	var networkErr error
+	if IsWorking.Load() {
+		res, err := networkFn()
+		c.checkAndUpdateWorkingState(err)
+		if err == nil && res != nil {
+			save(res)
+			return res, nil
+		}
+		networkErr = err
+	}
+
+	if cached != nil {
+		return cached, nil
+	}
+	if res := fallback(); res != nil {
+		return res, nil
+	}
+	return nil, noCachedDataError(networkErr)
+}
+
 // boundedCacheSet caches data with a limit on non-collection entries
 func (c *CacheLayer) boundedCacheSet(bucketName string, cacheKey string, data interface{}, mediaID int) error {
 	if !ShouldCache.Load() {
@@ -752,10 +773,8 @@ func (c *CacheLayer) invalidateMediaCaches(mediaID int) {
 
 	// Delete from all media-specific buckets
 	buckets := []string{
-		BaseAnimeBucket,
 		CompleteAnimeBucket,
 		AnimeDetailsBucket,
-		BaseMangaBucket,
 		MangaDetailsBucket,
 	}
 
@@ -983,33 +1002,23 @@ func (c *CacheLayer) BaseAnimeByMalID(ctx context.Context, id *int, interceptors
 }
 
 func (c *CacheLayer) BaseAnimeByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.BaseAnimeByID, error) {
-	if id == nil {
+	networkFn := func() (*anilist.BaseAnimeByID, error) {
 		return c.anilistClientRef.Get().BaseAnimeByID(ctx, id, interceptors...)
 	}
-
-	cacheKey := c.generateCacheKey(id)
-	res, err := networkFirstGet(c, BaseAnimeBucket, cacheKey, func() (*anilist.BaseAnimeByID, error) {
-		return c.anilistClientRef.Get().BaseAnimeByID(ctx, id, interceptors...)
-	})
-
-	// If network and direct cache failed, try to extract from collection cache
-	if err != nil {
-		if collectionResult := c.extractBaseAnimeFromCollection(*id); collectionResult != nil {
-			c.logger.Debug().Int("mediaID", *id).Msg("anilist cache: Extracted BaseAnime from collection cache")
-			return collectionResult, nil
-		}
+	if id == nil || !ShouldCache.Load() {
+		return networkFn()
 	}
 
-	// If successful, update bounded cache for non-collection media
-	if err == nil && res != nil {
-		go func() {
-			if err := c.boundedCacheSet(BaseAnimeBucket, cacheKey, res, *id); err != nil {
-				c.logger.Warn().Err(err).Msg("anilist cache: Failed to update bounded cache")
-			}
-		}()
+	titles := CurrentTitleCache()
+	var cached *anilist.BaseAnimeByID
+	media, fresh, ok := titles.GetAnime(*id)
+	if ok {
+		cached = &anilist.BaseAnimeByID{Media: media}
 	}
-
-	return res, err
+	return titleFirstGet(c, cached, fresh, networkFn,
+		func(res *anilist.BaseAnimeByID) { titles.PutAnime(res.GetMedia()) },
+		func() *anilist.BaseAnimeByID { return c.extractBaseAnimeFromCollection(*id) },
+	)
 }
 
 func (c *CacheLayer) SearchBaseAnimeByIds(ctx context.Context, ids []*int, page *int, perPage *int, status []*anilist.MediaStatus, inCollection *bool, sort []*anilist.MediaSort, season *anilist.MediaSeason, year *int, genre *string, format *anilist.MediaFormat, interceptors ...clientv2.RequestInterceptor) (*anilist.SearchBaseAnimeByIds, error) {
@@ -1206,33 +1215,23 @@ func (c *CacheLayer) SearchBaseManga(ctx context.Context, page *int, perPage *in
 }
 
 func (c *CacheLayer) BaseMangaByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.BaseMangaByID, error) {
-	if id == nil {
+	networkFn := func() (*anilist.BaseMangaByID, error) {
 		return c.anilistClientRef.Get().BaseMangaByID(ctx, id, interceptors...)
 	}
-
-	cacheKey := c.generateCacheKey(id)
-	res, err := networkFirstGet(c, BaseMangaBucket, cacheKey, func() (*anilist.BaseMangaByID, error) {
-		return c.anilistClientRef.Get().BaseMangaByID(ctx, id, interceptors...)
-	})
-
-	// If network and direct cache failed, try to extract from collection cache
-	if err != nil {
-		if collectionResult := c.extractBaseMangaFromCollection(*id); collectionResult != nil {
-			c.logger.Debug().Int("mediaID", *id).Msg("anilist cache: Extracted BaseManga from collection cache")
-			return collectionResult, nil
-		}
+	if id == nil || !ShouldCache.Load() {
+		return networkFn()
 	}
 
-	// If successful, update bounded cache for non-collection media
-	if err == nil && res != nil {
-		go func() {
-			if err := c.boundedCacheSet(BaseMangaBucket, cacheKey, res, *id); err != nil {
-				c.logger.Warn().Err(err).Msg("anilist cache: Failed to update bounded cache")
-			}
-		}()
+	titles := CurrentTitleCache()
+	var cached *anilist.BaseMangaByID
+	media, fresh, ok := titles.GetManga(*id)
+	if ok {
+		cached = &anilist.BaseMangaByID{Media: media}
 	}
-
-	return res, err
+	return titleFirstGet(c, cached, fresh, networkFn,
+		func(res *anilist.BaseMangaByID) { titles.PutManga(res.GetMedia()) },
+		func() *anilist.BaseMangaByID { return c.extractBaseMangaFromCollection(*id) },
+	)
 }
 
 func (c *CacheLayer) MangaDetailsByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.MangaDetailsByID, error) {

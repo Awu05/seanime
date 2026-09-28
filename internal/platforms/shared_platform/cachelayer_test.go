@@ -3,7 +3,6 @@ package shared_platform
 import (
 	"context"
 	"errors"
-	"os"
 	"seanime/internal/api/anilist"
 	"seanime/internal/events"
 	"seanime/internal/util"
@@ -256,33 +255,81 @@ func TestCacheLayerLiveEntryUpdateClearsQueuedUpdate(t *testing.T) {
 	require.Equal(t, 13, *client.updateEntryCalls[0].Progress)
 }
 
-func TestCacheLayerServesFreshDataWithoutHittingNetwork(t *testing.T) {
-	// boundedCacheSet writes to the cache dir from a background goroutine after a successful
-	// BaseAnimeByID call, so t.TempDir()'s auto-cleanup can race that write on Windows
-	// ("directory is not empty"). Use a plain temp dir we don't remove instead.
-	cacheDir, err := os.MkdirTemp("", "seanime-cachelayer-freshness-test-*")
-	require.NoError(t, err)
+func installTestTitleCache(t *testing.T) *TitleCache {
+	t.Helper()
+	tc := newTestTitleCache(t)
+	SetTitleCache(tc)
+	t.Cleanup(func() { SetTitleCache(nil) })
+	return tc
+}
 
-	client := &cacheLayerTestClient{cacheDir: cacheDir}
+func TestCacheLayerServesFreshTitleWithoutHittingNetwork(t *testing.T) {
+	tc := installTestTitleCache(t)
+	client := &cacheLayerTestClient{cacheDir: t.TempDir()}
 	cacheLayer := newTestCacheLayer(t, client)
-	cacheLayer.bucketTTLs[BaseAnimeBucket] = 50 * time.Millisecond
-
 	id := 1
 
-	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
+	_, err := cacheLayer.BaseAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, atomic.LoadInt32(&client.baseAnimeCalls), "expected 1 network call after the first fetch")
+	require.EqualValues(t, 1, atomic.LoadInt32(&client.baseAnimeCalls))
 
-	// A repeated call within the TTL window should be served from cache, not the network.
 	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, atomic.LoadInt32(&client.baseAnimeCalls), "expected the cached call to skip the network")
+	require.EqualValues(t, 1, atomic.LoadInt32(&client.baseAnimeCalls), "a fresh cached title must skip the network")
 
-	// Once the TTL expires, the next call should hit the network again.
-	time.Sleep(80 * time.Millisecond)
+	tc.now = func() time.Time { return time.Now().Add(longCacheTTL + time.Minute) }
 	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, atomic.LoadInt32(&client.baseAnimeCalls), "expected the stale entry to trigger a fresh network call")
+	require.EqualValues(t, 2, atomic.LoadInt32(&client.baseAnimeCalls), "a stale title must be refetched")
+}
+
+func TestCacheLayerSharesTitlesAcrossProfiles(t *testing.T) {
+	installTestTitleCache(t)
+	first := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	second := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	id := 1
+
+	_, err := newTestCacheLayer(t, first).BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	_, err = newTestCacheLayer(t, second).BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, atomic.LoadInt32(&second.baseAnimeCalls), "another profile's lookup must be served from the shared cache")
+}
+
+func TestCacheLayerServesStaleTitleWhenAniListDown(t *testing.T) {
+	tc := installTestTitleCache(t)
+	tc.PutAnime(&anilist.BaseAnime{ID: 1})
+	tc.now = func() time.Time { return time.Now().Add(longCacheTTL + time.Minute) }
+	client := &cacheLayerTestClient{cacheDir: t.TempDir(), baseAnimeErr: errors.New("anilist down")}
+	cacheLayer := newTestCacheLayer(t, client)
+	id := 1
+
+	res, err := cacheLayer.BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.Equal(t, 1, res.GetMedia().ID)
+
+	IsWorking.Store(false)
+	res, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.Equal(t, 1, res.GetMedia().ID)
+}
+
+func TestCacheLayerSkipsTitleCacheWhenCachingDisabled(t *testing.T) {
+	tc := installTestTitleCache(t)
+	tc.PutAnime(&anilist.BaseAnime{ID: 1})
+	client := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	cacheLayer := newTestCacheLayer(t, client)
+	ShouldCache.Store(false)
+	id, other := 1, 2
+
+	_, err := cacheLayer.BaseAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, atomic.LoadInt32(&client.baseAnimeCalls), "disabled caching must not serve from the title cache")
+
+	_, err = cacheLayer.BaseAnimeByID(context.Background(), &other)
+	require.NoError(t, err)
+	_, _, ok := tc.GetAnime(other)
+	require.False(t, ok, "disabled caching must not save to the title cache")
 }
 
 // TestCacheLayerSurfacesNetworkErrorWhenNoCacheFallback guards a reported bug: when AniList
