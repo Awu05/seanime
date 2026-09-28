@@ -1,27 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { discoverAnimeVariables, discoverMangaVariables, getPreviousSeason, getSeason } from "./discover-variables"
-
-describe("getSeason", () => {
-    it.each([
-        [0, "WINTER"],
-        [3, "SPRING"],
-        [6, "SUMMER"],
-        [9, "FALL"],
-        [11, "FALL"],
-    ] as const)("month index %i is %s", (month, season) => {
-        expect(getSeason(new Date(2026, month, 15))).toEqual({ season, year: 2026 })
-    })
-})
-
-describe("getPreviousSeason", () => {
-    it("wraps winter back to the previous year's fall", () => {
-        expect(getPreviousSeason(new Date(2026, 0, 15))).toEqual({ season: "FALL", year: 2025 })
-    })
-
-    it("stays in the same year otherwise", () => {
-        expect(getPreviousSeason(new Date(2026, 4, 15))).toEqual({ season: "WINTER", year: 2026 })
-    })
-})
+import { discoverAnimeVariables, discoverMangaVariables } from "./discover-variables"
 
 describe("discoverAnimeVariables", () => {
     const summer = new Date(2026, 7, 1)
@@ -40,6 +18,14 @@ describe("discoverAnimeVariables", () => {
 
     it("ranks last season by score", () => {
         expect(discoverAnimeVariables("pastSeason", [], summer)).toEqual({ sort: ["SCORE_DESC"], season: "SPRING", seasonYear: 2026 })
+    })
+
+    it("wraps last season in January back to the previous year's fall", () => {
+        expect(discoverAnimeVariables("pastSeason", [], new Date(2026, 0, 15))).toMatchObject({ season: "FALL", seasonYear: 2025 })
+    })
+
+    it("uses the current year for this season in December", () => {
+        expect(discoverAnimeVariables("thisSeason", [], new Date(2026, 11, 20))).toMatchObject({ season: "FALL", seasonYear: 2026 })
     })
 
     it("lists upcoming titles by trend", () => {
