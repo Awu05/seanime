@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"seanime/internal/api/anilist"
 	"seanime/internal/core"
 	"seanime/internal/imagecache"
+	"seanime/internal/platforms/shared_platform"
 	"seanime/internal/util"
 	"seanime/internal/util/diskstore"
 	"testing"
@@ -22,7 +24,26 @@ func newOfflineCopiesHandler(t *testing.T, multiUser bool) *Handler {
 	require.NoError(t, err)
 	images, err := imagecache.New(t.TempDir(), imagecache.DefaultMaxMB, logger)
 	require.NoError(t, err)
-	return &Handler{App: &core.App{Logger: logger, MultiUserEnabled: multiUser, EpisodeInfoStore: episodeInfo, ImageCache: images}}
+	titles, err := shared_platform.NewTitleCache(t.TempDir(), 1<<30, logger)
+	require.NoError(t, err)
+	return &Handler{App: &core.App{Logger: logger, MultiUserEnabled: multiUser, EpisodeInfoStore: episodeInfo, ImageCache: images, TitleCache: titles}}
+}
+
+// Saved title records live under offline-copies too, so the card must count and clear them.
+func TestOfflineCopiesIncludeTitleCache(t *testing.T) {
+	h := newOfflineCopiesHandler(t, false)
+	h.App.TitleCache.PutAnime(&anilist.BaseAnime{ID: 1})
+	require.Positive(t, h.App.TitleCache.Size())
+
+	c, rec := offlineCopiesContext(http.MethodGet, "/api/v1/filecache/offline-copies", nil, false)
+	require.NoError(t, h.HandleGetOfflineCopies(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotContains(t, rec.Body.String(), `"totalSize":"0 B"`)
+
+	c, rec = offlineCopiesContext(http.MethodDelete, "/api/v1/filecache/offline-copies", nil, false)
+	require.NoError(t, h.HandleClearOfflineCopies(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Zero(t, h.App.TitleCache.Size())
 }
 
 func offlineCopiesContext(method, path string, body []byte, isAdmin bool) (echo.Context, *httptest.ResponseRecorder) {

@@ -2921,7 +2921,7 @@ export type MemoryStatsResponse = {
  * - Filename: filecache.go
  * - Package: handlers
  * @description
- *  OfflineCopiesInfo describes the saved episode info and images that keep the library complete
+ *  OfflineCopiesInfo describes the saved episode info, title records and images that keep the library complete
  *  during an outage.
  */
 export type OfflineCopiesInfo = {

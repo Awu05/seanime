@@ -5876,7 +5876,7 @@
     "comments": [
       "HandleGetOfflineCopies",
       "",
-      "\t@summary returns the size of saved episode info and images, and the image cache limit.",
+      "\t@summary returns the size of saved episode info, title records and images, and the image cache limit.",
       "\t@route /api/v1/filecache/offline-copies [GET]",
       "\t@returns handlers.OfflineCopiesInfo",
       ""
@@ -5884,7 +5884,7 @@
     "filepath": "internal/handlers/filecache.go",
     "filename": "filecache.go",
     "api": {
-      "summary": "returns the size of saved episode info and images, and the image cache limit.",
+      "summary": "returns the size of saved episode info, title records and images, and the image cache limit.",
       "descriptions": [],
       "endpoint": "/api/v1/filecache/offline-copies",
       "methods": [
@@ -5943,7 +5943,7 @@
     "comments": [
       "HandleClearOfflineCopies",
       "",
-      "\t@summary deletes all saved episode info and images.",
+      "\t@summary deletes all saved episode info, title records and images.",
       "\t@route /api/v1/filecache/offline-copies [DELETE]",
       "\t@returns bool",
       ""
@@ -5951,7 +5951,7 @@
     "filepath": "internal/handlers/filecache.go",
     "filename": "filecache.go",
     "api": {
-      "summary": "deletes all saved episode info and images.",
+      "summary": "deletes all saved episode info, title records and images.",
       "descriptions": [],
       "endpoint": "/api/v1/filecache/offline-copies",
       "methods": [

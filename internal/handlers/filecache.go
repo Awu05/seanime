@@ -119,7 +119,7 @@ func respondAdminRequired(c echo.Context) error {
 	return c.JSON(http.StatusForbidden, map[string]string{"error": "Admin access required"})
 }
 
-// OfflineCopiesInfo describes the saved episode info and images that keep the library complete
+// OfflineCopiesInfo describes the saved episode info, title records and images that keep the library complete
 // during an outage.
 type OfflineCopiesInfo struct {
 	TotalSize       string `json:"totalSize"`
@@ -128,14 +128,14 @@ type OfflineCopiesInfo struct {
 
 // HandleGetOfflineCopies
 //
-//	@summary returns the size of saved episode info and images, and the image cache limit.
+//	@summary returns the size of saved episode info, title records and images, and the image cache limit.
 //	@route /api/v1/filecache/offline-copies [GET]
 //	@returns handlers.OfflineCopiesInfo
 func (h *Handler) HandleGetOfflineCopies(c echo.Context) error {
 	if !h.canManageSharedCaches(c) {
 		return respondAdminRequired(c)
 	}
-	size := h.App.EpisodeInfoStore.Size() + h.App.ImageCache.Size()
+	size := h.App.EpisodeInfoStore.Size() + h.App.ImageCache.Size() + h.App.TitleCache.Size()
 	return h.RespondWithData(c, OfflineCopiesInfo{
 		TotalSize:       util.Bytes(uint64(size)),
 		ImageCacheMaxMB: h.App.ImageCache.MaxMB(),
@@ -170,7 +170,7 @@ func (h *Handler) HandleSetImageCacheLimit(c echo.Context) error {
 
 // HandleClearOfflineCopies
 //
-//	@summary deletes all saved episode info and images.
+//	@summary deletes all saved episode info, title records and images.
 //	@route /api/v1/filecache/offline-copies [DELETE]
 //	@returns bool
 func (h *Handler) HandleClearOfflineCopies(c echo.Context) error {
@@ -184,6 +184,9 @@ func (h *Handler) HandleClearOfflineCopies(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 	if err := h.App.ImageCache.Clear(); err != nil {
+		return h.RespondWithError(c, err)
+	}
+	if err := h.App.TitleCache.Clear(); err != nil {
 		return h.RespondWithError(c, err)
 	}
 	return h.RespondWithData(c, true)

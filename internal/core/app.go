@@ -154,6 +154,8 @@ type (
 		EpisodeInfoStore *diskstore.Store
 		// ImageCache keeps images available during outages; served at /api/v1/image-cache.
 		ImageCache *imagecache.Cache
+		// TitleCache keeps AniList title records shared by every profile; see shared_platform.
+		TitleCache *shared_platform.TitleCache
 
 		// Integrations
 		DiscordPresence *discordrpc_presence.Presence
@@ -213,6 +215,9 @@ type (
 
 // episodeInfoMaxBytes caps saved episode info: one small file per title, roughly 2,000-10,000 titles.
 const episodeInfoMaxBytes = 150 << 20
+
+// titleCacheMaxBytes caps saved AniList title records, roughly 25,000 titles.
+const titleCacheMaxBytes = 100 << 20
 
 // OfflineCopiesDirName is the cache subdirectory holding saved episode info and cached images,
 // excluded from the regular file cache's reported size since it has its own "Offline copies" card.
@@ -338,6 +343,13 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	if err != nil {
 		logger.Fatal().Err(err).Msgf("app: Failed to initialize image cache")
 	}
+
+	// Shared AniList title records, filled from bulk results so single-title lookups skip AniList
+	titleCache, err := shared_platform.NewTitleCache(filepath.Join(cfg.Cache.Dir, OfflineCopiesDirName, "titles"), titleCacheMaxBytes, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msgf("app: Failed to initialize title cache")
+	}
+	shared_platform.SetTitleCache(titleCache)
 
 	// Initialize the extension bank that will be shared across modules
 	extensionBankRef := util.NewRef(extension.NewUnifiedBank())
@@ -470,6 +482,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		FileCacher:                    fileCacher,
 		EpisodeInfoStore:              episodeInfoStore,
 		ImageCache:                    imageCache,
+		TitleCache:                    titleCache,
 		OnlinestreamRepository:        onlinestreamRepository,
 		MetadataProviderRef:           metadataProviderRef,
 		MangaRepository:               mangaRepository,
