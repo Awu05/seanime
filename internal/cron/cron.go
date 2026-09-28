@@ -30,7 +30,10 @@ func RunJobs(app *core.App) {
 					continue
 				}
 				RefreshAnilistDataJob(ctx)
-				app.SyncAnilistToSimulatedCollection()
+				// The local account backup and offline sync only serve the main account.
+				if !app.MultiUserEnabled {
+					app.SyncAnilistToSimulatedCollection()
+				}
 			}
 		}
 	}()
@@ -51,7 +54,7 @@ func RunJobs(app *core.App) {
 		for {
 			select {
 			case <-refreshLocalDataTicker.C:
-				if app.IsOffline() {
+				if app.IsOffline() || app.MultiUserEnabled {
 					continue
 				}
 				SyncLocalDataJob(ctx)

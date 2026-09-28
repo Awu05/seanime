@@ -127,6 +127,9 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 
 	h.App.MultiUserEnabled = true
 	h.App.Logger.Info().Msg("app: Admin account created")
+	if h.App.IsOffline() {
+		h.App.SetOfflineMode(false)
+	}
 
 	// Log the new admin in immediately so they don't have to retype the
 	// credentials they just created.

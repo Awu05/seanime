@@ -289,6 +289,10 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 	// Clean up old database entries using the cleanup manager to prevent concurrent access issues
 	database.RunDatabaseCleanup() // Remove old entries from all tables sequentially
 
+	// Must run before cfg.Server.Offline picks the platform below; MultiUserEnabled is only set later.
+	adminExists, _ := database.AdminExists()
+	ignoreOfflineModeWithProfiles(cfg, adminExists, logger)
+
 	// Get anime library paths for plugin context
 	animeLibraryPaths, _ := database.GetAllLibraryPathsFromSettings()
 	plugin.GlobalAppContext.SetModulesPartial(plugin.AppContextModules{
