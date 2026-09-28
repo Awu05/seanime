@@ -11,7 +11,6 @@ import (
 	"seanime/internal/events"
 	"seanime/internal/util"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -327,68 +326,6 @@ func (ac *AnilistClientImpl) AnimeAiringScheduleRaw(ctx context.Context, ids []*
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type requestRateBlocker interface {
-	Wait(ctx context.Context, sleep requestSleepFunc) error
-	BlockUntil(until time.Time) bool
-}
-
-type requestSleepFunc func(ctx context.Context, delay time.Duration) error
-
-type aniListRateBlocker struct {
-	mu           sync.Mutex
-	blockedUntil time.Time
-	now          func() time.Time
-}
-
-func newAniListRateBlocker() *aniListRateBlocker {
-	return &aniListRateBlocker{now: time.Now}
-}
-
-func (b *aniListRateBlocker) Wait(ctx context.Context, sleep requestSleepFunc) error {
-	if sleep == nil {
-		sleep = sleepWithContext
-	}
-
-	for {
-		b.mu.Lock()
-		blockedUntil := b.blockedUntil
-		now := b.currentTime()
-		b.mu.Unlock()
-
-		if blockedUntil.IsZero() || !now.Before(blockedUntil) {
-			return nil
-		}
-
-		if err := sleep(ctx, blockedUntil.Sub(now)); err != nil {
-			return err
-		}
-	}
-}
-
-func (b *aniListRateBlocker) BlockUntil(until time.Time) bool {
-	if until.IsZero() {
-		return false
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	now := b.currentTime()
-	if !until.After(now) || !until.After(b.blockedUntil) {
-		return false
-	}
-
-	b.blockedUntil = until
-	return true
-}
-
-func (b *aniListRateBlocker) currentTime() time.Time {
-	if b.now != nil {
-		return b.now()
-	}
-	return time.Now()
-}
-
 func parseResponseDate(headers http.Header) (time.Time, bool) {
 	raw := headers.Get("Date")
 	if raw == "" {
@@ -458,14 +395,14 @@ func getRetryWindow(resp *http.Response, remaining string) (time.Time, time.Time
 }
 
 var (
-	sentRateLimitWarningTime                    = time.Now().Add(-10 * time.Second)
-	sharedAniListRateBlocker requestRateBlocker = newAniListRateBlocker()
+	sentRateLimitWarningTime              = time.Now().Add(-10 * time.Second)
+	sharedAniListPacer       requestPacer = newAniListPacer()
 )
 
 func doAniListRequestWithRetries(
 	client *http.Client,
 	req *http.Request,
-	rateBlocker requestRateBlocker,
+	pacer requestPacer,
 	sleep requestSleepFunc,
 	onRateLimited func(waitSeconds int),
 ) (resp *http.Response, rlRemainingStr string, err error) {
@@ -483,8 +420,8 @@ func doAniListRequestWithRetries(
 			return nil, rlRemainingStr, err
 		}
 
-		if rateBlocker != nil {
-			if err := rateBlocker.Wait(req.Context(), sleep); err != nil {
+		if pacer != nil {
+			if err := pacer.Wait(req.Context(), sleep); err != nil {
 				return nil, rlRemainingStr, err
 			}
 		}
@@ -507,12 +444,15 @@ func doAniListRequestWithRetries(
 		}
 
 		rlRemainingStr = resp.Header.Get("X-Ratelimit-Remaining")
+		if pacer != nil {
+			pacer.Observe(resp.Header)
+		}
 		responseTime, resetAt, shouldRetry := getRetryWindow(resp, rlRemainingStr)
 		if !shouldRetry {
 			return resp, rlRemainingStr, nil
 		}
 
-		if rateBlocker == nil || rateBlocker.BlockUntil(resetAt) {
+		if pacer == nil || pacer.BlockUntil(resetAt) {
 			if onRateLimited != nil {
 				waitSeconds := int(resetAt.Sub(responseTime).Round(time.Second) / time.Second)
 				if waitSeconds < 1 {
@@ -592,7 +532,7 @@ func (ac *AnilistClientImpl) customDoFunc(ctx context.Context, req *http.Request
 	resp, rlRemainingStr, err = doAniListRequestWithRetries(
 		alHttpClient(),
 		req,
-		sharedAniListRateBlocker,
+		sharedAniListPacer,
 		sleepWithContext,
 		func(waitSeconds int) {
 			notifyAniListRateLimit(ac.logger, waitSeconds)

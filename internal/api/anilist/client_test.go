@@ -164,7 +164,7 @@ func TestListAnime(t *testing.T) {
 
 func TestDoAniListRequestWithRetriesWaitsBetweenRateLimitedAttempts(t *testing.T) {
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)}
-	rateBlocker := newAniListRateBlocker()
+	rateBlocker := newAniListPacer()
 	rateBlocker.now = clock.Now
 	requestBody := `{"query":"test"}`
 	requestBodies := make([]string, 0, 2)
@@ -270,7 +270,7 @@ func TestDoAniListRequestWithRetriesHeaders(t *testing.T) {
 	resp, remaining, err := doAniListRequestWithRetries(
 		client,
 		req,
-		newAniListRateBlocker(),
+		newAniListPacer(),
 		nil,
 		func(int) {
 			warnings++
@@ -287,7 +287,7 @@ func TestDoAniListRequestWithRetriesHeaders(t *testing.T) {
 
 func TestDoAniListRequestWithRetriesExhaustsRetries(t *testing.T) {
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)}
-	rateBlocker := newAniListRateBlocker()
+	rateBlocker := newAniListPacer()
 	rateBlocker.now = clock.Now
 	requestBody := `{"query":"test"}`
 	attempt := 0
@@ -347,10 +347,10 @@ func TestUseCustomAPIUsesRuntimeConfig(t *testing.T) {
 	assert.True(t, NewAnilistClient("", t.TempDir()).IsAuthenticated())
 }
 
-func TestAniListRateBlockerWaitsUntilBlockExpires(t *testing.T) {
+func TestPacerWaitsUntilBlockExpires(t *testing.T) {
 	// once blocked, later requests should wait until the shared block expires.
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 10, 0, time.UTC)}
-	rateBlocker := newAniListRateBlocker()
+	rateBlocker := newAniListPacer()
 	rateBlocker.now = clock.Now
 	require.True(t, rateBlocker.BlockUntil(clock.Now().Add(18*time.Second)))
 
@@ -365,10 +365,10 @@ func TestAniListRateBlockerWaitsUntilBlockExpires(t *testing.T) {
 	assert.Equal(t, []time.Duration{18 * time.Second}, sleepDurations)
 }
 
-func TestAniListRateBlockerIgnoresDuplicateOrShorterBlocks(t *testing.T) {
+func TestPacerIgnoresDuplicateOrShorterBlocks(t *testing.T) {
 	// concurrent 429s with the same reset should not re-announce the same block repeatedly.
 	clock := &testClock{now: time.Date(2026, time.April, 7, 12, 0, 20, 0, time.UTC)}
-	rateBlocker := newAniListRateBlocker()
+	rateBlocker := newAniListPacer()
 	rateBlocker.now = clock.Now
 	blockedUntil := clock.Now().Add(18 * time.Second)
 

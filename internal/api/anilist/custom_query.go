@@ -79,7 +79,7 @@ func customQuery(body []byte, logger *zerolog.Logger, token ...string) (data int
 	resp, rlRemainingStr, err = doAniListRequestWithRetries(
 		alHttpClient(),
 		req,
-		sharedAniListRateBlocker,
+		sharedAniListPacer,
 		sleepWithContext,
 		func(waitSeconds int) {
 			notifyAniListRateLimit(logger, waitSeconds)
