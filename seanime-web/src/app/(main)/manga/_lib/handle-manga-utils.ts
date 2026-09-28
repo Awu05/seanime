@@ -37,7 +37,7 @@ export function useMangaReaderUtils() {
         let expiresAt = 0
         const sign = async () => {
             if (expiresAt - Date.now() > HMAC_TOKEN_REFRESH_WINDOW_MS) return
-            expiresAt = Date.now() + HMAC_TOKEN_TTL_SECONDS * 1000
+            const signedAt = Date.now()
             const [proxyToken, localToken] = await Promise.all([
                 getHMACTokenQueryParam("/api/v1/image-proxy", "&"),
                 getHMACTokenQueryParam("/api/v1/manga/local-page", "?"),
@@ -45,6 +45,8 @@ export function useMangaReaderUtils() {
             if (cancelled) return
             setTokenQueryParam(proxyToken)
             setLocalPageToken(localToken)
+            // An empty token means signing failed (or no password is set), so try again next minute.
+            if (proxyToken && localToken) expiresAt = signedAt + HMAC_TOKEN_TTL_SECONDS * 1000
         }
         sign()
         // Re-signs before expiry so a reader left open keeps loading pages. Checked every minute
