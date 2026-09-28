@@ -3,7 +3,7 @@ import { AnilistListAnime_Variables, AnilistListManga_Variables } from "@/api/ge
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import { AL_ListAnime, AL_ListManga } from "@/api/generated/types"
 import { serverAuthTokenAtom } from "@/app/(main)/_atoms/server-status.atoms"
-import { MediaCardGrid } from "@/app/(main)/_features/media/_components/media-card-grid"
+import { MediaCardLazyGrid } from "@/app/(main)/_features/media/_components/media-card-grid"
 import { MediaEntryCard } from "@/app/(main)/_features/media/_components/media-entry-card"
 import { DiscoverAnimeList, discoverMangaVariables } from "@/app/(main)/discover/_lib/discover-variables"
 import { __discover_trendingMangaGenresAtom, useDiscoverAnimeVariables } from "@/app/(main)/discover/_lib/handle-discover-queries"
@@ -17,12 +17,13 @@ import React from "react"
 
 const PAGE_SIZE = 48
 // Matches the server's AniList list cache, so reopening a modal doesn't refetch every loaded page.
-const STALE_TIME = 1000 * 60 * 10
+const CACHE_TIME = 1000 * 60 * 10
 
 export function DiscoverViewAllAnime({ list }: { list: DiscoverAnimeList }) {
+    const variables = useDiscoverAnimeVariables(list)
     return <InfiniteMediaGrid
         endpoint={API_ENDPOINTS.ANILIST.AnilistListAnime.endpoint}
-        variables={useDiscoverAnimeVariables(list)}
+        variables={variables}
         getMedia={(page: AL_ListAnime | undefined) => page?.Page?.media}
         renderItem={media => <MediaEntryCard key={media.id} media={media} type="anime" showLibraryBadge showTrailer showPreviewButton />}
     />
@@ -60,34 +61,41 @@ function InfiniteMediaGrid<T extends AL_ListAnime | AL_ListManga, M extends { id
             password,
         }),
         getNextPageParam: (lastPage, _, lastPageParam) => lastPage?.Page?.pageInfo?.hasNextPage ? lastPageParam + 1 : undefined,
-        staleTime: STALE_TIME,
-        gcTime: STALE_TIME,
+        staleTime: CACHE_TIME,
+        gcTime: CACHE_TIME,
     })
-
-    // The modal scrolls inside its own container, where an observer margin has no effect, so the
-    // sentinel itself is tall: it enters the viewport once the user is within 600px of the end.
-    const endRef = React.useRef<HTMLDivElement>(null)
-    const nearEnd = useInView(endRef)
-    React.useEffect(() => {
-        if (nearEnd && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) fetchNextPage()
-    }, [nearEnd, hasNextPage, isFetchingNextPage, isFetchNextPageError])
-
-    // Rankings can shift between page requests, so the same title may come back on two pages.
-    const media = React.useMemo(() => uniqBy(data?.pages.flatMap(page => getMedia(page) ?? []).filter(Boolean) ?? [], "id"), [data])
 
     if (!data) return isError && !isFetching ? <RetryMessage message="Couldn't load titles" onRetry={() => refetch()} /> : <LoadingSpinner />
 
+    // Rankings can shift between page requests, so the same title may come back on two pages.
+    const media = uniqBy(data.pages.flatMap(page => getMedia(page) ?? []).filter(Boolean), "id")
+
     return (
         <>
-            <MediaCardGrid maxCol={5}>
+            <MediaCardLazyGrid itemCount={media.length} maxCol={5}>
                 {media.map(renderItem)}
-            </MediaCardGrid>
-            <div className="relative">
-                <div ref={endRef} className="absolute bottom-0 h-[600px] w-full pointer-events-none" />
-            </div>
+            </MediaCardLazyGrid>
+            <LoadMoreSentinel enabled={hasNextPage && !isFetchingNextPage && !isFetchNextPageError} onReach={fetchNextPage} />
             {isFetchingNextPage && <LoadingSpinner />}
             {isFetchNextPageError && !isFetchingNextPage && <RetryMessage message="Couldn't load more titles" onRetry={() => fetchNextPage()} />}
         </>
+    )
+}
+
+// Its own component so the observer attaches when the grid first renders; useInView doesn't
+// re-attach to an element that mounts later. The modal scrolls inside its own container, where an
+// observer margin has no effect, so the sentinel is tall instead: it's in view within 600px of the end.
+function LoadMoreSentinel({ enabled, onReach }: { enabled: boolean, onReach: () => void }) {
+    const ref = React.useRef<HTMLDivElement>(null)
+    const inView = useInView(ref)
+    React.useEffect(() => {
+        if (inView && enabled) onReach()
+    }, [inView, enabled])
+
+    return (
+        <div className="relative">
+            <div ref={ref} className="absolute bottom-0 h-[600px] w-full pointer-events-none" />
+        </div>
     )
 }
 

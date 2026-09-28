@@ -20,26 +20,31 @@ const GENRE_ATOMS: Partial<Record<DiscoverAnimeList, typeof noGenresAtom>> = {
 
 // The row's query including its selected genre, so "View all" lists what the row shows.
 export function useDiscoverAnimeVariables(list: DiscoverAnimeList) {
-    return discoverAnimeVariables(list, useAtomValue(GENRE_ATOMS[list] ?? noGenresAtom))
+    const genres = useAtomValue(GENRE_ATOMS[list] ?? noGenresAtom)
+    return discoverAnimeVariables(list, genres)
 }
 
 export function useDiscoverTrendingAnime() {
-    return useAnilistListAnime({ ...ROW_PAGE, ...useDiscoverAnimeVariables("trending") }, true)
+    const variables = useDiscoverAnimeVariables("trending")
+    return useAnilistListAnime({ ...ROW_PAGE, ...variables }, true)
 }
 
 export function useDiscoverCurrentSeasonAnime(ref: any) {
     const isInView = useInView(ref, { once: true })
-    return useAnilistListAnime({ ...ROW_PAGE, ...useDiscoverAnimeVariables("thisSeason") }, isInView)
+    const variables = useDiscoverAnimeVariables("thisSeason")
+    return useAnilistListAnime({ ...ROW_PAGE, ...variables }, isInView)
 }
 
 export function useDiscoverPastSeasonAnime(ref: any) {
     const isInView = useInView(ref, { once: true })
-    return useAnilistListAnime({ ...ROW_PAGE, ...useDiscoverAnimeVariables("pastSeason") }, isInView)
+    const variables = useDiscoverAnimeVariables("pastSeason")
+    return useAnilistListAnime({ ...ROW_PAGE, ...variables }, isInView)
 }
 
 export function useDiscoverUpcomingAnime(ref: any) {
     const isInView = useInView(ref, { once: true })
-    return useAnilistListAnime({ ...ROW_PAGE, ...useDiscoverAnimeVariables("upcoming") }, isInView)
+    const variables = useDiscoverAnimeVariables("upcoming")
+    return useAnilistListAnime({ ...ROW_PAGE, ...variables }, isInView)
 }
 
 export function useDiscoverPopularAnime(ref: any) {
@@ -52,5 +57,6 @@ export function useDiscoverPopularAnime(ref: any) {
 
 export function useDiscoverTrendingMovies(ref: any) {
     const isInView = useInView(ref, { once: true })
-    return useAnilistListAnime({ ...ROW_PAGE, ...useDiscoverAnimeVariables("trendingMovies") }, isInView)
+    const variables = useDiscoverAnimeVariables("trendingMovies")
+    return useAnilistListAnime({ ...ROW_PAGE, ...variables }, isInView)
 }
