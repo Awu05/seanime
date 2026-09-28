@@ -33,7 +33,7 @@ type InfiniteMediaGridProps =
 function InfiniteMediaGrid({ type, variables }: InfiniteMediaGridProps) {
     const password = useAtomValue(serverAuthTokenAtom)
 
-    const { data, isPending, isError, isFetchNextPageError, hasNextPage, isFetchingNextPage, fetchNextPage, refetch } = useInfiniteQuery({
+    const { data, isError, isFetching, isFetchNextPageError, hasNextPage, isFetchingNextPage, fetchNextPage, refetch } = useInfiniteQuery({
         queryKey: ["discover-view-all", type, variables],
         initialPageParam: 1,
         queryFn: ({ pageParam }) => buildSeaQuery<AL_ListAnime | AL_ListManga>({
@@ -42,21 +42,21 @@ function InfiniteMediaGrid({ type, variables }: InfiniteMediaGridProps) {
             data: { ...variables, page: pageParam, perPage: PAGE_SIZE },
             password,
         }),
-        getNextPageParam: lastPage => lastPage?.Page?.pageInfo?.hasNextPage ? (lastPage.Page.pageInfo.currentPage ?? 0) + 1 : undefined,
+        getNextPageParam: (lastPage, _, lastPageParam) => lastPage?.Page?.pageInfo?.hasNextPage ? lastPageParam + 1 : undefined,
     })
 
-    // Loads the next page as the bottom of the list comes near the viewport.
+    // The modal scrolls inside its own container, where an observer margin has no effect, so the
+    // sentinel itself is tall: it enters the viewport once the user is within 600px of the end.
     const endRef = React.useRef<HTMLDivElement>(null)
-    const nearEnd = useInView(endRef, { margin: "0px 0px 600px 0px" })
+    const nearEnd = useInView(endRef)
     React.useEffect(() => {
         if (nearEnd && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) fetchNextPage()
     }, [nearEnd, hasNextPage, isFetchingNextPage, isFetchNextPageError])
 
     // Rankings can shift between page requests, so the same title may come back on two pages.
-    const media = React.useMemo(() => uniqBy(data?.pages.flatMap(page => page?.Page?.media ?? []) ?? [], "id"), [data])
+    const media = React.useMemo(() => uniqBy(data?.pages.flatMap(page => page?.Page?.media ?? []).filter(Boolean) ?? [], "id"), [data])
 
-    if (isPending) return <LoadingSpinner />
-    if (isError && !data) return <RetryMessage message="Couldn't load titles" onRetry={() => refetch()} />
+    if (!data) return isError && !isFetching ? <RetryMessage message="Couldn't load titles" onRetry={() => refetch()} /> : <LoadingSpinner />
 
     return (
         <>
@@ -65,9 +65,11 @@ function InfiniteMediaGrid({ type, variables }: InfiniteMediaGridProps) {
                     ? <MediaEntryCard key={item.id} media={item as AL_BaseAnime} type="anime" showLibraryBadge showTrailer showPreviewButton />
                     : <MediaEntryCard key={item.id} media={item as AL_BaseManga} type="manga" showPreviewButton />)}
             </MediaCardGrid>
-            <div ref={endRef} />
+            <div className="relative">
+                <div ref={endRef} className="absolute bottom-0 h-[600px] w-full pointer-events-none" />
+            </div>
             {isFetchingNextPage && <LoadingSpinner />}
-            {isFetchNextPageError && <RetryMessage message="Couldn't load more titles" onRetry={() => fetchNextPage()} />}
+            {isFetchNextPageError && !isFetchingNextPage && <RetryMessage message="Couldn't load more titles" onRetry={() => fetchNextPage()} />}
         </>
     )
 }

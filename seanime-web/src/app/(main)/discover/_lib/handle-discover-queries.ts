@@ -11,14 +11,16 @@ export const __discover_trendingMangaGenresAtom = atom<string[]>([])
 
 const ROW_PAGE = { page: 1, perPage: 20 }
 
+const noGenresAtom = atom<string[]>([])
+const GENRE_ATOMS: Partial<Record<DiscoverAnimeList, typeof noGenresAtom>> = {
+    trending: __discover_trendingGenresAtom,
+    thisSeason: __discover_currentSeasonGenresAtom,
+    pastSeason: __discover_pastSeasonGenresAtom,
+}
+
 // The row's query including its selected genre, so "View all" lists what the row shows.
 export function useDiscoverAnimeVariables(list: DiscoverAnimeList) {
-    const genresByList: Partial<Record<DiscoverAnimeList, string[]>> = {
-        trending: useAtomValue(__discover_trendingGenresAtom),
-        thisSeason: useAtomValue(__discover_currentSeasonGenresAtom),
-        pastSeason: useAtomValue(__discover_pastSeasonGenresAtom),
-    }
-    return discoverAnimeVariables(list, genresByList[list] ?? [])
+    return discoverAnimeVariables(list, useAtomValue(GENRE_ATOMS[list] ?? noGenresAtom))
 }
 
 export function useDiscoverTrendingAnime() {

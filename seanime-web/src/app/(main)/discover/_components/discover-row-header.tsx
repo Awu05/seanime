@@ -11,7 +11,7 @@ export function DiscoverRowHeader({ title, children }: { title: string, children
         <>
             <div className="flex items-center gap-3" data-discover-row-header>
                 <h2>{title}</h2>
-                <Button intent="gray-link" size="sm" onClick={() => setOpen(true)}>View all</Button>
+                <Button intent="gray-link" size="sm" aria-label={`View all ${title}`} onClick={() => setOpen(true)}>View all</Button>
             </div>
             <Modal open={open} onOpenChange={setOpen} title={title} contentClass="max-w-7xl">
                 {children}

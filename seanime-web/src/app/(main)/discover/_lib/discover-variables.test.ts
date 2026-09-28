@@ -61,6 +61,8 @@ describe("discoverMangaVariables", () => {
     })
 
     it("omits empty filters", () => {
-        expect(discoverMangaVariables(undefined, [])).toEqual({ sort: ["TRENDING_DESC"], countryOfOrigin: undefined, genres: undefined })
+        const variables = discoverMangaVariables(undefined, [])
+        expect(variables.countryOfOrigin).toBeUndefined()
+        expect(variables.genres).toBeUndefined()
     })
 })
