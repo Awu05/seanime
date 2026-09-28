@@ -132,7 +132,6 @@ const (
 	MangaCollectionBucket          = "manga-collection"
 	MangaCollectionTagsBucket      = "manga-collection-tags"
 	BaseAnimeMalBucket             = "base-anime-mal"
-	CompleteAnimeBucket            = "complete-anime"
 	AnimeDetailsBucket             = "anime-details"
 	MangaDetailsBucket             = "manga-details"
 	ViewerBucket                   = "viewer"
@@ -233,6 +232,7 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	// Title records moved to the shared TitleCache; these per-profile files are no longer read.
 	_ = fileCacher.Remove("base-anime")
 	_ = fileCacher.Remove("base-manga")
+	_ = fileCacher.Remove("complete-anime")
 
 	buckets := make(map[string]filecache.PermanentBucket)
 	buckets[AnimeCollectionBucket] = filecache.NewPermanentBucket(AnimeCollectionBucket)
@@ -241,7 +241,6 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	buckets[MangaCollectionBucket] = filecache.NewPermanentBucket(MangaCollectionBucket)
 	buckets[MangaCollectionTagsBucket] = filecache.NewPermanentBucket(MangaCollectionTagsBucket)
 	buckets[BaseAnimeMalBucket] = filecache.NewPermanentBucket(BaseAnimeMalBucket)
-	buckets[CompleteAnimeBucket] = filecache.NewPermanentBucket(CompleteAnimeBucket)
 	buckets[AnimeDetailsBucket] = filecache.NewPermanentBucket(AnimeDetailsBucket)
 	buckets[MangaDetailsBucket] = filecache.NewPermanentBucket(MangaDetailsBucket)
 	buckets[ViewerBucket] = filecache.NewPermanentBucket(ViewerBucket)
@@ -264,7 +263,6 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 		MangaCollectionBucket:          collectionCacheTTL,
 		MangaCollectionTagsBucket:      mediumCacheTTL,
 		BaseAnimeMalBucket:             longCacheTTL,
-		CompleteAnimeBucket:            longCacheTTL,
 		AnimeDetailsBucket:             longCacheTTL,
 		MangaDetailsBucket:             longCacheTTL,
 		ViewerBucket:                   mediumCacheTTL,
@@ -776,7 +774,6 @@ func (c *CacheLayer) invalidateMediaCaches(mediaID int) {
 
 	// Delete from all media-specific buckets
 	buckets := []string{
-		CompleteAnimeBucket,
 		AnimeDetailsBucket,
 		MangaDetailsBucket,
 	}
@@ -1032,25 +1029,23 @@ func (c *CacheLayer) SearchBaseAnimeByIds(ctx context.Context, ids []*int, page 
 }
 
 func (c *CacheLayer) CompleteAnimeByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.CompleteAnimeByID, error) {
-	if id == nil {
+	networkFn := func() (*anilist.CompleteAnimeByID, error) {
 		return c.anilistClientRef.Get().CompleteAnimeByID(ctx, id, interceptors...)
 	}
-
-	cacheKey := c.generateCacheKey(id)
-	res, err := networkFirstGet(c, CompleteAnimeBucket, cacheKey, func() (*anilist.CompleteAnimeByID, error) {
-		return c.anilistClientRef.Get().CompleteAnimeByID(ctx, id, interceptors...)
-	})
-
-	// If successful, update bounded cache for non-collection media
-	if err == nil && res != nil {
-		go func() {
-			if err := c.boundedCacheSet(CompleteAnimeBucket, cacheKey, res, *id); err != nil {
-				c.logger.Warn().Err(err).Msg("anilist cache: failed to update bounded cache")
-			}
-		}()
+	if id == nil || !ShouldCache.Load() {
+		return networkFn()
 	}
 
-	return res, err
+	titles := CurrentTitleCache()
+	var cached *anilist.CompleteAnimeByID
+	media, fresh, ok := titles.GetCompleteAnime(*id)
+	if ok {
+		cached = &anilist.CompleteAnimeByID{Media: media}
+	}
+	return titleFirstGet(c, cached, fresh, networkFn,
+		func(res *anilist.CompleteAnimeByID) { titles.PutCompleteAnime(res.GetMedia()) },
+		func() *anilist.CompleteAnimeByID { return nil },
+	)
 }
 
 func (c *CacheLayer) AnimeDetailsByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.AnimeDetailsByID, error) {

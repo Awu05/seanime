@@ -28,6 +28,8 @@ type cacheLayerTestClient struct {
 	baseAnimeCalls      int32
 	baseAnimeErr        error
 	customQueryErr      error
+	completeAnimeCalls  int32
+	completeAnimeErr    error
 }
 
 type cacheLayerUpdateEntryCall struct {
@@ -63,6 +65,14 @@ func (c *cacheLayerTestClient) BaseAnimeByID(_ context.Context, id *int, _ ...cl
 		mediaID = *id
 	}
 	return &anilist.BaseAnimeByID{Media: &anilist.BaseAnime{ID: mediaID}}, nil
+}
+
+func (c *cacheLayerTestClient) CompleteAnimeByID(_ context.Context, id *int, _ ...clientv2.RequestInterceptor) (*anilist.CompleteAnimeByID, error) {
+	atomic.AddInt32(&c.completeAnimeCalls, 1)
+	if c.completeAnimeErr != nil {
+		return nil, c.completeAnimeErr
+	}
+	return &anilist.CompleteAnimeByID{Media: &anilist.CompleteAnime{ID: *id}}, nil
 }
 
 func (c *cacheLayerTestClient) CustomQuery(_ []byte, _ *zerolog.Logger, _ ...string) (interface{}, error) {
@@ -287,15 +297,59 @@ func TestCacheLayerServesFreshTitleWithoutHittingNetwork(t *testing.T) {
 
 func TestNewCacheLayerRemovesRetiredTitleBuckets(t *testing.T) {
 	cacheDir := t.TempDir()
-	for _, name := range []string{"base-anime.cache", "base-manga.cache"} {
+	for _, name := range []string{"base-anime.cache", "base-manga.cache", "complete-anime.cache"} {
 		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, name), []byte("{}"), 0644))
 	}
 
 	newTestCacheLayer(t, &cacheLayerTestClient{cacheDir: cacheDir})
 
-	for _, name := range []string{"base-anime.cache", "base-manga.cache"} {
+	for _, name := range []string{"base-anime.cache", "base-manga.cache", "complete-anime.cache"} {
 		require.NoFileExists(t, filepath.Join(cacheDir, name))
 	}
+}
+
+func TestCacheLayerServesFreshCompleteAnimeWithoutHittingNetwork(t *testing.T) {
+	tc := installTestTitleCache(t)
+	client := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	cacheLayer := newTestCacheLayer(t, client)
+	id := 1
+
+	_, err := cacheLayer.CompleteAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	_, err = cacheLayer.CompleteAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, atomic.LoadInt32(&client.completeAnimeCalls), "a fresh cached record must skip the network")
+
+	tc.now = func() time.Time { return time.Now().Add(longCacheTTL + time.Minute) }
+	_, err = cacheLayer.CompleteAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, atomic.LoadInt32(&client.completeAnimeCalls), "a stale record must be refetched")
+}
+
+func TestCacheLayerSharesCompleteAnimeAcrossProfiles(t *testing.T) {
+	installTestTitleCache(t)
+	first := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	second := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	id := 1
+
+	_, err := newTestCacheLayer(t, first).CompleteAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	_, err = newTestCacheLayer(t, second).CompleteAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, atomic.LoadInt32(&second.completeAnimeCalls))
+}
+
+func TestCacheLayerServesStaleCompleteAnimeWhenAniListDown(t *testing.T) {
+	tc := installTestTitleCache(t)
+	tc.PutCompleteAnime(&anilist.CompleteAnime{ID: 1})
+	tc.now = func() time.Time { return time.Now().Add(longCacheTTL + time.Minute) }
+	client := &cacheLayerTestClient{cacheDir: t.TempDir(), completeAnimeErr: errors.New("anilist down")}
+	cacheLayer := newTestCacheLayer(t, client)
+	id := 1
+
+	res, err := cacheLayer.CompleteAnimeByID(context.Background(), &id)
+	require.NoError(t, err)
+	require.Equal(t, 1, res.GetMedia().ID)
 }
 
 func TestCacheLayerSharesTitlesAcrossProfiles(t *testing.T) {

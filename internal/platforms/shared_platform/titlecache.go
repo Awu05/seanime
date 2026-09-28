@@ -68,6 +68,18 @@ func (tc *TitleCache) PutManga(media ...*anilist.BaseManga) {
 	}
 }
 
+func (tc *TitleCache) GetCompleteAnime(id int) (*anilist.CompleteAnime, bool, bool) {
+	return getTitle[anilist.CompleteAnime](tc, "complete-anime", id)
+}
+
+func (tc *TitleCache) PutCompleteAnime(media ...*anilist.CompleteAnime) {
+	for _, m := range media {
+		if m != nil {
+			putTitle(tc, "complete-anime", m.ID, m)
+		}
+	}
+}
+
 func (tc *TitleCache) Size() int64 {
 	if tc == nil {
 		return 0
