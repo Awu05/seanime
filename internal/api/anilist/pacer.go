@@ -141,7 +141,7 @@ func (p *aniListPacer) Observe(headers http.Header) {
 	}
 	p.refillLocked(p.now())
 	if remaining, err := strconv.Atoi(headers.Get("X-RateLimit-Remaining")); err == nil {
-		p.tokens = max(0, min(p.tokens, float64(remaining-remainingMargin)))
+		p.tokens = min(p.tokens, float64(remaining-remainingMargin))
 	}
 }
 

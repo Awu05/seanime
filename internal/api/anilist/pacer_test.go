@@ -74,6 +74,18 @@ func TestPacerLowersTokensToRemaining(t *testing.T) {
 	require.Equal(t, []time.Duration{2 * time.Second}, delays)
 }
 
+// With nothing left in AniList's window, the pacer stays the margin below it instead of sending at
+// the full rate until AniList refuses.
+func TestPacerDelaysWhenAniListReportsNoneRemaining(t *testing.T) {
+	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
+	p := newTestPacer(clock)
+	p.Observe(rateHeaders("30", "0"))
+	var delays []time.Duration
+
+	require.NoError(t, p.Wait(context.Background(), recordSleep(clock, &delays)))
+	require.Equal(t, []time.Duration{6 * time.Second}, delays)
+}
+
 func TestPacerBackgroundKeepsHalfTheBurstForBrowsing(t *testing.T) {
 	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
 	p := newTestPacer(clock)
@@ -110,5 +122,5 @@ func TestPacerCancelledWaitReturnsContextError(t *testing.T) {
 
 	err := p.Wait(context.Background(), func(context.Context, time.Duration) error { return context.Canceled })
 	require.ErrorIs(t, err, context.Canceled)
-	require.Zero(t, p.tokens)
+	require.Equal(t, -2.0, p.tokens, "a cancelled wait must not take a token")
 }
