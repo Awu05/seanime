@@ -2,6 +2,7 @@ package anilist
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"seanime/internal/util"
 	"strconv"
@@ -113,13 +114,16 @@ func (p *aniListPacer) reserveLocked(background bool) time.Duration {
 	return p.tokenDuration(need - p.tokens)
 }
 
+// capacity is the burst size. At least 2 keeps both lanes reachable at any limit, since background
+// needs one token plus half the burst.
 func (p *aniListPacer) capacity() float64 {
-	return p.limit / 6
+	return max(p.limit/6, 2)
 }
 
-// tokenDuration is how long the bucket takes to refill n tokens.
+// tokenDuration is how long the bucket takes to refill n tokens, rounded up so a fractional shortfall
+// never becomes a zero wait that skips taking a token.
 func (p *aniListPacer) tokenDuration(n float64) time.Duration {
-	return time.Duration(n * 60 / p.limit * float64(time.Second))
+	return time.Duration(math.Ceil(n * 60 / p.limit * float64(time.Second)))
 }
 
 func (p *aniListPacer) refillLocked(now time.Time) {

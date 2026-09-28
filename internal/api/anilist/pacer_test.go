@@ -2,6 +2,7 @@ package anilist
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -60,6 +61,44 @@ func TestPacerFollowsLimitHeader(t *testing.T) {
 	require.NoError(t, p.Wait(context.Background(), recordSleep(clock, &delays)))
 	require.Len(t, delays, 1)
 	require.InDelta(t, float64(time.Second*60/90), float64(delays[0]), float64(time.Millisecond))
+}
+
+// A limit that doesn't divide a minute evenly must still charge every request a token.
+func TestPacerChargesEveryRequestAtUnevenRates(t *testing.T) {
+	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
+	p := newTestPacer(clock)
+	p.Observe(rateHeaders("90", "89"))
+	var delays []time.Duration
+
+	for range 15 + 3 {
+		require.NoError(t, p.Wait(context.Background(), recordSleep(clock, &delays)))
+	}
+
+	var waited time.Duration
+	for _, d := range delays {
+		waited += d
+	}
+	require.GreaterOrEqual(t, waited, 3*time.Second*60/90, "each request past the burst waits one token")
+}
+
+// Even a very low limit must let both lanes through eventually rather than wait forever.
+func TestPacerServesBothLanesAtVeryLowLimits(t *testing.T) {
+	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
+	p := newTestPacer(clock)
+	p.Observe(rateHeaders("5", "5"))
+	sleeps := 0
+	boundedSleep := func(_ context.Context, delay time.Duration) error {
+		if sleeps++; sleeps > 20 {
+			return errors.New("still waiting after 20 sleeps")
+		}
+		clock.Advance(delay)
+		return nil
+	}
+
+	for range 3 {
+		require.NoError(t, p.Wait(context.Background(), boundedSleep))
+		require.NoError(t, p.Wait(WithBackgroundPriority(context.Background()), boundedSleep))
+	}
 }
 
 func TestPacerLowersTokensToRemaining(t *testing.T) {
