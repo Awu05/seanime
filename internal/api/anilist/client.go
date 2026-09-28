@@ -581,9 +581,9 @@ func (ac *AnilistClientImpl) customDoFunc(ctx context.Context, req *http.Request
 			}
 		} else {
 			if timeSince > 900*time.Millisecond {
-				ac.logger.Warn().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Msg("anilist: Successful Request (slow)")
+				ac.logger.Warn().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Str("document", gqlInfo.Request.OperationName).Msg("anilist: Successful Request (slow)")
 			} else {
-				ac.logger.Info().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Msg("anilist: Successful Request")
+				ac.logger.Info().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Str("document", gqlInfo.Request.OperationName).Msg("anilist: Successful Request")
 			}
 		}
 	}()

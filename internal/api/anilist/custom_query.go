@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"seanime/internal/util"
 	"time"
 
@@ -21,6 +22,22 @@ func CustomQuery(body map[string]interface{}, logger *zerolog.Logger, token stri
 	return customQuery(bodyBytes, logger, token)
 }
 
+var operationNamePattern = regexp.MustCompile(`^\s*(?:query|mutation)\s+(\w+)`)
+
+// queryOperationName returns the GraphQL operation name from a request body, for logging.
+func queryOperationName(body []byte) string {
+	var req struct {
+		Query string `json:"query"`
+	}
+	if json.Unmarshal(body, &req) != nil {
+		return ""
+	}
+	if m := operationNamePattern.FindStringSubmatch(req.Query); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
 func customQuery(body []byte, logger *zerolog.Logger, token ...string) (data interface{}, err error) {
 
 	var rlRemainingStr string
@@ -29,14 +46,13 @@ func customQuery(body []byte, logger *zerolog.Logger, token ...string) (data int
 	defer func() {
 		timeSince := time.Since(reqTime)
 		formattedDur := timeSince.Truncate(time.Millisecond).String()
+		document := queryOperationName(body)
 		if err != nil {
-			logger.Error().Str("duration", formattedDur).Str("rlr", rlRemainingStr).Err(err).Msg("anilist: Failed Request (custom query)")
+			logger.Error().Str("duration", formattedDur).Str("rlr", rlRemainingStr).Str("document", document).Err(err).Msg("anilist: Failed Request (custom query)")
+		} else if timeSince > 600*time.Millisecond {
+			logger.Warn().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Str("document", document).Msg("anilist: Long Request")
 		} else {
-			if timeSince > 600*time.Millisecond {
-				logger.Warn().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Msg("anilist: Long Request")
-			} else {
-				logger.Trace().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Msg("anilist: Successful Request")
-			}
+			logger.Info().Str("rtt", formattedDur).Str("rlr", rlRemainingStr).Str("document", document).Msg("anilist: Successful Request")
 		}
 	}()
 
