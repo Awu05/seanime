@@ -7,14 +7,6 @@ import (
 
 // https://stackoverflow.com/a/72452542
 
-func NewAnilistLimiter() *Limiter {
-	//return NewLimiter(15*time.Second, 18)
-	//return NewLimiter(6*time.Second, 8)
-	return NewLimiter(10*time.Second, 5)
-}
-
-//----------------------------------------------------------------------------------------------------------------------
-
 type Limiter struct {
 	tick    time.Duration
 	count   uint

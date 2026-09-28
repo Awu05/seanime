@@ -3,7 +3,6 @@ package handlers
 import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/library/scanner"
-	"seanime/internal/util/limiter"
 
 	"github.com/labstack/echo/v4"
 )
@@ -44,7 +43,6 @@ func (h *Handler) HandleTestDump(c echo.Context) error {
 		LocalFiles:             localFiles,
 		CompleteAnimeCache:     completeAnimeCache,
 		Logger:                 h.App.Logger,
-		AnilistRateLimiter:     limiter.NewAnilistLimiter(),
 		DisableAnimeCollection: false,
 		ScanLogger:             nil,
 	})

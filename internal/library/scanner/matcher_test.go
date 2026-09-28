@@ -970,7 +970,6 @@ func TestMatcherWithOfflineDB(t *testing.T) {
 		CompleteAnimeCache:         wrapper.CompleteAnimeCache,
 		MetadataProviderRef:        util.NewRef(wrapper.MetadataProvider),
 		Logger:                     logger,
-		AnilistRateLimiter:         wrapper.AnilistRateLimiter,
 		ScanLogger:                 scanLogger,
 		DisableAnimeCollection:     true, // Only use offline database
 	})

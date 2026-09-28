@@ -16,7 +16,6 @@ import (
 	"seanime/internal/library/summary"
 	"seanime/internal/platforms/platform"
 	"seanime/internal/util"
-	"seanime/internal/util/limiter"
 	"sort"
 	"strings"
 	"sync"
@@ -62,15 +61,15 @@ type Scanner struct {
 func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error) {
 	defer util.HandlePanicWithError(&err)
 
+	// Scans only use the AniList budget that people browsing can spare.
+	ctx = anilist.WithBackgroundPriority(ctx)
+
 	go anime.EpisodeCollectionFromLocalFilesCache.Clear()
 
 	scn.WSEventManager.SendEvent(events.EventScanProgress, 0)
 	scn.WSEventManager.SendEvent(events.EventScanStatus, "Retrieving local files...")
 
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
-
-	// Create a new Anilist rate limiter
-	anilistRateLimiter := limiter.NewAnilistLimiter()
 
 	if scn.ScanSummaryLogger == nil {
 		scn.ScanSummaryLogger = summary.NewScanSummaryLogger()
@@ -360,7 +359,6 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 		LocalFiles:                 localFiles,
 		CompleteAnimeCache:         completeAnimeCache,
 		Logger:                     scn.Logger,
-		AnilistRateLimiter:         anilistRateLimiter,
 		DisableAnimeCollection:     false,
 		ScanLogger:                 scn.ScanLogger,
 		OptionalAnimeCollection:    scn.AnimeCollection,
@@ -432,13 +430,12 @@ func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error
 		MetadataProviderRef: scn.MetadataProviderRef,
 		PlatformRef:         scn.PlatformRef,
 		CompleteAnimeCache:  completeAnimeCache,
-		AnilistRateLimiter:  anilistRateLimiter,
 		Logger:              scn.Logger,
 		ScanLogger:          scn.ScanLogger,
 		ScanSummaryLogger:   scn.ScanSummaryLogger,
 		Config:              scn.Config,
 	}
-	hydrator.HydrateMetadata()
+	hydrator.HydrateMetadata(ctx)
 
 	scn.WSEventManager.SendEvent(events.EventScanProgress, 80)
 

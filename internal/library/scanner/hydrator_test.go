@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"errors"
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata"
@@ -149,14 +150,13 @@ func TestFileHydrator_HydrateMetadata(t *testing.T) {
 				AllMedia:            mc.NormalizedMedia,
 				CompleteAnimeCache:  wrapper.CompleteAnimeCache,
 				PlatformRef:         util.NewRef[platform.Platform](wrapper.Platform),
-				AnilistRateLimiter:  wrapper.AnilistRateLimiter,
 				MetadataProviderRef: util.NewRef(wrapper.MetadataProvider),
 				Logger:              logger,
 				ScanLogger:          scanLogger,
 				Config:              config,
 			}
 
-			fh.HydrateMetadata()
+			fh.HydrateMetadata(context.Background())
 
 			for _, lf := range fh.LocalFiles {
 				t.Logf("local file: %s, media id: %d, type: %s, episode: %d, aniDbEpisode: %s\n", lf.Name, lf.MediaId, lf.GetType(), lf.Metadata.Episode, lf.Metadata.AniDBEpisode)

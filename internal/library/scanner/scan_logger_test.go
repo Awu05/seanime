@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"seanime/internal/platforms/platform"
 	"seanime/internal/util"
 	"testing"
@@ -90,14 +91,13 @@ func TestScanLogger(t *testing.T) {
 				CompleteAnimeCache:  wrapper.CompleteAnimeCache,
 				PlatformRef:         util.NewRef[platform.Platform](wrapper.Platform),
 				MetadataProviderRef: util.NewRef(wrapper.MetadataProvider),
-				AnilistRateLimiter:  wrapper.AnilistRateLimiter,
 				Logger:              logger,
 				ScanLogger:          scanLogger,
 				ScanSummaryLogger:   nil,
 				ForceMediaId:        0,
 			}
 
-			fh.HydrateMetadata()
+			fh.HydrateMetadata(context.Background())
 
 			for _, lf := range fh.LocalFiles {
 				if lf.MediaId != tt.expectedMediaId {

@@ -13,7 +13,6 @@ import (
 	"seanime/internal/library/scanner"
 	"seanime/internal/library/summary"
 	"seanime/internal/util"
-	"seanime/internal/util/limiter"
 	"seanime/internal/util/result"
 	"slices"
 	"strconv"
@@ -412,7 +411,6 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 		CompleteAnimeCache:  anilist.NewCompleteAnimeCache(),
 		PlatformRef:         h.App.AnilistPlatformRef,
 		MetadataProviderRef: h.App.MetadataProviderRef,
-		AnilistRateLimiter:  limiter.NewAnilistLimiter(),
 		Logger:              h.App.Logger,
 		ScanLogger:          scanLogger,
 		ScanSummaryLogger:   scanSummaryLogger,
@@ -420,7 +418,7 @@ func (h *Handler) HandleAnimeEntryManualMatch(c echo.Context) error {
 		ForceMediaId:        media.GetID(),
 	}
 
-	fh.HydrateMetadata()
+	fh.HydrateMetadata(c.Request().Context())
 
 	// Hydrate the summary logger before merging files
 	fh.ScanSummaryLogger.HydrateData(selectedLfs, normalizedMedia, animeCollectionWithRelations)

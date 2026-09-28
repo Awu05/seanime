@@ -250,6 +250,7 @@ func (c *CacheLayer) getQueuedMediaListUpdates() ([]queuedMediaListUpdate, error
 }
 
 func (c *CacheLayer) syncQueuedUpdates(ctx context.Context) {
+	ctx = anilist.WithBackgroundPriority(ctx)
 	if !ShouldCache.Load() || !IsWorking.Load() {
 		return
 	}

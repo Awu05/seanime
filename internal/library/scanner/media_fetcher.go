@@ -42,7 +42,6 @@ type MediaFetcherOptions struct {
 	LocalFiles                 []*anime.LocalFile
 	CompleteAnimeCache         *anilist.CompleteAnimeCache
 	Logger                     *zerolog.Logger
-	AnilistRateLimiter         *limiter.Limiter
 	DisableAnimeCollection     bool
 	ScanLogger                 *ScanLogger
 	// used for adding custom sources
@@ -60,8 +59,7 @@ func NewMediaFetcher(ctx context.Context, opts *MediaFetcherOptions) (ret *Media
 		opts.LocalFiles == nil ||
 		opts.CompleteAnimeCache == nil ||
 		opts.MetadataProviderRef.IsAbsent() ||
-		opts.Logger == nil ||
-		opts.AnilistRateLimiter == nil {
+		opts.Logger == nil {
 		return nil, errors.New("missing options")
 	}
 
@@ -162,7 +160,6 @@ func NewMediaFetcher(ctx context.Context, opts *MediaFetcherOptions) (ret *Media
 			opts.LocalFiles,
 			opts.CompleteAnimeCache, // CompleteAnimeCache will be populated on success
 			opts.MetadataProviderRef.Get(),
-			opts.AnilistRateLimiter,
 			mf.ScanLogger,
 		)
 		if ok {
@@ -309,7 +306,6 @@ func FetchMediaFromLocalFiles(
 	localFiles []*anime.LocalFile,
 	completeAnime *anilist.CompleteAnimeCache,
 	metadataProvider metadata_provider.Provider,
-	anilistRateLimiter *limiter.Limiter,
 	scanLogger *ScanLogger,
 ) (ret []*anilist.CompleteAnime, ok bool) {
 	defer util.HandlePanicInModuleThen("library/scanner/FetchMediaFromLocalFiles", func() {
@@ -395,7 +391,6 @@ func FetchMediaFromLocalFiles(
 	// Fetch all media from the AniList IDs
 	anilistMedia := make([]*anilist.CompleteAnime, 0)
 	lop.ForEach(anilistIds, func(id int, index int) {
-		anilistRateLimiter.Wait()
 		var media *anilist.CompleteAnime
 		var err error
 		media, err = platform.GetAnimeWithRelations(ctx, id)
@@ -446,7 +441,7 @@ func FetchMediaFromLocalFiles(
 	// The relations are fetched in parallel and added to `completeAnime`
 	lop.ForEach(anilistMedia, func(m *anilist.CompleteAnime, index int) {
 		// We ignore errors because we want to continue even if one of the media fails
-		_ = m.FetchMediaTree(anilist.FetchMediaTreeAll, platform.GetAnilistClient(), anilistRateLimiter, tree, completeAnime)
+		_ = m.FetchMediaTree(ctx, anilist.FetchMediaTreeAll, platform.GetAnilistClient(), tree, completeAnime)
 	})
 
 	// +---------------------+

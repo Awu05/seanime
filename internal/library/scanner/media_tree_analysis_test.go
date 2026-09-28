@@ -15,7 +15,6 @@ import (
 func TestMediaTreeAnalysis(t *testing.T) {
 	wrapper := newScannerLiveWrapper(t)
 	anilistClient := wrapper.AnilistClient
-	anilistRateLimiter := wrapper.AnilistRateLimiter
 
 	tests := []struct {
 		name                          string
@@ -59,9 +58,9 @@ func TestMediaTreeAnalysis(t *testing.T) {
 			// +---------------------+
 
 			err = media.FetchMediaTree(
+				context.Background(),
 				anilist.FetchMediaTreeAll,
 				anilistClient,
-				anilistRateLimiter,
 				tree,
 				anilist.NewCompleteAnimeCache(),
 			)
@@ -104,7 +103,6 @@ func TestMediaTreeAnalysis(t *testing.T) {
 func TestMediaTreeAnalysis2(t *testing.T) {
 	wrapper := newScannerLiveWrapper(t)
 	anilistClient := wrapper.AnilistClient
-	anilistRateLimiter := wrapper.AnilistRateLimiter
 
 	tests := []struct {
 		name    string
@@ -131,9 +129,9 @@ func TestMediaTreeAnalysis2(t *testing.T) {
 			// +---------------------+
 
 			err = media.GetMedia().FetchMediaTree(
+				context.Background(),
 				anilist.FetchMediaTreeAll,
 				anilistClient,
-				anilistRateLimiter,
 				tree,
 				anilist.NewCompleteAnimeCache(),
 			)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"seanime/internal/api/anilist"
 	"seanime/internal/util/comparison"
-	"seanime/internal/util/limiter"
 	"seanime/internal/util/result"
 
 	"github.com/samber/lo"
@@ -147,7 +146,7 @@ func NewNormalizedMediaFromOfflineDB(
 	}
 }
 
-func FetchNormalizedMedia(anilistClient anilist.AnilistClient, l *limiter.Limiter, cache *anilist.CompleteAnimeCache, m *NormalizedMedia) error {
+func FetchNormalizedMedia(ctx context.Context, anilistClient anilist.AnilistClient, cache *anilist.CompleteAnimeCache, m *NormalizedMedia) error {
 	if anilistClient == nil || m == nil {
 		return nil
 	}
@@ -159,11 +158,12 @@ func FetchNormalizedMedia(anilistClient anilist.AnilistClient, l *limiter.Limite
 	if cache != nil {
 		if complete, found := cache.Get(m.ID); found {
 			*m = *NewNormalizedMedia(complete.ToBaseAnime())
+			m.fetched = true
+			return nil
 		}
 	}
 
-	l.Wait()
-	complete, err := anilistClient.CompleteAnimeByID(context.Background(), &m.ID)
+	complete, err := anilistClient.CompleteAnimeByID(ctx, &m.ID)
 	if err != nil {
 		return err
 	}
@@ -252,9 +252,9 @@ func (m *NormalizedMedia) GetPossibleSeasonNumber() int {
 }
 
 func (m *NormalizedMedia) FetchMediaTree(
+	ctx context.Context,
 	rel anilist.FetchMediaTreeRelation,
 	anilistClient anilist.AnilistClient,
-	rl *limiter.Limiter,
 	tree *anilist.CompleteAnimeRelationTree,
 	cache *anilist.CompleteAnimeCache,
 ) error {
@@ -262,12 +262,11 @@ func (m *NormalizedMedia) FetchMediaTree(
 		return nil
 	}
 
-	rl.Wait()
-	res, err := anilistClient.CompleteAnimeByID(context.Background(), &m.ID)
+	res, err := anilistClient.CompleteAnimeByID(ctx, &m.ID)
 	if err != nil {
 		return err
 	}
-	return res.GetMedia().FetchMediaTree(rel, anilistClient, rl, tree, cache)
+	return res.GetMedia().FetchMediaTree(ctx, rel, anilistClient, tree, cache)
 }
 
 // GetCurrentEpisodeCount returns the current episode number for that media and -1 if it doesn't have one.

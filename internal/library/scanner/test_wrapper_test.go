@@ -10,7 +10,6 @@ import (
 	"seanime/internal/platforms/anilist_platform"
 	"seanime/internal/testutil"
 	"seanime/internal/util"
-	"seanime/internal/util/limiter"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -27,7 +26,6 @@ type scannerTestWrapper struct {
 	Platform           *anilist_platform.AnilistPlatform
 	MetadataProvider   metadata_provider.Provider
 	CompleteAnimeCache *anilist.CompleteAnimeCache
-	AnilistRateLimiter *limiter.Limiter
 	WSEventManager     events.WSEventManagerInterface
 	LibraryDir         string
 }
@@ -69,7 +67,6 @@ func newScannerWrapper(t testing.TB, env *testutil.TestEnv, client anilist.Anili
 		Platform:           platform,
 		MetadataProvider:   metadata_provider.NewTestProviderWithEnv(env, database),
 		CompleteAnimeCache: anilist.NewCompleteAnimeCache(),
-		AnilistRateLimiter: limiter.NewAnilistLimiter(),
 		WSEventManager:     events.NewMockWSEventManager(logger),
 		LibraryDir:         scannerTestLibraryDir,
 	}

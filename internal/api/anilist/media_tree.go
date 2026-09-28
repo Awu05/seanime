@@ -3,7 +3,6 @@ package anilist
 import (
 	"context"
 	"seanime/internal/util"
-	"seanime/internal/util/limiter"
 	"seanime/internal/util/result"
 	"sync"
 
@@ -30,25 +29,23 @@ func NewCompleteAnimeRelationTree() *CompleteAnimeRelationTree {
 	return &CompleteAnimeRelationTree{result.NewMap[int, *CompleteAnime]()}
 }
 
-func (m *BaseAnime) FetchMediaTree(rel FetchMediaTreeRelation, anilistClient AnilistClient, rl *limiter.Limiter, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) (err error) {
+func (m *BaseAnime) FetchMediaTree(ctx context.Context, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) (err error) {
 	if m == nil {
 		return nil
 	}
 
 	defer util.HandlePanicInModuleWithError("anilist/BaseAnime.FetchMediaTree", &err)
 
-	rl.Wait()
-	res, err := anilistClient.CompleteAnimeByID(context.Background(), &m.ID)
+	res, err := anilistClient.CompleteAnimeByID(ctx, &m.ID)
 	if err != nil {
 		return err
 	}
-	return res.GetMedia().FetchMediaTree(rel, anilistClient, rl, tree, cache)
+	return res.GetMedia().FetchMediaTree(ctx, rel, anilistClient, tree, cache)
 }
 
 // FetchMediaTree populates the CompleteAnimeRelationTree with the given media's sequels and prequels.
 // It also takes a CompleteAnimeCache to store the fetched media in and avoid duplicate fetches.
-// It also takes a limiter.Limiter to limit the number of requests made to the AniList API.
-func (m *CompleteAnime) FetchMediaTree(rel FetchMediaTreeRelation, anilistClient AnilistClient, rl *limiter.Limiter, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) (err error) {
+func (m *CompleteAnime) FetchMediaTree(ctx context.Context, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) (err error) {
 	if m == nil {
 		return nil
 	}
@@ -80,7 +77,7 @@ func (m *CompleteAnime) FetchMediaTree(rel FetchMediaTreeRelation, anilistClient
 	}
 
 	doneCh := make(chan struct{})
-	processEdges(edges, rel, anilistClient, rl, tree, cache, doneCh)
+	processEdges(ctx, edges, rel, anilistClient, tree, cache, doneCh)
 
 	for {
 		select {
@@ -92,7 +89,7 @@ func (m *CompleteAnime) FetchMediaTree(rel FetchMediaTreeRelation, anilistClient
 }
 
 // processEdges fetches the next node(s) for each edge in parallel.
-func processEdges(edges []*CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, rl *limiter.Limiter, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache, doneCh chan struct{}) {
+func processEdges(ctx context.Context, edges []*CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache, doneCh chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(len(edges))
 
@@ -102,7 +99,7 @@ func processEdges(edges []*CompleteAnime_Relations_Edges, rel FetchMediaTreeRela
 			if edge == nil {
 				return
 			}
-			processEdge(edge, rel, anilistClient, rl, tree, cache)
+			processEdge(ctx, edge, rel, anilistClient, tree, cache)
 		}(item, i)
 	}
 
@@ -113,14 +110,13 @@ func processEdges(edges []*CompleteAnime_Relations_Edges, rel FetchMediaTreeRela
 	}()
 }
 
-func processEdge(edge *CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, rl *limiter.Limiter, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) {
+func processEdge(ctx context.Context, edge *CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation, anilistClient AnilistClient, tree *CompleteAnimeRelationTree, cache *CompleteAnimeCache) {
 	defer util.HandlePanicInModuleThen("anilist/processEdge", func() {})
 	cacheV, ok := cache.Get(edge.GetNode().ID)
 	edgeCompleteAnime := cacheV
 	if !ok {
-		rl.Wait()
 		// Fetch the next node
-		res, err := anilistClient.CompleteAnimeByID(context.Background(), &edge.GetNode().ID)
+		res, err := anilistClient.CompleteAnimeByID(ctx, &edge.GetNode().ID)
 		if err == nil {
 			edgeCompleteAnime = res.GetMedia()
 			cache.Set(edgeCompleteAnime.ID, edgeCompleteAnime)
@@ -132,7 +128,7 @@ func processEdge(edge *CompleteAnime_Relations_Edges, rel FetchMediaTreeRelation
 	// Get the relation type to fetch for the next node
 	edgeRel := getEdgeRelation(edge, rel)
 	// Fetch the next node(s)
-	err := edgeCompleteAnime.FetchMediaTree(edgeRel, anilistClient, rl, tree, cache)
+	err := edgeCompleteAnime.FetchMediaTree(ctx, edgeRel, anilistClient, tree, cache)
 	if err != nil {
 		return
 	}

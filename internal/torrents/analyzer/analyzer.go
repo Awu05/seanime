@@ -1,6 +1,7 @@
 package torrent_analyzer
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"seanime/internal/api/anilist"
@@ -9,7 +10,6 @@ import (
 	"seanime/internal/library/scanner"
 	"seanime/internal/platforms/platform"
 	"seanime/internal/util"
-	"seanime/internal/util/limiter"
 
 	"github.com/rs/zerolog"
 	lop "github.com/samber/lo/parallel"
@@ -201,7 +201,6 @@ func (f *File) GetPath() string {
 func (a *Analyzer) scanFiles() error {
 
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
-	anilistRateLimiter := limiter.NewAnilistLimiter()
 
 	lfs := a.getLocalFiles() // Extract local files from the Files
 
@@ -210,7 +209,7 @@ func (a *Analyzer) scanFiles() error {
 	// +---------------------+
 
 	tree := anilist.NewCompleteAnimeRelationTree()
-	if err := a.media.FetchMediaTree(anilist.FetchMediaTreeAll, a.platformRef.Get().GetAnilistClient(), anilistRateLimiter, tree, completeAnimeCache); err != nil {
+	if err := a.media.FetchMediaTree(context.Background(), anilist.FetchMediaTreeAll, a.platformRef.Get().GetAnilistClient(), tree, completeAnimeCache); err != nil {
 		return err
 	}
 
@@ -255,14 +254,13 @@ func (a *Analyzer) scanFiles() error {
 		CompleteAnimeCache:  completeAnimeCache,
 		PlatformRef:         a.platformRef,
 		MetadataProviderRef: a.metadataProviderRef,
-		AnilistRateLimiter:  anilistRateLimiter,
 		Logger:              a.logger,
 		ScanLogger:          nil,
 		ScanSummaryLogger:   nil,
 		ForceMediaId:        map[bool]int{true: a.media.GetID(), false: 0}[a.forceMatch],
 	}
 
-	fh.HydrateMetadata()
+	fh.HydrateMetadata(context.Background())
 
 	for _, af := range a.files {
 		for _, lf := range lfs {

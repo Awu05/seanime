@@ -3,7 +3,6 @@ package anilist
 import (
 	"context"
 	"seanime/internal/util"
-	"seanime/internal/util/limiter"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -12,7 +11,6 @@ import (
 
 func TestBaseAnime_FetchMediaTree_BaseAnime(t *testing.T) {
 	anilistClient := NewTestAnilistClient()
-	lim := limiter.NewAnilistLimiter()
 	completeAnimeCache := NewCompleteAnimeCache()
 
 	tests := []struct {
@@ -46,9 +44,9 @@ func TestBaseAnime_FetchMediaTree_BaseAnime(t *testing.T) {
 				tree := NewCompleteAnimeRelationTree()
 
 				err = media.FetchMediaTree(
+					context.Background(),
 					FetchMediaTreeAll,
 					anilistClient,
-					lim,
 					tree,
 					completeAnimeCache,
 				)
@@ -72,7 +70,6 @@ func TestBaseAnime_FetchMediaTree_BaseAnime(t *testing.T) {
 
 func TestBaseAnime_FetchMediaTree_BaseAnimeLive(t *testing.T) {
 	anilistClient := newLiveAnilistClient(t)
-	lim := limiter.NewAnilistLimiter()
 	completeAnimeCache := NewCompleteAnimeCache()
 	mediaID := 21355
 	edgeIDs := []int{21355, 108632, 119661, 163134}
@@ -86,9 +83,9 @@ func TestBaseAnime_FetchMediaTree_BaseAnimeLive(t *testing.T) {
 	tree := NewCompleteAnimeRelationTree()
 
 	err = media.FetchMediaTree(
+		context.Background(),
 		FetchMediaTreeAll,
 		anilistClient,
-		lim,
 		tree,
 		completeAnimeCache,
 	)

@@ -4,7 +4,6 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/platforms/platform"
 	"seanime/internal/util"
-	"seanime/internal/util/limiter"
 	"testing"
 
 	"github.com/samber/lo"
@@ -14,7 +13,6 @@ import (
 func TestNewMediaFetcher(t *testing.T) {
 	wrapper := newScannerFixtureWrapper(t)
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
-	anilistRateLimiter := limiter.NewAnilistLimiter()
 
 	tests := []struct {
 		name                   string
@@ -72,7 +70,6 @@ func TestNewMediaFetcher(t *testing.T) {
 				CompleteAnimeCache:     completeAnimeCache,
 				MetadataProviderRef:    util.NewRef(wrapper.MetadataProvider),
 				Logger:                 util.NewLogger(),
-				AnilistRateLimiter:     anilistRateLimiter,
 				ScanLogger:             scanLogger,
 				DisableAnimeCollection: tt.disableAnimeCollection,
 			})
@@ -98,7 +95,6 @@ func TestNewMediaFetcher(t *testing.T) {
 func TestNewEnhancedMediaFetcher(t *testing.T) {
 	wrapper := newScannerFixtureWrapper(t)
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
-	anilistRateLimiter := limiter.NewAnilistLimiter()
 
 	tests := []struct {
 		name     string
@@ -143,7 +139,6 @@ func TestNewEnhancedMediaFetcher(t *testing.T) {
 				CompleteAnimeCache:  completeAnimeCache,
 				MetadataProviderRef: util.NewRef(wrapper.MetadataProvider),
 				Logger:              util.NewLogger(),
-				AnilistRateLimiter:  anilistRateLimiter,
 				ScanLogger:          scanLogger,
 			})
 			if err != nil {
@@ -168,7 +163,6 @@ func TestNewEnhancedMediaFetcher(t *testing.T) {
 func TestFetchMediaFromLocalFiles(t *testing.T) {
 	wrapper := newScannerFixtureWrapper(t)
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
-	anilistRateLimiter := limiter.NewAnilistLimiter()
 
 	tests := []struct {
 		name            string
@@ -212,7 +206,6 @@ func TestFetchMediaFromLocalFiles(t *testing.T) {
 				lfs,
 				completeAnimeCache,
 				wrapper.MetadataProvider,
-				anilistRateLimiter,
 				scanLogger,
 			)
 			if !ok {

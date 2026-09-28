@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"seanime/internal/api/anilist"
@@ -33,7 +34,6 @@ type FileHydrator struct {
 	CompleteAnimeCache  *anilist.CompleteAnimeCache
 	PlatformRef         *util.Ref[platform.Platform]
 	MetadataProviderRef *util.Ref[metadata_provider.Provider]
-	AnilistRateLimiter  *limiter.Limiter
 	Logger              *zerolog.Logger
 	ScanLogger          *ScanLogger                // optional
 	ScanSummaryLogger   *summary.ScanSummaryLogger // optional
@@ -55,7 +55,7 @@ type compiledHydrationFileRule struct {
 
 // HydrateMetadata will hydrate the metadata of each LocalFile with the metadata of the matched anilist.BaseAnime.
 // It will divide the LocalFiles into groups based on their media ID and process each group in parallel.
-func (fh *FileHydrator) HydrateMetadata() {
+func (fh *FileHydrator) HydrateMetadata(ctx context.Context) {
 	start := time.Now()
 	rateLimiter := limiter.NewLimiter(5*time.Second, 20)
 
@@ -104,7 +104,7 @@ func (fh *FileHydrator) HydrateMetadata() {
 		go func(mId int, files []*anime.LocalFile) {
 			defer wg.Done()
 			defer func() { <-sem }() // Release semaphore
-			fh.hydrateGroupMetadata(mId, files, rateLimiter)
+			fh.hydrateGroupMetadata(ctx, mId, files, rateLimiter)
 		}(mId, files)
 	}
 	wg.Wait()
@@ -117,6 +117,7 @@ func (fh *FileHydrator) HydrateMetadata() {
 }
 
 func (fh *FileHydrator) hydrateGroupMetadata(
+	ctx context.Context,
 	mId int,
 	lfs []*anime.LocalFile, // Grouped local files
 	rateLimiter *limiter.Limiter,
@@ -136,7 +137,7 @@ func (fh *FileHydrator) hydrateGroupMetadata(
 	}
 
 	// Make sure the media is fetched
-	_ = anime.FetchNormalizedMedia(fh.PlatformRef.Get().GetAnilistClient(), fh.AnilistRateLimiter, fh.CompleteAnimeCache, media)
+	_ = anime.FetchNormalizedMedia(ctx, fh.PlatformRef.Get().GetAnilistClient(), fh.CompleteAnimeCache, media)
 
 	// Tree contains media relations
 	tree := anilist.NewCompleteAnimeRelationTree()
@@ -402,7 +403,7 @@ func (fh *FileHydrator) hydrateGroupMetadata(
 				mediaTreeFetchStart := time.Now()
 				// Fetch media tree
 				// The media tree will be used to normalize episode numbers
-				if err := media.FetchMediaTree(anilist.FetchMediaTreeAll, fh.PlatformRef.Get().GetAnilistClient(), fh.AnilistRateLimiter, tree, fh.CompleteAnimeCache); err == nil {
+				if err := media.FetchMediaTree(ctx, anilist.FetchMediaTreeAll, fh.PlatformRef.Get().GetAnilistClient(), tree, fh.CompleteAnimeCache); err == nil {
 					// Create a new media tree analysis that will be used for episode normalization
 					mta, _ := NewMediaTreeAnalysis(&MediaTreeAnalysisOptions{
 						tree:                tree,
