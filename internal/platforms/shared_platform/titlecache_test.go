@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,6 +73,41 @@ func TestTitleCacheSkipsSavesWhenAniListDownOrCachingDisabled(t *testing.T) {
 	IsWorking.Store(true)
 	ShouldCache.Store(false)
 	tc.PutAnime(&anilist.BaseAnime{ID: 2})
+
+	require.Zero(t, tc.Size())
+}
+
+func listQueryBody(t *testing.T, query string) []byte {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"query": query, "variables": map[string]any{"page": 1}})
+	require.NoError(t, err)
+	return body
+}
+
+func TestSaveListTitlesSavesSeanimeListQueries(t *testing.T) {
+	tc := newTestTitleCache(t)
+
+	saveListTitles(tc, listQueryBody(t, anilist.ListAnimeDocument), map[string]any{"Page": map[string]any{"media": []any{map[string]any{"id": 1}}}})
+	saveListTitles(tc, listQueryBody(t, anilist.ListMangaDocument), map[string]any{"Page": map[string]any{"media": []any{map[string]any{"id": 2}}}})
+	saveListTitles(tc, listQueryBody(t, anilist.ListRecentAiringAnimeQuery), map[string]any{"Page": map[string]any{"airingSchedules": []any{
+		map[string]any{"episode": 1, "media": map[string]any{"id": 3}},
+		map[string]any{"episode": 2, "media": map[string]any{"id": 3}},
+	}}})
+
+	_, _, ok := tc.GetAnime(1)
+	require.True(t, ok)
+	_, _, ok = tc.GetManga(2)
+	require.True(t, ok)
+	_, _, ok = tc.GetAnime(3)
+	require.True(t, ok)
+}
+
+// A plugin query can share an operation name but select other fields, so only Seanime's own list
+// documents are saved.
+func TestSaveListTitlesIgnoresOtherQueries(t *testing.T) {
+	tc := newTestTitleCache(t)
+
+	saveListTitles(tc, listQueryBody(t, "query ListAnime { Page { media { id } } }"), map[string]any{"Page": map[string]any{"media": []any{map[string]any{"id": 1}}}})
 
 	require.Zero(t, tc.Size())
 }

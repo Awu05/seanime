@@ -20,17 +20,20 @@ import (
 
 type cacheLayerTestClient struct {
 	anilist.AnilistClient
-	cacheDir            string
-	animeCollection     *anilist.AnimeCollection
-	mangaCollection     *anilist.MangaCollection
-	updateEntryCalls    []cacheLayerUpdateEntryCall
-	updateProgressCalls []cacheLayerUpdateProgressCall
-	baseAnimeCalls      int32
-	baseAnimeErr        error
-	customQueryErr      error
+	cacheDir             string
+	animeCollection      *anilist.AnimeCollection
+	mangaCollection      *anilist.MangaCollection
+	updateEntryCalls     []cacheLayerUpdateEntryCall
+	updateProgressCalls  []cacheLayerUpdateProgressCall
+	baseAnimeCalls       int32
+	baseAnimeErr         error
+	customQueryErr       error
+	customQueryData      interface{}
 	completeAnimeCalls   int32
 	completeAnimeErr     error
 	completeAnimeBatches [][]int
+	// completeAnimeBeforeErr is what a batch fetched before completeAnimeErr stopped it.
+	completeAnimeBeforeErr []*anilist.CompleteAnime
 }
 
 type cacheLayerUpdateEntryCall struct {
@@ -79,7 +82,7 @@ func (c *cacheLayerTestClient) CompleteAnimeByID(_ context.Context, id *int, _ .
 func (c *cacheLayerTestClient) CompleteAnimeByIDs(_ context.Context, ids []int) ([]*anilist.CompleteAnime, error) {
 	c.completeAnimeBatches = append(c.completeAnimeBatches, ids)
 	if c.completeAnimeErr != nil {
-		return nil, c.completeAnimeErr
+		return c.completeAnimeBeforeErr, c.completeAnimeErr
 	}
 	ret := make([]*anilist.CompleteAnime, len(ids))
 	for i, id := range ids {
@@ -99,6 +102,9 @@ func completeAnimeIDs(media []*anilist.CompleteAnime) []int {
 func (c *cacheLayerTestClient) CustomQuery(_ []byte, _ *zerolog.Logger, _ ...string) (interface{}, error) {
 	if c.customQueryErr != nil {
 		return nil, c.customQueryErr
+	}
+	if c.customQueryData != nil {
+		return c.customQueryData, nil
 	}
 	return map[string]interface{}{"ok": true}, nil
 }
@@ -327,6 +333,12 @@ func TestNewCacheLayerRemovesRetiredTitleBuckets(t *testing.T) {
 	for _, name := range []string{"base-anime.cache", "base-manga.cache", "complete-anime.cache"} {
 		require.NoFileExists(t, filepath.Join(cacheDir, name))
 	}
+
+	// The cleanup runs once per cache directory, not on every CacheLayer built for it.
+	marker := filepath.Join(cacheDir, "base-anime.cache")
+	require.NoError(t, os.WriteFile(marker, []byte("{}"), 0644))
+	newTestCacheLayer(t, &cacheLayerTestClient{cacheDir: cacheDir})
+	require.FileExists(t, marker)
 }
 
 func TestCacheLayerServesFreshCompleteAnimeWithoutHittingNetwork(t *testing.T) {
@@ -404,6 +416,46 @@ func TestCacheLayerCompleteAnimeByIDsServesStaleWhenAniListFails(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []int{1}, completeAnimeIDs(media))
 	require.Len(t, client.completeAnimeBatches, 1, "no request while AniList is marked down")
+}
+
+// Titles are saved when AniList answers a list query, not from a stored copy served after a failure.
+func TestCacheLayerCustomQuerySavesListTitlesFromNetwork(t *testing.T) {
+	tc := installTestTitleCache(t)
+	client := &cacheLayerTestClient{
+		cacheDir:        t.TempDir(),
+		customQueryData: map[string]any{"Page": map[string]any{"media": []any{map[string]any{"id": 7}}}},
+	}
+	cacheLayer := newTestCacheLayer(t, client)
+
+	_, err := cacheLayer.CustomQuery(listQueryBody(t, anilist.ListAnimeDocument), util.NewLogger())
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		_, _, ok := tc.GetAnime(7)
+		return ok
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
+// The failure that marks AniList down must not discard records the same batch already fetched.
+func TestCacheLayerCompleteAnimeByIDsSavesPartialBatchWhenAniListGoesDown(t *testing.T) {
+	previousEventManager := events.GlobalWSEventManager
+	events.GlobalWSEventManager = &events.GlobalWSEventManagerWrapper{}
+	t.Cleanup(func() { events.GlobalWSEventManager = previousEventManager })
+	tc := installTestTitleCache(t)
+	client := &cacheLayerTestClient{
+		cacheDir:               t.TempDir(),
+		completeAnimeErr:       errors.New("anilist down"),
+		completeAnimeBeforeErr: []*anilist.CompleteAnime{{ID: 2}},
+	}
+	cacheLayer := newTestCacheLayer(t, client)
+	for range failureThreshold - 1 {
+		cacheLayer.checkAndUpdateWorkingState(errors.New("anilist down"))
+	}
+
+	_, err := cacheLayer.CompleteAnimeByIDs(context.Background(), []int{2, 3})
+	require.Error(t, err)
+	require.False(t, IsWorking.Load(), "this batch's failure is the one that marks AniList down")
+	_, _, ok := tc.GetCompleteAnime(2)
+	require.True(t, ok)
 }
 
 func TestCacheLayerSharesTitlesAcrossProfiles(t *testing.T) {

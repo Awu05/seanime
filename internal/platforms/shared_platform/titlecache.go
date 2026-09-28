@@ -9,6 +9,7 @@ import (
 
 	"github.com/goccy/go-json"
 	"github.com/rs/zerolog"
+	"github.com/samber/lo"
 )
 
 // TitleCache is the server-wide store of AniList title records. Records hold only public data, so
@@ -44,11 +45,11 @@ func CurrentTitleCache() *TitleCache {
 	return titleCache.Load()
 }
 
-func (tc *TitleCache) GetAnime(id int) (*anilist.BaseAnime, bool, bool) {
+func (tc *TitleCache) GetAnime(id int) (media *anilist.BaseAnime, fresh bool, ok bool) {
 	return getTitle[anilist.BaseAnime](tc, "anime", id)
 }
 
-func (tc *TitleCache) GetManga(id int) (*anilist.BaseManga, bool, bool) {
+func (tc *TitleCache) GetManga(id int) (media *anilist.BaseManga, fresh bool, ok bool) {
 	return getTitle[anilist.BaseManga](tc, "manga", id)
 }
 
@@ -68,7 +69,7 @@ func (tc *TitleCache) PutManga(media ...*anilist.BaseManga) {
 	}
 }
 
-func (tc *TitleCache) GetCompleteAnime(id int) (*anilist.CompleteAnime, bool, bool) {
+func (tc *TitleCache) GetCompleteAnime(id int) (media *anilist.CompleteAnime, fresh bool, ok bool) {
 	return getTitle[anilist.CompleteAnime](tc, "complete-anime", id)
 }
 
@@ -78,6 +79,47 @@ func (tc *TitleCache) PutCompleteAnime(media ...*anilist.CompleteAnime) {
 			putTitle(tc, "complete-anime", m.ID, m)
 		}
 	}
+}
+
+// saveListTitles saves the titles from a list query AniList just answered. Only Seanime's own list
+// documents are decoded, since a plugin query can share their name but select other fields.
+func saveListTitles(tc *TitleCache, body []byte, res interface{}) {
+	var req struct {
+		Query string `json:"query"`
+	}
+	if tc == nil || json.Unmarshal(body, &req) != nil {
+		return
+	}
+	switch req.Query {
+	case anilist.ListAnimeDocument:
+		if list, ok := decodeListResult[anilist.ListAnime](res); ok {
+			tc.PutAnime(list.GetPage().GetMedia()...)
+		}
+	case anilist.ListMangaDocument:
+		if list, ok := decodeListResult[anilist.ListManga](res); ok {
+			tc.PutManga(list.GetPage().GetMedia()...)
+		}
+	case anilist.ListRecentAiringAnimeQuery:
+		if list, ok := decodeListResult[anilist.ListRecentAnime](res); ok {
+			// A show appears once per airing episode.
+			media := lo.Map(list.GetPage().GetAiringSchedules(), func(s *anilist.ListRecentAnime_Page_AiringSchedules, _ int) *anilist.BaseAnime {
+				return s.GetMedia()
+			})
+			tc.PutAnime(lo.UniqBy(media, func(m *anilist.BaseAnime) int { return m.GetID() })...)
+		}
+	}
+}
+
+func decodeListResult[T any](res interface{}) (*T, bool) {
+	data, err := json.Marshal(res)
+	if err != nil {
+		return nil, false
+	}
+	var list T
+	if json.Unmarshal(data, &list) != nil {
+		return nil, false
+	}
+	return &list, true
 }
 
 func (tc *TitleCache) Size() int64 {

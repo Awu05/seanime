@@ -351,15 +351,6 @@ var (
 	anilistListSeasonAnimeCache = result.NewCache[string, []*anilist.BaseAnime]()
 )
 
-// saveAnimeTitles stores bulk AniList results for later single-title lookups, off the request path.
-func (h *Handler) saveAnimeTitles(media ...*anilist.BaseAnime) {
-	go h.App.TitleCache.PutAnime(media...)
-}
-
-func (h *Handler) saveMangaTitles(media ...*anilist.BaseManga) {
-	go h.App.TitleCache.PutManga(media...)
-}
-
 // shouldTrySimklDiscoveryFallback reports whether a Discover/Search/Calendar/Details fallback
 // call should be attempted: AniList must be known down AND the profile must have a SIMKL
 // client_id configured. This is intentionally lighter than Component 1's tracking-fallback gate
@@ -657,7 +648,6 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 
 	if ret != nil {
 		anilistListAnimeCache.SetT(cacheKey, ret, time.Minute*10)
-		h.saveAnimeTitles(ret.GetPage().GetMedia()...)
 	}
 
 	return h.RespondWithData(c, ret)
@@ -772,7 +762,6 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 		}
 	}
 
-	h.saveAnimeTitles(results...)
 	anilistListSeasonAnimeCache.SetT(cacheKey, results, time.Minute*10)
 
 	return h.RespondWithData(c, results)
@@ -850,12 +839,6 @@ func (h *Handler) HandleAnilistListRecentAiringAnime(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	schedules := ret.GetPage().GetAiringSchedules()
-	media := make([]*anilist.BaseAnime, len(schedules))
-	for i, schedule := range schedules {
-		media[i] = schedule.GetMedia()
-	}
-	h.saveAnimeTitles(media...)
 	anilistListRecentAnimeCache.SetT(cacheKey, ret, time.Hour*1)
 
 	return h.RespondWithData(c, ret)
@@ -894,7 +877,6 @@ func (h *Handler) HandleAnilistListMissedSequels(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
-	h.saveAnimeTitles(ret...)
 	anilistMissedSequelsCache.SetT(1, ret, time.Hour*4)
 
 	return h.RespondWithData(c, ret)

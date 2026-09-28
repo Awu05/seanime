@@ -223,6 +223,9 @@ func clearFailureTracking() {
 	failureTracking = failureTracking[:0]
 }
 
+// retiredBucketsRemoved holds the cache directories already cleared of retired title buckets.
+var retiredBucketsRemoved sync.Map
+
 // NewCacheLayer returns a new instance of the global cache layer.
 // An optional logoutFunc can be passed to perform server-side cleanup when an invalid token is detected.
 func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc ...func()) anilist.AnilistClient {
@@ -231,9 +234,11 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 		return anilistClientRef.Get()
 	}
 	// Title records moved to the shared TitleCache; these per-profile files are no longer read.
-	_ = fileCacher.Remove("base-anime")
-	_ = fileCacher.Remove("base-manga")
-	_ = fileCacher.Remove("complete-anime")
+	if _, done := retiredBucketsRemoved.LoadOrStore(anilistClientRef.Get().GetCacheDir(), true); !done {
+		_ = fileCacher.Remove("base-anime")
+		_ = fileCacher.Remove("base-manga")
+		_ = fileCacher.Remove("complete-anime")
+	}
 
 	buckets := make(map[string]filecache.PermanentBucket)
 	buckets[AnimeCollectionBucket] = filecache.NewPermanentBucket(AnimeCollectionBucket)
@@ -344,6 +349,7 @@ func (c *CacheLayer) CustomQuery(body []byte, logger *zerolog.Logger, token ...s
 				if err := c.fileCacher.SetPerm(bucket, cacheKey, res); err != nil {
 					c.logger.Warn().Err(err).Msg("anilist cache: Failed to cache custom query result")
 				}
+				saveListTitles(CurrentTitleCache(), body, res)
 			}()
 			return res, nil
 		}
@@ -643,7 +649,7 @@ func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, n
 }
 
 // titleFirstGet serves a single-title lookup from the shared title cache, refreshing it from the
-// network when stale. A stale copy beats an error when AniList is failing.
+// network when stale. A stale copy beats an error when AniList is failing. fallback may be nil.
 func titleFirstGet[T any](c *CacheLayer, cached *T, fresh bool, networkFn func() (*T, error), save func(*T), fallback func() *T) (*T, error) {
 	if cached != nil && fresh {
 		return cached, nil
@@ -663,8 +669,10 @@ func titleFirstGet[T any](c *CacheLayer, cached *T, fresh bool, networkFn func()
 	if cached != nil {
 		return cached, nil
 	}
-	if res := fallback(); res != nil {
-		return res, nil
+	if fallback != nil {
+		if res := fallback(); res != nil {
+			return res, nil
+		}
 	}
 	return nil, noCachedDataError(networkErr)
 }
@@ -1045,7 +1053,7 @@ func (c *CacheLayer) CompleteAnimeByID(ctx context.Context, id *int, interceptor
 	}
 	return titleFirstGet(c, cached, fresh, networkFn,
 		func(res *anilist.CompleteAnimeByID) { titles.PutCompleteAnime(res.GetMedia()) },
-		func() *anilist.CompleteAnimeByID { return nil },
+		nil,
 	)
 }
 
@@ -1076,8 +1084,9 @@ func (c *CacheLayer) CompleteAnimeByIDs(ctx context.Context, ids []int) ([]*anil
 	}
 
 	fetched, err := c.anilistClientRef.Get().CompleteAnimeByIDs(ctx, missing)
-	c.checkAndUpdateWorkingState(err)
+	// Save first: this failure may mark AniList down, which stops saves.
 	titles.PutCompleteAnime(fetched...)
+	c.checkAndUpdateWorkingState(err)
 	ret = append(ret, fetched...)
 	if err != nil {
 		for _, m := range fetched {

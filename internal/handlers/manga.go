@@ -589,7 +589,6 @@ func (h *Handler) HandleAnilistListManga(c echo.Context) error {
 
 	if ret != nil {
 		anilistListMangaCache.SetT(cacheKey, ret, time.Minute*10)
-		h.saveMangaTitles(ret.GetPage().GetMedia()...)
 	}
 
 	return h.RespondWithData(c, ret)
