@@ -419,9 +419,7 @@ func (a *App) InitOrRefreshModules(profileID string) {
 	if !a.IsDesktopSidecar {
 		adminExists, _ := a.Database.AdminExists()
 		if !adminExists {
-			adminUser := os.Getenv("SEANIME_ADMIN_USERNAME")
-			adminPass := os.Getenv("SEANIME_ADMIN_PASSWORD")
-			if adminUser != "" && adminPass != "" {
+			if adminUser, adminPass, ok := envAdminCredentials(os.Getenv); ok {
 				a.bootstrapAdminFromEnv(adminUser, adminPass, os.Getenv("SEANIME_INSTANCE_ACCESS_CODE"))
 			}
 		}

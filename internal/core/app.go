@@ -291,7 +291,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 
 	// Must run before cfg.Server.Offline picks the platform below; MultiUserEnabled is only set later.
 	adminExists, _ := database.AdminExists()
-	ignoreOfflineModeWithProfiles(cfg, adminExists, logger)
+	ignoreOfflineModeWithProfiles(cfg, profilesEnabledAtBoot(adminExists, configOpts.Flags.IsDesktopSidecar, os.Getenv), logger)
 
 	// Get anime library paths for plugin context
 	animeLibraryPaths, _ := database.GetAllLibraryPathsFromSettings()
