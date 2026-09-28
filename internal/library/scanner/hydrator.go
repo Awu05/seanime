@@ -126,17 +126,22 @@ func (fh *FileHydrator) prefetchCompleteAnime(ctx context.Context, mediaIDs []in
 		_, cached := fh.CompleteAnimeCache.Get(id)
 		return !cached && !customsource.IsExtensionId(id)
 	})
-	client := fh.PlatformRef.Get().GetAnilistClient()
-	if len(missing) == 0 || client == nil {
-		return
-	}
-	media, err := client.CompleteAnimeByIDs(ctx, missing)
+	media, err := fetchCompleteAnime(ctx, fh.PlatformRef.Get().GetAnilistClient(), missing)
 	if err != nil {
 		fh.Logger.Warn().Err(err).Msg("hydrator: Failed to prefetch media")
 	}
 	for _, m := range media {
 		fh.CompleteAnimeCache.Set(m.ID, m)
 	}
+}
+
+// fetchCompleteAnime fetches ids in AniList batches, or nothing when there are none or the platform
+// has no AniList client (test fakes).
+func fetchCompleteAnime(ctx context.Context, client anilist.AnilistClient, ids []int) ([]*anilist.CompleteAnime, error) {
+	if client == nil || len(ids) == 0 {
+		return nil, nil
+	}
+	return client.CompleteAnimeByIDs(ctx, ids)
 }
 
 func (fh *FileHydrator) hydrateGroupMetadata(

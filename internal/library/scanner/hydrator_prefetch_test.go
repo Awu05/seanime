@@ -54,6 +54,13 @@ func TestPrefetchCompleteAnimeFetchesOnlyUncachedAniListIDs(t *testing.T) {
 	require.True(t, ok)
 }
 
+// Enhanced mode and title matching share this, so neither panics on a platform without a client.
+func TestFetchCompleteAnimeSkipsMissingClient(t *testing.T) {
+	media, err := fetchCompleteAnime(context.Background(), nil, []int{1})
+	require.NoError(t, err)
+	require.Empty(t, media)
+}
+
 // Platforms without an AniList client (test fakes) must be skipped, as FetchNormalizedMedia does.
 func TestPrefetchCompleteAnimeSkipsMissingClient(t *testing.T) {
 	fh := &FileHydrator{
