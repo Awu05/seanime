@@ -8,6 +8,7 @@ import (
 	"seanime/internal/extension"
 	"seanime/internal/manga"
 	manga_providers "seanime/internal/manga/providers"
+	"seanime/internal/platforms/shared_platform"
 	syncpkg "seanime/internal/sync"
 	"seanime/internal/util/result"
 	"strconv"
@@ -589,6 +590,7 @@ func (h *Handler) HandleAnilistListManga(c echo.Context) error {
 
 	if ret != nil {
 		anilistListMangaCache.SetT(cacheKey, ret, time.Minute*10)
+		shared_platform.CurrentTitleCache().PutManga(ret.GetPage().GetMedia()...)
 	}
 
 	return h.RespondWithData(c, ret)

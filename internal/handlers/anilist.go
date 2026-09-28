@@ -648,6 +648,7 @@ func (h *Handler) HandleAnilistListAnime(c echo.Context) error {
 
 	if ret != nil {
 		anilistListAnimeCache.SetT(cacheKey, ret, time.Minute*10)
+		shared_platform.CurrentTitleCache().PutAnime(ret.GetPage().GetMedia()...)
 	}
 
 	return h.RespondWithData(c, ret)
@@ -762,6 +763,7 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 		}
 	}
 
+	shared_platform.CurrentTitleCache().PutAnime(results...)
 	anilistListSeasonAnimeCache.SetT(cacheKey, results, time.Minute*10)
 
 	return h.RespondWithData(c, results)
@@ -839,6 +841,9 @@ func (h *Handler) HandleAnilistListRecentAiringAnime(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	for _, schedule := range ret.GetPage().GetAiringSchedules() {
+		shared_platform.CurrentTitleCache().PutAnime(schedule.GetMedia())
+	}
 	anilistListRecentAnimeCache.SetT(cacheKey, ret, time.Hour*1)
 
 	return h.RespondWithData(c, ret)
@@ -877,6 +882,7 @@ func (h *Handler) HandleAnilistListMissedSequels(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	shared_platform.CurrentTitleCache().PutAnime(ret...)
 	anilistMissedSequelsCache.SetT(1, ret, time.Hour*4)
 
 	return h.RespondWithData(c, ret)
