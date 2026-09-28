@@ -59,6 +59,23 @@ func TestTitleCacheSkipsNilAndZeroID(t *testing.T) {
 	require.Zero(t, tc.Size())
 }
 
+// Bulk results can be old stored copies while AniList is down, so they must not be saved as fresh.
+func TestTitleCacheSkipsSavesWhenAniListDownOrCachingDisabled(t *testing.T) {
+	tc := newTestTitleCache(t)
+	t.Cleanup(func() {
+		IsWorking.Store(true)
+		ShouldCache.Store(true)
+	})
+
+	IsWorking.Store(false)
+	tc.PutAnime(&anilist.BaseAnime{ID: 1})
+	IsWorking.Store(true)
+	ShouldCache.Store(false)
+	tc.PutAnime(&anilist.BaseAnime{ID: 2})
+
+	require.Zero(t, tc.Size())
+}
+
 func TestTitleCacheCorruptEntryIsAMiss(t *testing.T) {
 	tc := newTestTitleCache(t)
 	require.NoError(t, tc.store.Put(titleKey("anime", 1), []byte("not json")))

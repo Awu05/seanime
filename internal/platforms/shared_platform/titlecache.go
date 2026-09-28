@@ -98,7 +98,8 @@ func getTitle[M any](tc *TitleCache, kind string, id int) (media *M, fresh bool,
 }
 
 func putTitle[M any](tc *TitleCache, kind string, id int, media *M) {
-	if tc == nil || id == 0 {
+	// While AniList is down, bulk results may be old stored copies that must not be saved as fresh.
+	if tc == nil || id == 0 || !ShouldCache.Load() || !IsWorking.Load() {
 		return
 	}
 	data, err := json.Marshal(titleEntry[M]{FetchedAt: tc.now().Unix(), Media: media})
