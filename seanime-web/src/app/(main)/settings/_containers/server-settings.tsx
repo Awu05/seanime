@@ -231,55 +231,57 @@ export function ServerSettings(props: ServerSettingsProps) {
                 </div>
             </SettingsCard>
 
-            <SettingsCard
-                title="Local Account"
-                description="Local account is used when you're not using an AniList account."
-            >
-                <div className={cn(serverStatus?.user?.isSimulated && "opacity-50 pointer-events-none")}>
+            {!serverStatus?.multiUserEnabled && <>
+                <SettingsCard
+                    title="Local Account"
+                    description="Local account is used when you're not using an AniList account."
+                >
+                    <div className={cn(serverStatus?.user?.isSimulated && "opacity-50 pointer-events-none")}>
+                        <Field.Switch
+                            side="right"
+                            name="autoSyncToLocalAccount"
+                            label="Automatically back up AniList lists"
+                            help="If enabled, your local lists will be periodically updated by using your AniList data. This will override any local changes you've made since the last sync."
+                            icon={<LuUserPen className="" />}
+                        />
+                    </div>
+                    <Button
+                        size="sm"
+                        intent="primary-subtle"
+                        loading={isUploading}
+                        leftIcon={<LuCloudUpload className="size-4" />}
+                        onClick={() => {
+                            confirmDialog.open()
+                        }}
+                        disabled={serverStatus?.user?.isSimulated}
+                    >
+                        Upload local lists to AniList
+                    </Button>
+                </SettingsCard>
+
+                <ConfirmationDialog {...confirmDialog} />
+
+                <SettingsCard title="Offline mode" description="Only available when authenticated with AniList.">
+
                     <Field.Switch
                         side="right"
-                        name="autoSyncToLocalAccount"
-                        label="Automatically back up AniList lists"
-                        help="If enabled, your local lists will be periodically updated by using your AniList data. This will override any local changes you've made since the last sync."
-                        icon={<LuUserPen className="" />}
+                        name="autoSyncOfflineLocalData"
+                        label="Auto-refresh offline media"
+                        help="If disabled, you will need to manually refresh your local metadata by clicking 'Sync now' in the offline mode page."
+                        moreHelp="Will be paused if you have made changes offline and have not synced them to AniList yet."
+                        icon={<MdDownloading className="" />}
                     />
-                </div>
-                <Button
-                    size="sm"
-                    intent="primary-subtle"
-                    loading={isUploading}
-                    leftIcon={<LuCloudUpload className="size-4" />}
-                    onClick={() => {
-                        confirmDialog.open()
-                    }}
-                    disabled={serverStatus?.user?.isSimulated}
-                >
-                    Upload local lists to AniList
-                </Button>
-            </SettingsCard>
 
-            <ConfirmationDialog {...confirmDialog} />
+                    <Field.Switch
+                        side="right"
+                        name="autoSaveCurrentMediaOffline"
+                        label="Auto-save currently watched/read media"
+                        help="If enabled, Seanime will automatically save all media you're currently watching/reading for offline use."
+                        icon={<TbChecklist className="" />}
+                    />
 
-            <SettingsCard title="Offline mode" description="Only available when authenticated with AniList.">
-
-                <Field.Switch
-                    side="right"
-                    name="autoSyncOfflineLocalData"
-                    label="Auto-refresh offline media"
-                    help="If disabled, you will need to manually refresh your local metadata by clicking 'Sync now' in the offline mode page."
-                    moreHelp="Will be paused if you have made changes offline and have not synced them to AniList yet."
-                    icon={<MdDownloading className="" />}
-                />
-
-                <Field.Switch
-                    side="right"
-                    name="autoSaveCurrentMediaOffline"
-                    label="Auto-save currently watched/read media"
-                    help="If enabled, Seanime will automatically save all media you're currently watching/reading for offline use."
-                    icon={<TbChecklist className="" />}
-                />
-
-            </SettingsCard>
+                </SettingsCard>
+            </>}
 
             <SettingsCard title="Metadata Providers">
                 <div className="space-y-3">

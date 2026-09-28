@@ -25,6 +25,7 @@ import { LoadingSpinner, Spinner } from "@/components/ui/loading-spinner"
 import { Modal } from "@/components/ui/modal"
 import { Separator } from "@/components/ui/separator"
 import { anilist_getListDataFromEntry } from "@/lib/helpers/media"
+import { useRouter } from "@/lib/navigation"
 import { WSEvents } from "@/lib/server/ws-events"
 import { useAtomValue } from "jotai/react"
 import React from "react"
@@ -33,7 +34,22 @@ import { VscSyncIgnored } from "react-icons/vsc"
 import { toast } from "sonner"
 
 
+// Offline mode only serves the main account, so it's unavailable once profiles exist. The page's
+// data hooks live in SyncPage so they never fire (and 403) before the redirect.
 export default function Page() {
+    const serverStatus = useServerStatus()
+    const router = useRouter()
+    const multiUser = !!serverStatus?.multiUserEnabled
+
+    React.useEffect(() => {
+        if (multiUser) router.replace("/")
+    }, [multiUser])
+
+    if (multiUser) return null
+    return <SyncPage />
+}
+
+function SyncPage() {
     const serverStatus = useServerStatus()
 
     const [syncModalOpen, setSyncModalOpen] = React.useState(false)

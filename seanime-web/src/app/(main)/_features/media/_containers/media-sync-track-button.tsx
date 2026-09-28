@@ -1,4 +1,5 @@
 import { useLocalAddTrackedMedia, useLocalGetIsMediaTracked, useLocalRemoveTrackedMedia } from "@/api/hooks/local.hooks"
+import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { ConfirmationDialog, useConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { IconButton } from "@/components/ui/button"
 import { Tooltip } from "@/components/ui/tooltip"
@@ -11,7 +12,15 @@ type MediaSyncTrackButtonProps = {
     size?: "sm" | "md" | "lg"
 }
 
+// Hidden once profiles exist: offline mode only serves the main account. TrackButton's queries
+// must not mount there, or they 403.
 export function MediaSyncTrackButton(props: MediaSyncTrackButtonProps) {
+    const serverStatus = useServerStatus()
+    if (serverStatus?.multiUserEnabled) return null
+    return <TrackButton {...props} />
+}
+
+function TrackButton(props: MediaSyncTrackButtonProps) {
 
     const {
         mediaId,
