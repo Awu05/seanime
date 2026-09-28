@@ -230,6 +230,9 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	if err != nil {
 		return anilistClientRef.Get()
 	}
+	// Title records moved to the shared TitleCache; these per-profile files are no longer read.
+	_ = fileCacher.Remove("base-anime")
+	_ = fileCacher.Remove("base-manga")
 
 	buckets := make(map[string]filecache.PermanentBucket)
 	buckets[AnimeCollectionBucket] = filecache.NewPermanentBucket(AnimeCollectionBucket)

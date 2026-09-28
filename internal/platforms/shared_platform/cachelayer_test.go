@@ -3,6 +3,8 @@ package shared_platform
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"seanime/internal/api/anilist"
 	"seanime/internal/events"
 	"seanime/internal/util"
@@ -281,6 +283,19 @@ func TestCacheLayerServesFreshTitleWithoutHittingNetwork(t *testing.T) {
 	_, err = cacheLayer.BaseAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, atomic.LoadInt32(&client.baseAnimeCalls), "a stale title must be refetched")
+}
+
+func TestNewCacheLayerRemovesRetiredTitleBuckets(t *testing.T) {
+	cacheDir := t.TempDir()
+	for _, name := range []string{"base-anime.cache", "base-manga.cache"} {
+		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, name), []byte("{}"), 0644))
+	}
+
+	newTestCacheLayer(t, &cacheLayerTestClient{cacheDir: cacheDir})
+
+	for _, name := range []string{"base-anime.cache", "base-manga.cache"} {
+		require.NoFileExists(t, filepath.Join(cacheDir, name))
+	}
 }
 
 func TestCacheLayerSharesTitlesAcrossProfiles(t *testing.T) {
