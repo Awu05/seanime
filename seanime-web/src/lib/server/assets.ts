@@ -1,6 +1,6 @@
 import { getServerBaseUrl } from "@/api/client/server-url"
 import { SERVER_AUTH_TOKEN_STORAGE_KEY } from "@/app/(main)/_atoms/server-status.atoms"
-import { createServerPasswordHMACAuth, HMAC_TOKEN_TTL_SECONDS } from "@/lib/server/hmac-auth"
+import { createServerPasswordHMACAuth, HMAC_TOKEN_REFRESH_WINDOW_MS, HMAC_TOKEN_TTL_SECONDS } from "@/lib/server/hmac-auth"
 
 const IMAGE_CACHE_PATH = "/api/v1/image-cache"
 
@@ -21,7 +21,6 @@ function getStoredServerPasswordHash(): string | undefined {
 // A fresh token every call would change the URL (it embeds iat/exp) and defeat the browser's
 // URL-keyed cache, so the query param is reused until it's within an hour of expiring.
 const IMAGE_CACHE_TOKEN_TTL_MS = HMAC_TOKEN_TTL_SECONDS * 1000
-const IMAGE_CACHE_TOKEN_REFRESH_WINDOW_MS = 60 * 60 * 1000
 
 let cachedImageCacheToken: { hash: string; param: string; expiresAt: number } | undefined
 
@@ -29,7 +28,7 @@ function getImageCacheAuthParam(passwordHash: string): string {
     const now = Date.now()
     if (!cachedImageCacheToken
         || cachedImageCacheToken.hash !== passwordHash
-        || cachedImageCacheToken.expiresAt - now <= IMAGE_CACHE_TOKEN_REFRESH_WINDOW_MS) {
+        || cachedImageCacheToken.expiresAt - now <= HMAC_TOKEN_REFRESH_WINDOW_MS) {
         cachedImageCacheToken = {
             hash: passwordHash,
             param: createServerPasswordHMACAuth(passwordHash).generateQueryParamSync(IMAGE_CACHE_PATH, "&"),

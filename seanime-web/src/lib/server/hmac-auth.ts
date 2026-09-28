@@ -2,6 +2,8 @@ import * as CryptoJS from "crypto-js"
 
 // Shared by both HMAC-authenticated routes so their token lifetime can't drift apart.
 export const HMAC_TOKEN_TTL_SECONDS = 24 * 60 * 60
+// Long-lived URL builders re-sign once a token is this close to expiring.
+export const HMAC_TOKEN_REFRESH_WINDOW_MS = 60 * 60 * 1000
 
 interface TokenClaims {
     endpoint: string

@@ -2,6 +2,7 @@ import { getServerBaseUrl } from "@/api/client/server-url"
 import { HibikeManga_ChapterDetails, Manga_MediaDownloadData } from "@/api/generated/types"
 import { useServerHMACAuth, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { DataGridRowSelectedEvent } from "@/components/ui/datagrid/use-datagrid-row-selection"
+import { HMAC_TOKEN_REFRESH_WINDOW_MS, HMAC_TOKEN_TTL_SECONDS } from "@/lib/server/hmac-auth"
 import { RowSelectionState } from "@tanstack/react-table"
 import React from "react"
 
@@ -32,10 +33,27 @@ export function useMangaReaderUtils() {
     const [localPageToken, setLocalPageToken] = React.useState<string>("")
 
     React.useLayoutEffect(() => {
-        (async () => {
-            setTokenQueryParam(await getHMACTokenQueryParam("/api/v1/image-proxy", "&"))
-            setLocalPageToken(await getHMACTokenQueryParam("/api/v1/manga/local-page", "?"))
-        })()
+        let cancelled = false
+        let expiresAt = 0
+        const sign = async () => {
+            if (expiresAt - Date.now() > HMAC_TOKEN_REFRESH_WINDOW_MS) return
+            expiresAt = Date.now() + HMAC_TOKEN_TTL_SECONDS * 1000
+            const [proxyToken, localToken] = await Promise.all([
+                getHMACTokenQueryParam("/api/v1/image-proxy", "&"),
+                getHMACTokenQueryParam("/api/v1/manga/local-page", "?"),
+            ])
+            if (cancelled) return
+            setTokenQueryParam(proxyToken)
+            setLocalPageToken(localToken)
+        }
+        sign()
+        // Re-signs before expiry so a reader left open keeps loading pages. Checked every minute
+        // rather than with one long timer, which a sleeping device can delay past expiry.
+        const interval = setInterval(sign, 60_000)
+        return () => {
+            cancelled = true
+            clearInterval(interval)
+        }
     }, [password])
 
     const getChapterPageUrl = React.useCallback((url: string, isDownloaded: boolean | undefined, headers?: Record<string, string>) => {
