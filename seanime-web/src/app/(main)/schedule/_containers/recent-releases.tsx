@@ -1,8 +1,12 @@
+import { AL_ListRecentAnime_Page_AiringSchedules } from "@/api/generated/types"
 import { useAnilistListRecentAiringAnime } from "@/api/hooks/anilist.hooks"
+import { MediaCardGrid } from "@/app/(main)/_features/media/_components/media-card-grid"
 import { MediaEntryCard } from "@/app/(main)/_features/media/_components/media-entry-card"
 import { MediaEntryCardSkeleton } from "@/app/(main)/_features/media/_components/media-entry-card-skeleton"
+import { DiscoverRowHeader } from "@/app/(main)/discover/_components/discover-row-header"
 import { AppLayoutStack } from "@/components/ui/app-layout"
 import { Carousel, CarouselContent, CarouselDotButtons } from "@/components/ui/carousel"
+import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { addSeconds, formatDistanceToNow, subDays } from "date-fns"
 import React from "react"
 
@@ -25,7 +29,11 @@ export function RecentReleases() {
 
     return (
         <AppLayoutStack className="pb-6">
-            <h2>Aired Recently</h2>
+            <DiscoverRowHeader title="Aired Recently">
+                {isLoading ? <LoadingSpinner /> : <MediaCardGrid maxCol={5}>
+                    {aired?.map(item => <RecentReleaseCard key={item.id} item={item} showPreviewButton />)}
+                </MediaCardGrid>}
+            </DiscoverRowHeader>
             <Carousel
                 className="w-full max-w-full"
                 gap="md"
@@ -40,38 +48,52 @@ export function RecentReleases() {
                 <CarouselContent className="px-6">
                     {!isLoading ? aired?.map(item => {
                         return (
-                            <MediaEntryCard
+                            <RecentReleaseCard
                                 key={item.id}
-                                media={item?.media!}
-                                showLibraryBadge
+                                item={item}
                                 containerClassName="basis-[200px] md:basis-[250px] mx-2 mt-8 mb-0"
-                                hideReleasingBadge
-                                showTrailer
-                                type="anime"
-                                overlay={<div className="flex flex-col w-fit absolute right-0 items-end">
-                                    <div
-                                        className="font-semibold text-white bg-gray-950 z-[1] pl-3 pr-[0.2rem] w-full py-1.5 text-center !tracking-wider !bg-opacity-80 rounded-none rounded-bl-lg"
-                                    >{item?.media?.format === "MOVIE" ? "Movie" :
-                                        <span className="tracking-wider"><span className="!text-lg">{item.episode}</span><span className="text-[--muted] tracking-wider !text-md">/{item.media?.episodes ?? "-"}</span></span>}</div>
-                                    <div className="text-xs font-semibold z-[-1] w-fit h-fit pl-2 pr-[0.3rem] py-1 ml-2 text-center bg-gray-700 !bg-opacity-70 rounded-none rounded-bl-lg">
-                                        {item.airingAt
-                                            ? formatDistanceToNow(addSeconds(new Date(), item.timeUntilAiring), { addSuffix: true })
-                                                ?.replace("less than a", "1")
-                                                ?.replace("about ", "")
-                                                ?.replace(" minutes", "m")
-                                                ?.replace(" minute", "m")
-                                                ?.replace(" hours", "h")
-                                                ?.replace(" hour", "h")
-                                                ?.replace(" days", "d")
-
-                                            : undefined}
-                                    </div>
-                                </div>}
                             />
                         )
                     }) : [...Array(10).keys()].map((v, idx) => <MediaEntryCardSkeleton key={idx} />)}
                 </CarouselContent>
             </Carousel>
         </AppLayoutStack>
+    )
+}
+
+function RecentReleaseCard({ item, containerClassName, showPreviewButton }: {
+    item: AL_ListRecentAnime_Page_AiringSchedules,
+    containerClassName?: string,
+    showPreviewButton?: boolean
+}) {
+    return (
+        <MediaEntryCard
+            media={item?.media!}
+            showLibraryBadge
+            containerClassName={containerClassName}
+            hideReleasingBadge
+            showTrailer
+            showPreviewButton={showPreviewButton}
+            type="anime"
+            overlay={<div className="flex flex-col w-fit absolute right-0 items-end">
+                <div
+                    className="font-semibold text-white bg-gray-950 z-[1] pl-3 pr-[0.2rem] w-full py-1.5 text-center !tracking-wider !bg-opacity-80 rounded-none rounded-bl-lg"
+                >{item?.media?.format === "MOVIE" ? "Movie" :
+                    <span className="tracking-wider"><span className="!text-lg">{item.episode}</span><span className="text-[--muted] tracking-wider !text-md">/{item.media?.episodes ?? "-"}</span></span>}</div>
+                <div className="text-xs font-semibold z-[-1] w-fit h-fit pl-2 pr-[0.3rem] py-1 ml-2 text-center bg-gray-700 !bg-opacity-70 rounded-none rounded-bl-lg">
+                    {item.airingAt
+                        ? formatDistanceToNow(addSeconds(new Date(), item.timeUntilAiring), { addSuffix: true })
+                            ?.replace("less than a", "1")
+                            ?.replace("about ", "")
+                            ?.replace(" minutes", "m")
+                            ?.replace(" minute", "m")
+                            ?.replace(" hours", "h")
+                            ?.replace(" hour", "h")
+                            ?.replace(" days", "d")
+
+                        : undefined}
+                </div>
+            </div>}
+        />
     )
 }

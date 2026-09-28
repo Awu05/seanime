@@ -40,7 +40,7 @@ import { useHasTorrentOrDebridInclusion, useIsSimulatedUser, useServerStatus } f
 import { MangaEntryCardUnreadBadge } from "@/app/(main)/manga/_containers/manga-entry-card-unread-badge"
 import { SeaLink } from "@/components/shared/sea-link"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, IconButton } from "@/components/ui/button"
 import { ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { preloadMediaEntry } from "@/lib/entry-preloader"
 import { stripHtml } from "@/lib/helpers/string"
@@ -79,6 +79,8 @@ type MediaEntryCardProps<T extends "anime" | "manga"> = {
     hideAnilistEntryEditButton?: boolean
     onClick?: () => void
     hideReleasingBadge?: boolean
+    // Adds a preview button to the hover popup, for lists the user shouldn't have to leave to see details.
+    showPreviewButton?: boolean
 } & MediaEntryCardBaseProps
 
 function formatAiringDateRange(
@@ -126,6 +128,7 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
         hideAnilistEntryEditButton = false,
         onClick,
         hideReleasingBadge = false,
+        showPreviewButton = false,
     } = props
 
     const router = useRouter()
@@ -391,6 +394,14 @@ export function MediaEntryCard<T extends "anime" | "manga">(props: MediaEntryCar
                                             : "Start Reading"}
                                     </Button>
                                 </SeaLink>}
+                                {showPreviewButton && !serverStatus?.isOffline && <IconButton
+                                    icon={<LuEye />}
+                                    intent="gray-subtle"
+                                    size="sm"
+                                    tabIndex={-1}
+                                    aria-label="Preview"
+                                    onClick={handlePreviewClick}
+                                />}
                             </div>
 
                             {type === "anime" && (

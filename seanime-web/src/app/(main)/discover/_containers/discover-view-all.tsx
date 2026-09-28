@@ -1,0 +1,82 @@
+import { buildSeaQuery } from "@/api/client/requests"
+import { AnilistListAnime_Variables, AnilistListManga_Variables } from "@/api/generated/endpoint.types"
+import { API_ENDPOINTS } from "@/api/generated/endpoints"
+import { AL_BaseAnime, AL_BaseManga, AL_ListAnime, AL_ListManga } from "@/api/generated/types"
+import { serverAuthTokenAtom } from "@/app/(main)/_atoms/server-status.atoms"
+import { MediaCardGrid } from "@/app/(main)/_features/media/_components/media-card-grid"
+import { MediaEntryCard } from "@/app/(main)/_features/media/_components/media-entry-card"
+import { DiscoverAnimeList, discoverMangaVariables } from "@/app/(main)/discover/_lib/discover-variables"
+import { __discover_trendingMangaGenresAtom, useDiscoverAnimeVariables } from "@/app/(main)/discover/_lib/handle-discover-queries"
+import { Button } from "@/components/ui/button"
+import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { useInfiniteQuery } from "@tanstack/react-query"
+import { useAtomValue } from "jotai/react"
+import uniqBy from "lodash/uniqBy"
+import { useInView } from "motion/react"
+import React from "react"
+
+const PAGE_SIZE = 48
+
+export function DiscoverViewAllAnime({ list }: { list: DiscoverAnimeList }) {
+    return <InfiniteMediaGrid type="anime" variables={useDiscoverAnimeVariables(list)} />
+}
+
+export function DiscoverViewAllManga({ country }: { country: string }) {
+    const genres = useAtomValue(__discover_trendingMangaGenresAtom)
+    return <InfiniteMediaGrid type="manga" variables={discoverMangaVariables(country, genres)} />
+}
+
+type InfiniteMediaGridProps =
+    | { type: "anime", variables: AnilistListAnime_Variables }
+    | { type: "manga", variables: AnilistListManga_Variables }
+
+function InfiniteMediaGrid({ type, variables }: InfiniteMediaGridProps) {
+    const password = useAtomValue(serverAuthTokenAtom)
+
+    const { data, isPending, isError, isFetchNextPageError, hasNextPage, isFetchingNextPage, fetchNextPage, refetch } = useInfiniteQuery({
+        queryKey: ["discover-view-all", type, variables],
+        initialPageParam: 1,
+        queryFn: ({ pageParam }) => buildSeaQuery<AL_ListAnime | AL_ListManga>({
+            endpoint: type === "anime" ? API_ENDPOINTS.ANILIST.AnilistListAnime.endpoint : API_ENDPOINTS.MANGA.AnilistListManga.endpoint,
+            method: "POST",
+            data: { ...variables, page: pageParam, perPage: PAGE_SIZE },
+            password,
+        }),
+        getNextPageParam: lastPage => lastPage?.Page?.pageInfo?.hasNextPage ? (lastPage.Page.pageInfo.currentPage ?? 0) + 1 : undefined,
+    })
+
+    // Loads the next page as the bottom of the list comes near the viewport.
+    const endRef = React.useRef<HTMLDivElement>(null)
+    const nearEnd = useInView(endRef, { margin: "0px 0px 600px 0px" })
+    React.useEffect(() => {
+        if (nearEnd && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) fetchNextPage()
+    }, [nearEnd, hasNextPage, isFetchingNextPage, isFetchNextPageError])
+
+    // Rankings can shift between page requests, so the same title may come back on two pages.
+    const media = React.useMemo(() => uniqBy(data?.pages.flatMap(page => page?.Page?.media ?? []) ?? [], "id"), [data])
+
+    if (isPending) return <LoadingSpinner />
+    if (isError && !data) return <RetryMessage message="Couldn't load titles" onRetry={() => refetch()} />
+
+    return (
+        <>
+            <MediaCardGrid maxCol={5}>
+                {media.map(item => type === "anime"
+                    ? <MediaEntryCard key={item.id} media={item as AL_BaseAnime} type="anime" showLibraryBadge showTrailer showPreviewButton />
+                    : <MediaEntryCard key={item.id} media={item as AL_BaseManga} type="manga" showPreviewButton />)}
+            </MediaCardGrid>
+            <div ref={endRef} />
+            {isFetchingNextPage && <LoadingSpinner />}
+            {isFetchNextPageError && <RetryMessage message="Couldn't load more titles" onRetry={() => fetchNextPage()} />}
+        </>
+    )
+}
+
+function RetryMessage({ message, onRetry }: { message: string, onRetry: () => void }) {
+    return (
+        <div className="flex flex-col items-center gap-2 py-6 text-[--muted]">
+            <p>{message}</p>
+            <Button intent="gray-subtle" size="sm" onClick={onRetry}>Try again</Button>
+        </div>
+    )
+}

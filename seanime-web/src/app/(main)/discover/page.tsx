@@ -3,6 +3,7 @@ import { PluginWebviewSlot } from "@/app/(main)/_features/plugin/webview/plugin-
 import { useAnilistHealthy } from "@/app/(main)/_hooks/use-anilist-healthy"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { DiscoverPageHeader } from "@/app/(main)/discover/_components/discover-page-header"
+import { DiscoverRowHeader } from "@/app/(main)/discover/_components/discover-row-header"
 import { DiscoverAiringSchedule } from "@/app/(main)/discover/_containers/discover-airing-schedule"
 import { DiscoverMissedSequelsSection } from "@/app/(main)/discover/_containers/discover-missed-sequels"
 import { DiscoverPastSeason, DiscoverThisSeason } from "@/app/(main)/discover/_containers/discover-popular"
@@ -10,6 +11,7 @@ import { DiscoverTrending } from "@/app/(main)/discover/_containers/discover-tre
 import { DiscoverTrendingCountry } from "@/app/(main)/discover/_containers/discover-trending-country"
 import { DiscoverTrendingMovies } from "@/app/(main)/discover/_containers/discover-trending-movies"
 import { DiscoverUpcoming } from "@/app/(main)/discover/_containers/discover-upcoming"
+import { DiscoverViewAllAnime, DiscoverViewAllManga } from "@/app/(main)/discover/_containers/discover-view-all"
 import { __discord_pageTypeAtom } from "@/app/(main)/discover/_lib/discover.atoms"
 import { RecentReleases } from "@/app/(main)/schedule/_containers/recent-releases"
 import { PageWrapper } from "@/components/shared/page-wrapper"
@@ -112,25 +114,25 @@ export default function Page() {
                         data-discover-page-anime-container
                     >
                         <div className="space-y-2 z-[5] relative" data-discover-page-anime-trending-container>
-                            <h2>Trending Right Now</h2>
+                            <DiscoverRowHeader title="Trending Right Now"><DiscoverViewAllAnime list="trending" /></DiscoverRowHeader>
                             <DiscoverTrending />
                         </div>
                         <RecentReleases />
                         {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-highest-rated-container>
-                            <h2>Top of the Season</h2>
+                            <DiscoverRowHeader title="Top of the Season"><DiscoverViewAllAnime list="thisSeason" /></DiscoverRowHeader>
                             <DiscoverThisSeason />
                         </div>}
                         {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-highest-rated-container>
-                            <h2>Best of Last Season</h2>
+                            <DiscoverRowHeader title="Best of Last Season"><DiscoverViewAllAnime list="pastSeason" /></DiscoverRowHeader>
                             <DiscoverPastSeason />
                         </div>}
                         <DiscoverMissedSequelsSection />
                         <div className="space-y-2 z-[5] relative" data-discover-page-anime-upcoming-container>
-                            <h2>Coming Soon</h2>
+                            <DiscoverRowHeader title="Coming Soon"><DiscoverViewAllAnime list="upcoming" /></DiscoverRowHeader>
                             <DiscoverUpcoming />
                         </div>
                         {anilistHealthy && <div className="space-y-2 z-[5] relative" data-discover-page-anime-trending-movies-container>
-                            <h2>Trending Movies</h2>
+                            <DiscoverRowHeader title="Trending Movies"><DiscoverViewAllAnime list="trendingMovies" /></DiscoverRowHeader>
                             <DiscoverTrendingMovies />
                         </div>}
                         {/*<div className="space-y-2 z-[5] relative">*/}
@@ -171,15 +173,15 @@ export default function Page() {
                         {/*    <DiscoverTrendingMangaAll />*/}
                         {/*</div>*/}
                         <div className="space-y-2 z-[5] relative" data-discover-page-manga-trending-container>
-                            <h2>Trending Manga</h2>
+                            <DiscoverRowHeader title="Trending Manga"><DiscoverViewAllManga country="JP" /></DiscoverRowHeader>
                             <DiscoverTrendingCountry country="JP" forDiscoverHeader />
                         </div>
                         <div className="space-y-2 z-[5] relative" data-discover-page-manga-trending-manhwa-container>
-                            <h2>Trending Manhwa</h2>
+                            <DiscoverRowHeader title="Trending Manhwa"><DiscoverViewAllManga country="KR" /></DiscoverRowHeader>
                             <DiscoverTrendingCountry country="KR" />
                         </div>
                         <div className="space-y-2 z-[5] relative" data-discover-page-manga-trending-manhua-container>
-                            <h2>Trending Manhua</h2>
+                            <DiscoverRowHeader title="Trending Manhua"><DiscoverViewAllManga country="CN" /></DiscoverRowHeader>
                             <DiscoverTrendingCountry country="CN" />
                         </div>
                         {/*<div className="space-y-2 z-[5] relative">*/}

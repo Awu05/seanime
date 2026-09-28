@@ -4,13 +4,13 @@ import { MediaEntryCardSkeleton } from "@/app/(main)/_features/media/_components
 import { MediaGenreSelector } from "@/app/(main)/_features/media/_components/media-genre-selector"
 import { __discover_hoveringHeaderAtom } from "@/app/(main)/discover/_components/discover-page-header"
 import { __discover_headerIsTransitioningAtom, __discover_randomTrendingAtom } from "@/app/(main)/discover/_containers/discover-trending"
+import { discoverMangaVariables } from "@/app/(main)/discover/_lib/discover-variables"
+import { __discover_trendingMangaGenresAtom } from "@/app/(main)/discover/_lib/handle-discover-queries"
 import { ADVANCED_SEARCH_MEDIA_GENRES } from "@/app/(main)/search/_lib/advanced-search-constants"
 import { Carousel, CarouselContent, CarouselDotButtons } from "@/components/ui/carousel"
 import { atom } from "jotai"
 import { useAtom, useAtomValue, useSetAtom } from "jotai/react"
 import React, { useEffect, useState } from "react"
-
-const trendingGenresAtom = atom<string[]>([])
 
 export const __discover_mangaRandomNumberAtom = atom<number>(0)
 export const __discover_mangaTotalItemsAtom = atom<number>(0)
@@ -22,14 +22,8 @@ export const __discover_setMangaRandomNumberAtom = atom(
 )
 
 export function DiscoverTrendingCountry({ country, forDiscoverHeader }: { country: string | undefined, forDiscoverHeader?: boolean }) {
-    const genres = useAtomValue(trendingGenresAtom)
-    const { data, isLoading } = useAnilistListManga({
-        page: 1,
-        perPage: 20,
-        sort: ["TRENDING_DESC"],
-        countryOfOrigin: country || undefined,
-        genres: genres.length > 0 ? genres : undefined,
-    })
+    const genres = useAtomValue(__discover_trendingMangaGenresAtom)
+    const { data, isLoading } = useAnilistListManga({ page: 1, perPage: 20, ...discoverMangaVariables(country, genres) })
 
     const setRandomTrendingAtom = useSetAtom(__discover_randomTrendingAtom)
     const isHoveringHeader = useAtomValue(__discover_hoveringHeaderAtom)
@@ -126,7 +120,7 @@ export function DiscoverTrendingCountry({ country, forDiscoverHeader }: { countr
 
 function GenreSelector() {
 
-    const [selectedGenre, setSelectedGenre] = useAtom(trendingGenresAtom)
+    const [selectedGenre, setSelectedGenre] = useAtom(__discover_trendingMangaGenresAtom)
 
     return (
         <MediaGenreSelector

@@ -1,6 +1,8 @@
 import { useAnilistListMissedSequels } from "@/api/hooks/anilist.hooks"
+import { MediaCardGrid } from "@/app/(main)/_features/media/_components/media-card-grid"
 import { MediaEntryCard } from "@/app/(main)/_features/media/_components/media-entry-card"
 import { MediaEntryCardSkeleton } from "@/app/(main)/_features/media/_components/media-entry-card-skeleton"
+import { DiscoverRowHeader } from "@/app/(main)/discover/_components/discover-row-header"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Carousel, CarouselContent, CarouselDotButtons } from "@/components/ui/carousel"
 import { useInView } from "motion/react"
@@ -18,7 +20,11 @@ export function DiscoverMissedSequelsSection({ title = "You Might Have Missed" }
 
     return (
         <PageWrapper className="space-y-2 z-[5] relative" data-discover-missed-sequels-container>
-            <h2>{title}</h2>
+            <DiscoverRowHeader title={title}>
+                <MediaCardGrid maxCol={5}>
+                    {data.map(media => <MediaEntryCard key={media.id} media={media} showLibraryBadge showTrailer showPreviewButton type="anime" />)}
+                </MediaCardGrid>
+            </DiscoverRowHeader>
             <Carousel
                 className="w-full max-w-full"
                 gap="xl"
