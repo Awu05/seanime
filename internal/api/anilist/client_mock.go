@@ -642,6 +642,16 @@ func (ac *FixtureAnilistClient) CompleteAnimeByID(ctx context.Context, id *int, 
 	return nil, ac.missingFixtureError("CompleteAnimeByID", *id)
 }
 
+func (ac *FixtureAnilistClient) CompleteAnimeByIDs(ctx context.Context, ids []int) ([]*CompleteAnime, error) {
+	ret := make([]*CompleteAnime, 0, len(ids))
+	for _, id := range ids {
+		if res, err := ac.CompleteAnimeByID(ctx, &id); err == nil {
+			ret = append(ret, res.GetMedia())
+		}
+	}
+	return ret, nil
+}
+
 func (ac *FixtureAnilistClient) ListAnime(ctx context.Context, page *int, search *string, perPage *int, sort []*MediaSort, status []*MediaStatus, genres []*string, tags []*string, averageScoreGreater *int, season *MediaSeason, seasonYear *int, format *MediaFormat, isAdult *bool, interceptors ...clientv2.RequestInterceptor) (*ListAnime, error) {
 	ac.logger.Debug().Msg("anilist: Fetching media list")
 	media, pageInfo, err := baseAnimeFixtureSlice(page, perPage)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"seanime/internal/api/anilist"
 	"seanime/internal/events"
 	"seanime/internal/util"
@@ -1046,6 +1047,45 @@ func (c *CacheLayer) CompleteAnimeByID(ctx context.Context, id *int, interceptor
 		func(res *anilist.CompleteAnimeByID) { titles.PutCompleteAnime(res.GetMedia()) },
 		func() *anilist.CompleteAnimeByID { return nil },
 	)
+}
+
+// CompleteAnimeByIDs returns what the shared title cache and AniList have for ids, fetching only the
+// records that aren't fresh. On failure it still returns what it has, including stale copies.
+func (c *CacheLayer) CompleteAnimeByIDs(ctx context.Context, ids []int) ([]*anilist.CompleteAnime, error) {
+	if !ShouldCache.Load() {
+		return c.anilistClientRef.Get().CompleteAnimeByIDs(ctx, ids)
+	}
+
+	titles := CurrentTitleCache()
+	ret := make([]*anilist.CompleteAnime, 0, len(ids))
+	stale := make(map[int]*anilist.CompleteAnime)
+	var missing []int
+	for _, id := range ids {
+		media, fresh, ok := titles.GetCompleteAnime(id)
+		if ok && fresh {
+			ret = append(ret, media)
+			continue
+		}
+		if ok {
+			stale[id] = media
+		}
+		missing = append(missing, id)
+	}
+	if len(missing) == 0 || !IsWorking.Load() {
+		return append(ret, slices.Collect(maps.Values(stale))...), nil
+	}
+
+	fetched, err := c.anilistClientRef.Get().CompleteAnimeByIDs(ctx, missing)
+	c.checkAndUpdateWorkingState(err)
+	titles.PutCompleteAnime(fetched...)
+	ret = append(ret, fetched...)
+	if err != nil {
+		for _, m := range fetched {
+			delete(stale, m.ID)
+		}
+		ret = append(ret, slices.Collect(maps.Values(stale))...)
+	}
+	return ret, err
 }
 
 func (c *CacheLayer) AnimeDetailsByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.AnimeDetailsByID, error) {

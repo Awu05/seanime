@@ -28,8 +28,9 @@ type cacheLayerTestClient struct {
 	baseAnimeCalls      int32
 	baseAnimeErr        error
 	customQueryErr      error
-	completeAnimeCalls  int32
-	completeAnimeErr    error
+	completeAnimeCalls   int32
+	completeAnimeErr     error
+	completeAnimeBatches [][]int
 }
 
 type cacheLayerUpdateEntryCall struct {
@@ -73,6 +74,26 @@ func (c *cacheLayerTestClient) CompleteAnimeByID(_ context.Context, id *int, _ .
 		return nil, c.completeAnimeErr
 	}
 	return &anilist.CompleteAnimeByID{Media: &anilist.CompleteAnime{ID: *id}}, nil
+}
+
+func (c *cacheLayerTestClient) CompleteAnimeByIDs(_ context.Context, ids []int) ([]*anilist.CompleteAnime, error) {
+	c.completeAnimeBatches = append(c.completeAnimeBatches, ids)
+	if c.completeAnimeErr != nil {
+		return nil, c.completeAnimeErr
+	}
+	ret := make([]*anilist.CompleteAnime, len(ids))
+	for i, id := range ids {
+		ret[i] = &anilist.CompleteAnime{ID: id}
+	}
+	return ret, nil
+}
+
+func completeAnimeIDs(media []*anilist.CompleteAnime) []int {
+	ids := make([]int, len(media))
+	for i, m := range media {
+		ids[i] = m.ID
+	}
+	return ids
 }
 
 func (c *cacheLayerTestClient) CustomQuery(_ []byte, _ *zerolog.Logger, _ ...string) (interface{}, error) {
@@ -350,6 +371,39 @@ func TestCacheLayerServesStaleCompleteAnimeWhenAniListDown(t *testing.T) {
 	res, err := cacheLayer.CompleteAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
 	require.Equal(t, 1, res.GetMedia().ID)
+}
+
+func TestCacheLayerCompleteAnimeByIDsFetchesOnlyMissing(t *testing.T) {
+	tc := installTestTitleCache(t)
+	tc.PutCompleteAnime(&anilist.CompleteAnime{ID: 1})
+	client := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	cacheLayer := newTestCacheLayer(t, client)
+
+	media, err := cacheLayer.CompleteAnimeByIDs(context.Background(), []int{1, 2, 3})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []int{1, 2, 3}, completeAnimeIDs(media))
+	require.Equal(t, [][]int{{2, 3}}, client.completeAnimeBatches)
+
+	_, _, ok := tc.GetCompleteAnime(3)
+	require.True(t, ok, "fetched records must be saved")
+}
+
+func TestCacheLayerCompleteAnimeByIDsServesStaleWhenAniListFails(t *testing.T) {
+	tc := installTestTitleCache(t)
+	tc.PutCompleteAnime(&anilist.CompleteAnime{ID: 1})
+	tc.now = func() time.Time { return time.Now().Add(longCacheTTL + time.Minute) }
+	client := &cacheLayerTestClient{cacheDir: t.TempDir(), completeAnimeErr: errors.New("anilist down")}
+	cacheLayer := newTestCacheLayer(t, client)
+
+	media, err := cacheLayer.CompleteAnimeByIDs(context.Background(), []int{1, 2})
+	require.Error(t, err)
+	require.Equal(t, []int{1}, completeAnimeIDs(media))
+
+	IsWorking.Store(false)
+	media, err = cacheLayer.CompleteAnimeByIDs(context.Background(), []int{1, 2})
+	require.NoError(t, err)
+	require.Equal(t, []int{1}, completeAnimeIDs(media))
+	require.Len(t, client.completeAnimeBatches, 1, "no request while AniList is marked down")
 }
 
 func TestCacheLayerSharesTitlesAcrossProfiles(t *testing.T) {
