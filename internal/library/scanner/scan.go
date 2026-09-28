@@ -57,12 +57,17 @@ type Scanner struct {
 	ProfileID string
 }
 
+// scanContext keeps a scan running when the request that started it ends, since its files are saved
+// afterwards, and gives it only the AniList budget that people browsing can spare.
+func scanContext(ctx context.Context) context.Context {
+	return anilist.WithBackgroundPriority(context.WithoutCancel(ctx))
+}
+
 // Scan will scan the directory and return a list of anime.LocalFile.
 func (scn *Scanner) Scan(ctx context.Context) (lfs []*anime.LocalFile, err error) {
 	defer util.HandlePanicWithError(&err)
 
-	// Scans only use the AniList budget that people browsing can spare.
-	ctx = anilist.WithBackgroundPriority(ctx)
+	ctx = scanContext(ctx)
 
 	go anime.EpisodeCollectionFromLocalFilesCache.Clear()
 
