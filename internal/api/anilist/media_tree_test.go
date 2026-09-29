@@ -2,6 +2,7 @@ package anilist
 
 import (
 	"context"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 )
 
 func TestBaseAnime_FetchMediaTree_BaseAnime(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "CompleteAnimeByID")
 	anilistClient := NewTestAnilistClient()
 	completeAnimeCache := NewCompleteAnimeCache()
 

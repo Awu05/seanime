@@ -30,10 +30,10 @@ type scannerTestWrapper struct {
 	LibraryDir         string
 }
 
-func newScannerFixtureWrapper(t testing.TB) *scannerTestWrapper {
+func newScannerFixtureWrapper(t testing.TB, flags ...testutil.SkipFunc) *scannerTestWrapper {
 	t.Helper()
 
-	env := testutil.NewTestEnv(t)
+	env := testutil.NewTestEnv(t, flags...)
 	return newScannerWrapper(t, env, anilist.NewTestAnilistClient(), "")
 }
 

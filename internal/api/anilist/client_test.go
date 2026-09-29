@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"strconv"
 	"testing"
@@ -47,6 +48,7 @@ func newAniListTestResponse(statusCode int, body string, headers map[string]stri
 }
 
 func TestGetAnimeById(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "BaseAnimeByID")
 	anilistClient := NewTestAnilistClient()
 
 	tests := []struct {
@@ -78,6 +80,7 @@ func TestGetAnimeByIdLive(t *testing.T) {
 }
 
 func TestListAnime(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	tests := []struct {
 		name                string
 		Page                *int

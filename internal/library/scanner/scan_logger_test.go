@@ -3,11 +3,13 @@ package scanner
 import (
 	"context"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"testing"
 )
 
 func TestScanLogger(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollectionWithRelations")
 	wrapper := newScannerFixtureWrapper(t)
 	logger := wrapper.Logger
 	animeCollection, err := wrapper.Platform.GetAnimeCollectionWithRelations(t.Context())

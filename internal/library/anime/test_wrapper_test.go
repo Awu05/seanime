@@ -31,6 +31,7 @@ type animeTestMetadataProvider struct {
 
 func newAnimeTestWrapper(t *testing.T) *animeTestWrapper {
 	t.Helper()
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 
 	// keep the real fixture stack, but make metadata overrides cheap and explicit per test.
 	env := testutil.NewTestEnv(t)

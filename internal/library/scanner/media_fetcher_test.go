@@ -3,6 +3,7 @@ package scanner
 import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 )
 
 func TestNewMediaFetcher(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollectionWithRelations")
 	wrapper := newScannerFixtureWrapper(t)
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
 
@@ -93,7 +95,8 @@ func TestNewMediaFetcher(t *testing.T) {
 }
 
 func TestNewEnhancedMediaFetcher(t *testing.T) {
-	wrapper := newScannerFixtureWrapper(t)
+	testutil.RequireAnilistFixtures(t, "AnimeCollectionWithRelations")
+	wrapper := newScannerFixtureWrapper(t, testutil.MyAnimeList())
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
 
 	tests := []struct {
@@ -161,7 +164,8 @@ func TestNewEnhancedMediaFetcher(t *testing.T) {
 }
 
 func TestFetchMediaFromLocalFiles(t *testing.T) {
-	wrapper := newScannerFixtureWrapper(t)
+	testutil.RequireAnilistFixtures(t, "AnimeCollectionWithRelations")
+	wrapper := newScannerFixtureWrapper(t, testutil.MyAnimeList())
 	completeAnimeCache := anilist.NewCompleteAnimeCache()
 
 	tests := []struct {

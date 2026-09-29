@@ -9,6 +9,7 @@ import (
 	"seanime/internal/library/anime"
 	"seanime/internal/library/summary"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"seanime/internal/util/result"
 	"testing"
@@ -18,6 +19,7 @@ import (
 )
 
 func TestFileHydrator_HydrateMetadata(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollectionWithRelations")
 	wrapper := newScannerFixtureWrapper(t)
 	logger := wrapper.Logger
 	animeCollection, err := wrapper.Platform.GetAnimeCollectionWithRelations(t.Context())

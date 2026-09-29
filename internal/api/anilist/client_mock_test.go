@@ -37,6 +37,7 @@ func TestCustomQueryFixturePathIsStable(t *testing.T) {
 }
 
 func TestFixtureMangaCollectionUsesCommittedFixture(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "MangaCollection")
 	client := NewFixtureAnilistClient()
 
 	collection, err := client.MangaCollection(context.Background(), nil)

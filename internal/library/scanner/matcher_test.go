@@ -5,6 +5,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/library/anime"
 	"seanime/internal/platforms/platform"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 )
 
 func TestMatcher1(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollectionWithRelations")
 
 	anilistClient := anilist.NewTestAnilistClient()
 	animeCollection, err := anilistClient.AnimeCollectionWithRelations(context.Background(), nil)
@@ -946,6 +948,7 @@ func TestMatcher3(t *testing.T) {
 // TestMatcherWithOfflineDB tests matching using the anime-offline-database.
 // MediaFetcher is initialized with DisableAnimeCollection=true and Enhanced=true.
 func TestMatcherWithOfflineDB(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollectionWithRelations")
 	if testing.Short() {
 		t.Skip("Skipping integration test")
 	}

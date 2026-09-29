@@ -226,6 +226,20 @@ func ShouldRecordAnilistFixtures() bool {
 	return enabled
 }
 
+// RequireAnilistFixtures skips the test unless the named AniList fixtures are recorded or about to be.
+// They're recorded from a logged-in account and never committed, so a fresh checkout has none.
+func RequireAnilistFixtures(t testing.TB, names ...string) {
+	t.Helper()
+	if ShouldRecordAnilistFixtures() {
+		return
+	}
+	for _, name := range names {
+		if _, err := os.Stat(TestDataPath(name)); err != nil {
+			t.Skipf("AniList fixture %q isn't recorded; set %s=true with a logged-in client to record it", name, RecordAnilistFixturesEnvName)
+		}
+	}
+}
+
 func Live() SkipFunc {
 	return func(t testing.TB, cfg *Config) {
 		t.Helper()

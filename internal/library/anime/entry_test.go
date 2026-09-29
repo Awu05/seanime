@@ -7,6 +7,7 @@ import (
 	"seanime/internal/extension"
 	"seanime/internal/library/anime"
 	"seanime/internal/platforms/anilist_platform"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 // TestNewAnimeEntry tests /library/entry endpoint.
 // /!\ MAKE SURE TO HAVE THE MEDIA ADDED TO YOUR LIST TEST ACCOUNT LISTS
 func TestNewAnimeEntry(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	logger := util.NewLogger()
 
 	database, err := db.NewDatabase(t.TempDir(), "test", logger)
