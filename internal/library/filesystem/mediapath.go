@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	stdpath "path"
 	"path/filepath"
 	"seanime/internal/util"
 	"sort"
@@ -26,7 +27,8 @@ func SeparateFilePath(path string, prefixPath string) *SeparatedFilePath {
 		cleaned = path[len(prefixPath):] // Remove prefix
 	}
 	fp := filepath.Base(filepath.ToSlash(path))
-	parentsPath := filepath.Dir(filepath.ToSlash(cleaned))
+	// path.Dir keeps the slashes; filepath.Dir would turn them back into backslashes on Windows.
+	parentsPath := stdpath.Dir(cleaned)
 	if parentsPath == "." || parentsPath == "/" || parentsPath == ".." {
 		parentsPath = ""
 	}

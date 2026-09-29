@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"seanime/internal/util"
 	"testing"
 
@@ -72,6 +73,10 @@ func TestGetVideoFilePathsFromDir_WithSymlinks(t *testing.T) {
 	// Create a symlink to the external directory
 	symlinkPath := filepath.Join(libDir, "symlink_to_external")
 	if err := os.Symlink(externalLibDir, symlinkPath); err != nil {
+		// Windows only allows symlinks with admin rights or developer mode.
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlinks unavailable: %s", err)
+		}
 		t.Fatalf("Failed to create symlink: %s", err)
 	}
 	// Create a recursive symlink to the library directory
