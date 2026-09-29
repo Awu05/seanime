@@ -403,6 +403,11 @@ func (c *CacheLayer) checkAndUpdateWorkingState(err error) {
 			return
 		}
 
+		// A failed title batch counts once, through the first lookup it served
+		if _, shared := errors.AsType[sharedBatchError](err); shared {
+			return
+		}
+
 		// skip 404 errors
 		if strings.Contains(err.Error(), "404") {
 			return

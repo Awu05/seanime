@@ -38,7 +38,7 @@ type titleBatcher[M any] struct {
 	save  func(...*M)
 
 	mu      sync.Mutex
-	calls   map[int]*titleCall[M] // lookups pending or in flight, by title ID
+	calls   map[int]*titleCall[M] // the latest lookup pending or in flight, by title ID
 	pending *titleBatch[M]
 }
 
@@ -53,21 +53,33 @@ type titleBatch[M any] struct {
 	profileID  string
 	client     anilist.AnilistClient
 	ids        []int
-	background bool // every lookup in it is background work
+	calls      []*titleCall[M] // one per ID
+	background bool            // every lookup in it is background work
 	timer      *time.Timer
+	errTaken   bool // a caller has already been handed the batch's error
 }
+
+// sharedBatchError is a failed batch's error as every caller but the first sees it, so one failed
+// request counts once toward marking AniList down.
+type sharedBatchError struct{ error }
+
+func (e sharedBatchError) Unwrap() error { return e.error }
 
 func newTitleBatcher[M any](fetch func(anilist.AnilistClient, context.Context, []int) ([]*M, error), id func(*M) int, save func(...*M)) *titleBatcher[M] {
 	return &titleBatcher[M]{fetch: fetch, id: id, save: save, calls: make(map[int]*titleCall[M])}
 }
 
 // get returns id's record from the next batch, joining a lookup for it already pending or in
-// flight. When the batch doesn't return it, single looks it up with the caller's own login, which
-// may see titles another login can't, such as adult ones.
+// flight. When the batch doesn't return it, or another login's token was rejected, single looks it
+// up with the caller's own login, which may see titles another login can't, such as adult ones.
 func (b *titleBatcher[M]) get(ctx context.Context, client anilist.AnilistClient, id int, single func() (*M, error)) (*M, error) {
 	background := anilist.IsBackgroundPriority(ctx)
 	b.mu.Lock()
 	call, ok := b.calls[id]
+	// A browsing lookup doesn't wait behind a background batch that's already sent.
+	if ok && !background && call.batch.background && call.batch != b.pending {
+		ok = false
+	}
 	if !ok {
 		call = &titleCall[M]{done: make(chan struct{})}
 		b.calls[id] = call
@@ -82,14 +94,28 @@ func (b *titleBatcher[M]) get(ctx context.Context, client anilist.AnilistClient,
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	if call.media != nil || call.err != nil {
-		return call.media, call.err
+	if call.media != nil {
+		return call.media, nil
+	}
+	if call.err != nil && (client == call.batch.client || !isAnilistAuthError(call.err)) {
+		return nil, b.batchError(call.batch, call.err)
 	}
 	media, err := single()
 	if err == nil {
 		b.save(media)
 	}
 	return media, err
+}
+
+// batchError hands the first caller the batch's error and every later one a sharedBatchError.
+func (b *titleBatcher[M]) batchError(batch *titleBatch[M], err error) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if batch.errTaken {
+		return sharedBatchError{err}
+	}
+	batch.errTaken = true
+	return err
 }
 
 func (b *titleBatcher[M]) addLocked(ctx context.Context, client anilist.AnilistClient, id int, call *titleCall[M], background bool) {
@@ -100,6 +126,7 @@ func (b *titleBatcher[M]) addLocked(ctx context.Context, client anilist.AnilistC
 		b.pending = batch
 	}
 	batch.ids = append(batch.ids, id)
+	batch.calls = append(batch.calls, call)
 	batch.background = batch.background && background
 	call.batch = batch
 	if len(batch.ids) == titleBatchSize {
@@ -135,9 +162,11 @@ func (b *titleBatcher[M]) send(batch *titleBatch[M]) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for _, id := range batch.ids {
-		call := b.calls[id]
-		delete(b.calls, id)
+	for i, call := range batch.calls {
+		id := batch.ids[i]
+		if b.calls[id] == call {
+			delete(b.calls, id)
+		}
 		call.media = found[id]
 		if call.media == nil {
 			call.err = err
