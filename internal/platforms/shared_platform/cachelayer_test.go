@@ -573,7 +573,7 @@ func newTestCacheLayer(t *testing.T, client *cacheLayerTestClient) *CacheLayer {
 	clearFailureTracking()
 
 	clientRef := util.NewRef[anilist.AnilistClient](client)
-	cacheLayer, ok := NewCacheLayer(clientRef).(*CacheLayer)
+	cacheLayer, ok := newCacheLayer(clientRef).(*CacheLayer)
 	require.True(t, ok)
 
 	t.Cleanup(func() {

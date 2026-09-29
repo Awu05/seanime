@@ -226,9 +226,18 @@ func clearFailureTracking() {
 // retiredBucketsRemoved holds the cache directories already cleared of retired title buckets.
 var retiredBucketsRemoved sync.Map
 
-// NewCacheLayer returns a new instance of the global cache layer.
+// NewCacheLayer returns a new instance of the global cache layer and starts syncing its queued list updates.
 // An optional logoutFunc can be passed to perform server-side cleanup when an invalid token is detected.
 func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc ...func()) anilist.AnilistClient {
+	client := newCacheLayer(anilistClientRef, logoutFunc...)
+	if cl, ok := client.(*CacheLayer); ok {
+		cl.startQueuedUpdateSync()
+	}
+	return client
+}
+
+// newCacheLayer builds a cache layer without the background sync, which never stops.
+func newCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc ...func()) anilist.AnilistClient {
 	fileCacher, err := filecache.NewCacher(anilistClientRef.Get().GetCacheDir())
 	if err != nil {
 		return anilistClientRef.Get()
@@ -302,7 +311,6 @@ func NewCacheLayer(anilistClientRef *util.Ref[anilist.AnilistClient], logoutFunc
 	}
 
 	AnilistClient.Store(anilistClientRef.Get())
-	cl.startQueuedUpdateSync()
 
 	return cl
 }
