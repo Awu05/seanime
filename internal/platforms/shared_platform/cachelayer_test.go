@@ -34,6 +34,9 @@ type cacheLayerTestClient struct {
 	completeAnimeBatches [][]int
 	// completeAnimeBeforeErr is what a batch fetched before completeAnimeErr stopped it.
 	completeAnimeBeforeErr []*anilist.CompleteAnime
+	saveEntriesRequests    int
+	saveEntriesErr         error
+	rejectMediaIDs         map[int]error
 }
 
 type cacheLayerUpdateEntryCall struct {
@@ -136,6 +139,93 @@ func (c *cacheLayerTestClient) UpdateMediaListEntryProgress(_ context.Context, m
 		Status:   newCloned(status),
 	})
 	return &anilist.UpdateMediaListEntryProgress{SaveMediaListEntry: &anilist.UpdateMediaListEntryProgress_SaveMediaListEntry{ID: 999}}, nil
+}
+
+// SaveMediaListEntries records each update as the single mutation it replaces.
+func (c *cacheLayerTestClient) SaveMediaListEntries(ctx context.Context, updates []anilist.MediaListEntryUpdate) ([]error, error) {
+	c.saveEntriesRequests++
+	if c.saveEntriesErr != nil {
+		return nil, c.saveEntriesErr
+	}
+	results := make([]error, len(updates))
+	for i, u := range updates {
+		if err := c.rejectMediaIDs[u.MediaID]; err != nil {
+			results[i] = err
+			continue
+		}
+		if u.ProgressOnly {
+			_, _ = c.UpdateMediaListEntryProgress(ctx, &u.MediaID, u.Progress, u.Status)
+		} else {
+			_, _ = c.UpdateMediaListEntry(ctx, &u.MediaID, u.Status, u.ScoreRaw, u.Progress, u.StartedAt, u.CompletedAt)
+		}
+	}
+	return results, nil
+}
+
+func queueProgressUpdates(t *testing.T, cacheLayer *CacheLayer, ids ...int) {
+	t.Helper()
+	for _, id := range ids {
+		_, err := cacheLayer.queueMediaListEntryProgressUpdate(new(id), new(1), nil)
+		require.NoError(t, err)
+	}
+}
+
+func TestCacheLayerSyncsQueuedUpdatesInGroupsOfTen(t *testing.T) {
+	client := &cacheLayerTestClient{cacheDir: t.TempDir()}
+	cacheLayer := newTestCacheLayer(t, client)
+	ids := make([]int, 12)
+	for i := range ids {
+		ids[i] = i + 1
+	}
+	queueProgressUpdates(t, cacheLayer, ids...)
+
+	cacheLayer.syncQueuedUpdates(context.Background())
+	require.Equal(t, 2, client.saveEntriesRequests)
+	require.Len(t, client.updateProgressCalls, 12)
+	for _, id := range ids {
+		requireNoQueuedUpdate(t, cacheLayer, id)
+	}
+}
+
+func TestCacheLayerKeepsRejectedQueuedUpdate(t *testing.T) {
+	client := &cacheLayerTestClient{cacheDir: t.TempDir(), rejectMediaIDs: map[int]error{2: errors.New("Media not found")}}
+	cacheLayer := newTestCacheLayer(t, client)
+	queueProgressUpdates(t, cacheLayer, 1, 2, 3)
+
+	cacheLayer.syncQueuedUpdates(context.Background())
+	require.Equal(t, 1, client.saveEntriesRequests)
+	requireNoQueuedUpdate(t, cacheLayer, 1)
+	requireNoQueuedUpdate(t, cacheLayer, 3)
+	rejected := getQueuedUpdate(t, cacheLayer, 2)
+	require.Equal(t, 1, rejected.Attempts)
+	require.NotNil(t, rejected.NextAttemptAt)
+}
+
+func TestCacheLayerKeepsQueuedUpdatesWhenRequestFails(t *testing.T) {
+	client := &cacheLayerTestClient{cacheDir: t.TempDir(), saveEntriesErr: errors.New("503 Service Unavailable")}
+	cacheLayer := newTestCacheLayer(t, client)
+	queueProgressUpdates(t, cacheLayer, 1, 2)
+
+	cacheLayer.syncQueuedUpdates(context.Background())
+	for _, id := range []int{1, 2} {
+		require.Equal(t, 1, getQueuedUpdate(t, cacheLayer, id).Attempts)
+	}
+}
+
+func TestCacheLayerStopsReplayWhenAniListGoesDown(t *testing.T) {
+	previousEventManager := events.GlobalWSEventManager
+	events.GlobalWSEventManager = &events.GlobalWSEventManagerWrapper{}
+	t.Cleanup(func() { events.GlobalWSEventManager = previousEventManager })
+	client := &cacheLayerTestClient{cacheDir: t.TempDir(), saveEntriesErr: errors.New("503 Service Unavailable")}
+	cacheLayer := newTestCacheLayer(t, client)
+	queueProgressUpdates(t, cacheLayer, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+	for range failureThreshold - 1 {
+		cacheLayer.checkAndUpdateWorkingState(errors.New("anilist down"))
+	}
+
+	cacheLayer.syncQueuedUpdates(context.Background())
+	require.False(t, IsWorking.Load())
+	require.Equal(t, 1, client.saveEntriesRequests, "no more groups once AniList is marked down")
 }
 
 func TestCacheLayerLogsOutOnInvalidToken(t *testing.T) {

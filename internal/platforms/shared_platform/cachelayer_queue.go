@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"seanime/internal/api/anilist"
 	"seanime/internal/util/filecache"
 	"slices"
@@ -20,6 +19,7 @@ const (
 	queueSyncTimeout   = 20 * time.Second
 	queueRetryDelay    = 15 * time.Second
 	queueRetryDelayMax = 5 * time.Minute
+	queueSyncBatchSize = 10
 )
 
 type queuedMediaListUpdate struct {
@@ -263,56 +263,72 @@ func (c *CacheLayer) syncQueuedUpdates(ctx context.Context) {
 		c.logger.Warn().Err(err).Msg("anilist cache: Failed to load queued list updates")
 		return
 	}
-	if len(updates) == 0 {
-		return
-	}
 
 	now := time.Now()
-	synced := 0
+	due := make([]queuedMediaListUpdate, 0, len(updates))
+	entries := make([]anilist.MediaListEntryUpdate, 0, len(updates))
 	for _, update := range updates {
 		if update.NextAttemptAt != nil && update.NextAttemptAt.After(now) {
 			continue
 		}
+		entry := update.entryUpdate()
+		if entry.ProgressOnly && entry.Progress == nil && entry.Status == nil {
+			c.logger.Warn().Int("mediaId", update.MediaID).Msg("anilist cache: Queued list update has no fields")
+			c.setQueuedUpdateSyncFailed(update)
+			continue
+		}
+		due = append(due, update)
+		entries = append(entries, entry)
+	}
 
-		updateCtx, cancel := context.WithTimeout(ctx, queueSyncTimeout)
-		err := c.syncQueuedUpdate(updateCtx, update)
+	synced := 0
+	defer func() {
+		if synced > 0 {
+			c.logger.Info().Int("count", synced).Msg("anilist cache: Synced queued list updates")
+		}
+	}()
+	for start := 0; start < len(due); start += queueSyncBatchSize {
+		end := min(start+queueSyncBatchSize, len(due))
+		groupCtx, cancel := context.WithTimeout(ctx, queueSyncTimeout)
+		results, err := c.anilistClientRef.Get().SaveMediaListEntries(groupCtx, entries[start:end])
 		cancel()
 
 		c.checkAndUpdateWorkingState(err)
 		if err != nil {
-			c.setQueuedUpdateSyncFailed(update, err)
+			for _, update := range due[start:end] {
+				c.setQueuedUpdateSyncFailed(update)
+			}
 			if !IsWorking.Load() {
 				return
 			}
 			continue
 		}
-
-		if c.deleteQueuedUpdateIfCurrent(update) {
-			synced++
+		for i, update := range due[start:end] {
+			if results[i] != nil {
+				c.logger.Warn().Err(results[i]).Int("mediaId", update.MediaID).Msg("anilist cache: AniList rejected queued list update")
+				c.setQueuedUpdateSyncFailed(update)
+			} else if c.deleteQueuedUpdateIfCurrent(update) {
+				synced++
+			}
 		}
 	}
+}
 
-	if synced > 0 {
-		c.logger.Info().Int("count", synced).Msg("anilist cache: Synced queued list updates")
+// entryUpdate is the change to send. A queued progress change sends only progress and status, as
+// the live update did.
+func (u queuedMediaListUpdate) entryUpdate() anilist.MediaListEntryUpdate {
+	return anilist.MediaListEntryUpdate{
+		MediaID:      u.MediaID,
+		Status:       u.Status,
+		ScoreRaw:     u.ScoreRaw,
+		Progress:     u.Progress,
+		StartedAt:    u.StartedAt,
+		CompletedAt:  u.CompletedAt,
+		ProgressOnly: !u.FullUpdate && u.ScoreRaw == nil && u.StartedAt == nil && u.CompletedAt == nil,
 	}
 }
 
-func (c *CacheLayer) syncQueuedUpdate(ctx context.Context, update queuedMediaListUpdate) error {
-	mediaID := update.MediaID
-	if update.FullUpdate || update.ScoreRaw != nil || update.StartedAt != nil || update.CompletedAt != nil {
-		_, err := c.anilistClientRef.Get().UpdateMediaListEntry(ctx, &mediaID, update.Status, update.ScoreRaw, update.Progress, update.StartedAt, update.CompletedAt)
-		return err
-	}
-
-	if update.Progress == nil && update.Status == nil {
-		return fmt.Errorf("queued list update for media %d has no fields", update.MediaID)
-	}
-
-	_, err := c.anilistClientRef.Get().UpdateMediaListEntryProgress(ctx, &mediaID, update.Progress, update.Status)
-	return err
-}
-
-func (c *CacheLayer) setQueuedUpdateSyncFailed(update queuedMediaListUpdate, syncErr error) {
+func (c *CacheLayer) setQueuedUpdateSyncFailed(update queuedMediaListUpdate) {
 	bucket := c.buckets[PendingMediaListUpdatesBucket]
 	key := strconv.Itoa(update.MediaID)
 
