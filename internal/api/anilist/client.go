@@ -400,6 +400,22 @@ var (
 	sharedAniListPacer       = newAniListPacer()
 )
 
+// observeResponse follows resp's rate-limit headers and reports whether AniList rate limited the
+// request. onRateLimited is called when that starts a new wait.
+func observeResponse(pacer requestPacer, resp *http.Response, onRateLimited func(waitSeconds int)) bool {
+	if pacer != nil {
+		pacer.Observe(resp.Header)
+	}
+	responseTime, resetAt, limited := getRetryWindow(resp, resp.Header.Get("X-Ratelimit-Remaining"))
+	if !limited {
+		return false
+	}
+	if (pacer == nil || pacer.BlockUntil(resetAt)) && onRateLimited != nil {
+		onRateLimited(max(int(resetAt.Sub(responseTime).Round(time.Second)/time.Second), 1))
+	}
+	return true
+}
+
 func doAniListRequestWithRetries(
 	client *http.Client,
 	req *http.Request,
@@ -445,22 +461,8 @@ func doAniListRequestWithRetries(
 		}
 
 		rlRemainingStr = resp.Header.Get("X-Ratelimit-Remaining")
-		if pacer != nil {
-			pacer.Observe(resp.Header)
-		}
-		responseTime, resetAt, shouldRetry := getRetryWindow(resp, rlRemainingStr)
-		if !shouldRetry {
+		if !observeResponse(pacer, resp, onRateLimited) {
 			return resp, rlRemainingStr, nil
-		}
-
-		if pacer == nil || pacer.BlockUntil(resetAt) {
-			if onRateLimited != nil {
-				waitSeconds := int(resetAt.Sub(responseTime).Round(time.Second) / time.Second)
-				if waitSeconds < 1 {
-					waitSeconds = 1
-				}
-				onRateLimited(waitSeconds)
-			}
 		}
 		closeAniListResponseBody(resp)
 	}

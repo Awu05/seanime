@@ -4,11 +4,51 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"seanime/internal/api/anilist"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFetchSharesTheAniListRateLimit(t *testing.T) {
+	var aniListRequests atomic.Int32
+	aniList := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if aniListRequests.Add(1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer aniList.Close()
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer other.Close()
+
+	prevProvider := anilist.CurrentRequestProvider()
+	t.Cleanup(func() { require.NoError(t, anilist.SetRequestProvider(prevProvider)) })
+	require.NoError(t, anilist.UseCustomAPI(anilist.CustomClientConfig{Name: "fetch-test", Endpoint: aniList.URL}))
+
+	vm := goja.New()
+	fetch := BindFetch("", vm, []string{"*"})
+	defer fetch.Close()
+	timeFetch := func(url string) time.Duration {
+		start := time.Now()
+		val, err := vm.RunString(fmt.Sprintf(`fetch(%q)`, url))
+		require.NoError(t, err)
+		promise := requirePromise(t, val)
+		require.Eventually(t, func() bool { return promise.State() == goja.PromiseStateFulfilled }, 5*time.Second, 10*time.Millisecond)
+		return time.Since(start)
+	}
+
+	timeFetch(aniList.URL) // rate limited: blocks every AniList request
+	require.Less(t, timeFetch(other.URL), time.Second, "other hosts are not paced")
+	require.GreaterOrEqual(t, timeFetch(aniList.URL), time.Second, "the AniList API waits out the block")
+}
 
 // inspired by figma
 

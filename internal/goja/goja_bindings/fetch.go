@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"seanime/internal/api/anilist"
 	"seanime/internal/security"
 	"seanime/internal/util"
 	"strings"
@@ -474,6 +475,17 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 			}
 		}
 
+		// Plugins share Seanime's AniList rate limit.
+		aniListRequest := anilist.IsAPIURL(url)
+		if aniListRequest {
+			if err := anilist.PaceExternalRequest(request.Context()); err != nil {
+				f.vmResponseCh <- func() {
+					_ = reject(NewError(f.vm, err))
+				}
+				return
+			}
+		}
+
 		var result fetchResult
 		var resp *req.Response
 		var err error
@@ -502,6 +514,9 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 				_ = reject(NewError(f.vm, err))
 			}
 			return
+		}
+		if aniListRequest {
+			anilist.ObserveExternalResponse(resp.Response)
 		}
 
 		rawBody := resp.Bytes()
