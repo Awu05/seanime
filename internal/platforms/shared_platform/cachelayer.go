@@ -1225,8 +1225,24 @@ func (c *CacheLayer) UpdateMediaListEntryProgress(ctx context.Context, mediaID *
 	return res, err
 }
 
+// SaveMediaListEntries sends queued updates, so unlike the single mutations it never queues them.
 func (c *CacheLayer) SaveMediaListEntries(ctx context.Context, updates []anilist.MediaListEntryUpdate) ([]error, error) {
-	return c.anilistClientRef.Get().SaveMediaListEntries(ctx, updates)
+	results, err := c.anilistClientRef.Get().SaveMediaListEntries(ctx, updates)
+	c.checkAndUpdateWorkingState(err)
+	if err != nil {
+		return nil, err
+	}
+	saved := false
+	for i, update := range updates {
+		if results[i] == nil {
+			c.invalidateMediaCaches(update.MediaID)
+			saved = true
+		}
+	}
+	if saved {
+		c.invalidateCollectionCaches()
+	}
+	return results, nil
 }
 
 func (c *CacheLayer) UpdateMediaListEntryRepeat(ctx context.Context, mediaID *int, repeat *int, interceptors ...clientv2.RequestInterceptor) (*anilist.UpdateMediaListEntryRepeat, error) {

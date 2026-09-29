@@ -50,6 +50,32 @@ func TestFetchSharesTheAniListRateLimit(t *testing.T) {
 	require.GreaterOrEqual(t, timeFetch(aniList.URL), time.Second, "the AniList API waits out the block")
 }
 
+// A plugin's timeout also bounds the wait for AniList's rate limit.
+func TestFetchTimeoutCoversTheAniListRateLimitWait(t *testing.T) {
+	aniList := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer aniList.Close()
+	prevProvider := anilist.CurrentRequestProvider()
+	t.Cleanup(func() { require.NoError(t, anilist.SetRequestProvider(prevProvider)) })
+	require.NoError(t, anilist.UseCustomAPI(anilist.CustomClientConfig{Name: "fetch-test", Endpoint: aniList.URL}))
+
+	vm := goja.New()
+	fetch := BindFetch("", vm, []string{"*"})
+	defer fetch.Close()
+	val, err := vm.RunString(fmt.Sprintf(`fetch(%q)`, aniList.URL))
+	require.NoError(t, err)
+	blocking := requirePromise(t, val)
+	waitForPromiseState(t, blocking, goja.PromiseStateFulfilled) // blocks AniList requests for a minute
+
+	start := time.Now()
+	val, err = vm.RunString(fmt.Sprintf(`fetch(%q, { timeout: 1 })`, aniList.URL))
+	require.NoError(t, err)
+	waitForPromiseState(t, requirePromise(t, val), goja.PromiseStateRejected)
+	require.Less(t, time.Since(start), 2*time.Second)
+}
+
 // inspired by figma
 
 func TestFetchRedirectOptions(t *testing.T) {

@@ -110,7 +110,7 @@ func saveMediaListEntriesResults(count int, statusCode int, body []byte) ([]erro
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(body, &res); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("anilist: failed to decode response (status %d): %w", statusCode, err)
 	}
 	if len(res.Errors) == 0 && (statusCode < 200 || statusCode > 299) {
 		return nil, fmt.Errorf("anilist: request failed with status %d", statusCode)
@@ -119,7 +119,7 @@ func saveMediaListEntriesResults(count int, statusCode int, body []byte) ([]erro
 	for _, e := range res.Errors {
 		i := updateIndex(e.Path, count)
 		if i < 0 {
-			return nil, errors.New(e.Message)
+			return nil, fmt.Errorf("anilist: %s (status %d)", e.Message, statusCode)
 		}
 		results[i] = errors.Join(results[i], errors.New(e.Message))
 	}

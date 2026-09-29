@@ -290,10 +290,9 @@ func (c *CacheLayer) syncQueuedUpdates(ctx context.Context) {
 	for start := 0; start < len(due); start += queueSyncBatchSize {
 		end := min(start+queueSyncBatchSize, len(due))
 		groupCtx, cancel := context.WithTimeout(ctx, queueSyncTimeout)
-		results, err := c.anilistClientRef.Get().SaveMediaListEntries(groupCtx, entries[start:end])
+		results, err := c.SaveMediaListEntries(groupCtx, entries[start:end])
 		cancel()
 
-		c.checkAndUpdateWorkingState(err)
 		if err != nil {
 			for _, update := range due[start:end] {
 				c.setQueuedUpdateSyncFailed(update)

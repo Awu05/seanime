@@ -316,10 +316,8 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 					options.Method = strings.ToUpper(v)
 				}
 			}
-			if o := rawOpts.Get("timeout"); o != nil && !goja.IsUndefined(o) {
-				if v, ok := o.Export().(int); ok {
-					options.Timeout = v
-				}
+			if o := rawOpts.Get("timeout"); o != nil && !goja.IsUndefined(o) && o.ToInteger() > 0 {
+				options.Timeout = int(o.ToInteger())
 			}
 			if o := rawOpts.Get("headers"); o != nil && !goja.IsUndefined(o) {
 				if v, ok := o.Export().(map[string]interface{}); ok {
@@ -475,10 +473,13 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 			}
 		}
 
-		// Plugins share Seanime's AniList rate limit.
+		// Plugins share Seanime's AniList rate limit, and their timeout covers the wait.
 		aniListRequest := anilist.IsAPIURL(url)
 		if aniListRequest {
-			if err := anilist.PaceExternalRequest(request.Context()); err != nil {
+			paceCtx, cancel := context.WithTimeout(request.Context(), time.Duration(options.Timeout)*time.Second)
+			err := anilist.PaceExternalRequest(paceCtx)
+			cancel()
+			if err != nil {
 				f.vmResponseCh <- func() {
 					_ = reject(NewError(f.vm, err))
 				}

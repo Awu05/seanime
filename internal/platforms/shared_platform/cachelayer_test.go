@@ -250,6 +250,27 @@ func TestCacheLayerKeepsQueuedUpdatesWhenRequestFails(t *testing.T) {
 	}
 }
 
+// Once replayed, the locally patched collection gives way to AniList's own copy, as after a live update.
+func TestCacheLayerReplayClearsPatchedCollection(t *testing.T) {
+	client := &cacheLayerTestClient{
+		cacheDir:        t.TempDir(),
+		animeCollection: newTestAnimeCollection(101, 321, anilist.MediaListStatusCurrent, 2),
+	}
+	cacheLayer := newTestCacheLayer(t, client)
+	_, err := cacheLayer.AnimeCollection(context.Background(), new("user"))
+	require.NoError(t, err)
+	IsWorking.Store(false)
+	_, err = cacheLayer.UpdateMediaListEntryProgress(context.Background(), new(101), new(6), nil)
+	require.NoError(t, err)
+
+	IsWorking.Store(true)
+	cacheLayer.syncQueuedUpdates(context.Background())
+	requireNoQueuedUpdate(t, cacheLayer, 101)
+	found, err := cacheLayer.fileCacher.GetPerm(cacheLayer.buckets[AnimeCollectionBucket], cacheLayer.generateCacheKey("collection", nil), &anilist.AnimeCollection{})
+	require.NoError(t, err)
+	require.False(t, found)
+}
+
 func TestCacheLayerStopsReplayWhenAniListGoesDown(t *testing.T) {
 	previousEventManager := events.GlobalWSEventManager
 	events.GlobalWSEventManager = &events.GlobalWSEventManagerWrapper{}

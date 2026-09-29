@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/goccy/go-json"
@@ -86,4 +87,18 @@ func TestSaveMediaListEntriesFailsRequestOnServerError(t *testing.T) {
 		{MediaID: 1, Progress: new(1), ProgressOnly: true},
 	})
 	require.ErrorContains(t, err, "503")
+}
+
+// The status stays in request errors, which the cache layer's failure rules match on.
+func TestSaveMediaListEntriesRequestErrorsCarryTheStatus(t *testing.T) {
+	for status, body := range map[int]string{
+		http.StatusNotFound:        `{"errors":[{"message":"Not Found."}]}`,
+		http.StatusTooManyRequests: `<html>Too Many Requests</html>`,
+	} {
+		useSaveEntriesServer(t, status, body)
+		_, err := NewAnilistClient("token", t.TempDir()).SaveMediaListEntries(context.Background(), []MediaListEntryUpdate{
+			{MediaID: 1, Progress: new(1), ProgressOnly: true},
+		})
+		require.ErrorContains(t, err, strconv.Itoa(status))
+	}
 }
