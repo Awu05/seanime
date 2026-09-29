@@ -702,25 +702,3 @@ func (r *Repository) sendDownloadCompletedEvent(tId string, torrentName string, 
 		r.logger.Err(err).Str("torrentItemId", tId).Msg("debrid: Failed to trigger local download completed hook")
 	}
 }
-
-func getFilenameFromHeaders(url string) (string, error) {
-	resp, err := http.Head(url)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	// Get the Content-Disposition header
-	contentDisposition := resp.Header.Get("Content-Disposition")
-	if contentDisposition == "" {
-		return "", fmt.Errorf("no Content-Disposition header found")
-	}
-
-	// Use a regex to extract the filename from Content-Disposition
-	re := regexp.MustCompile(`filename="(.+)"`)
-	matches := re.FindStringSubmatch(contentDisposition)
-	if len(matches) > 1 {
-		return matches[1], nil
-	}
-	return "", fmt.Errorf("filename not found in Content-Disposition header")
-}

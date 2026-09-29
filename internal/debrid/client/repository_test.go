@@ -377,7 +377,8 @@ func TestDownloadedItemsAreRemovedFromQueue(t *testing.T) {
 	repo.processQueuedDownloads(repo.provider.MustGet())
 
 	require.Eventually(t, func() bool {
-		_, err := os.Stat(filepath.Join(destination, "episode.mkv"))
+		// Files are named after the torrent, with the extension from the content type.
+		_, err := os.Stat(filepath.Join(destination, "test.mkv"))
 		return err == nil
 	}, time.Second, 10*time.Millisecond)
 	require.Eventually(t, func() bool {

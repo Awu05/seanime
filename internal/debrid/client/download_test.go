@@ -169,13 +169,8 @@ func TestRDDownload(t *testing.T) {
 	body := []byte("rd data")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead {
-			w.Header().Set("Content-Disposition", `attachment; filename="Episode 01.mkv"`)
-			w.Header().Set("Content-Type", "application/force-download")
-			return
-		}
-
 		// rd usually gives us the real filename in headers, not in the content type
+		w.Header().Set("Content-Disposition", `attachment; filename="Episode 01.mkv"`)
 		w.Header().Set("Content-Type", "application/force-download")
 		_, _ = w.Write(body)
 	}))
@@ -190,7 +185,7 @@ func TestRDDownload(t *testing.T) {
 		ctxMap:         result.NewMap[string, context.CancelFunc](),
 	}
 
-	require.NoError(t, repo.downloadTorrentItem("torrent-1", "rd", "", destination))
+	require.NoError(t, repo.downloadTorrentItem("torrent-1", "", "", destination))
 	require.Eventually(t, func() bool {
 		return hasDebridDownloadStatus(ws, "completed")
 	}, time.Second, 10*time.Millisecond)
