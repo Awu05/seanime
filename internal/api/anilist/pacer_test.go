@@ -4,11 +4,92 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"seanime/internal/util"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+// waitAll starts one Wait per profile ID in order, each after the one before it is queued, and
+// returns the order they were served in.
+func waitAll(t *testing.T, p *aniListPacer, profileIDs ...string) []string {
+	t.Helper()
+	var mu sync.Mutex
+	var served []string
+	var wg sync.WaitGroup
+	for i, profileID := range profileIDs {
+		wg.Go(func() {
+			if err := p.Wait(util.ContextWithProfileID(context.Background(), profileID), nil); err != nil {
+				t.Error(err)
+			}
+			mu.Lock()
+			served = append(served, profileID)
+			mu.Unlock()
+		})
+		require.Eventually(t, func() bool {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			queued := 0
+			for _, n := range p.waiting {
+				queued += n
+			}
+			return queued == i+1
+		}, time.Second, time.Millisecond)
+	}
+	wg.Wait()
+	return served
+}
+
+// blockedPacer serves a token every 10ms after a one-second head start, so waiters queue before any
+// is served.
+func blockedPacer() *aniListPacer {
+	p := newAniListPacer()
+	p.Observe(rateHeaders("6000", "-98"))
+	return p
+}
+
+func TestPacerTakesTurnsBetweenProfiles(t *testing.T) {
+	for _, first := range []string{"a", ""} {
+		served := waitAll(t, blockedPacer(), first, first, first, first, first, "b")
+		require.Equal(t, "b", served[1], "profile %q's burst must not hold up b", first)
+	}
+}
+
+func TestPacerServesOneProfileAtTheUsualRate(t *testing.T) {
+	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
+	p := newTestPacer(clock)
+	ctx := util.ContextWithProfileID(context.Background(), "a")
+	var delays []time.Duration
+
+	for range 5 {
+		require.NoError(t, p.Wait(ctx, recordSleep(clock, &delays)))
+	}
+	require.Empty(t, delays)
+	require.NoError(t, p.Wait(ctx, recordSleep(clock, &delays)))
+	require.Equal(t, []time.Duration{2 * time.Second}, delays)
+}
+
+func TestPacerDropsCancelledWaiterFromTurns(t *testing.T) {
+	p := blockedPacer()
+	ctx, cancel := context.WithCancel(util.ContextWithProfileID(context.Background(), "a"))
+	cancelled := make(chan error, 1)
+	go func() { cancelled <- p.Wait(ctx, nil) }()
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.waiting["a"] == 1
+	}, time.Second, time.Millisecond)
+
+	cancel()
+	require.ErrorIs(t, <-cancelled, context.Canceled)
+	require.NoError(t, p.Wait(util.ContextWithProfileID(context.Background(), "b"), nil))
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Empty(t, p.turns)
+	require.Empty(t, p.waiting)
+}
 
 func newTestPacer(clock *testClock) *aniListPacer {
 	p := newAniListPacer()
@@ -171,13 +252,13 @@ func TestPacerBackgroundKeepsHalfTheBurstForBrowsing(t *testing.T) {
 func TestPacerBackgroundYieldsToWaitingBrowsing(t *testing.T) {
 	clock := &testClock{now: time.Date(2026, time.September, 28, 12, 0, 0, 0, time.UTC)}
 	p := newTestPacer(clock)
-	p.browsingWaiting = 1
+	p.joinLocked("")
 	var delays []time.Duration
 
 	err := p.Wait(WithBackgroundPriority(context.Background()), func(_ context.Context, delay time.Duration) error {
 		delays = append(delays, delay)
 		clock.Advance(delay)
-		p.browsingWaiting = 0 // the browsing request was served
+		p.leaveLocked("", true) // the browsing request was served
 		return nil
 	})
 	require.NoError(t, err)
