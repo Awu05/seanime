@@ -113,19 +113,22 @@ func TestSameDir(t *testing.T) {
 }
 
 func TestResolveArchiveEntryPath(t *testing.T) {
+	// A real directory, so the root has a drive letter on Windows like real destinations do.
+	root := filepath.Join(t.TempDir(), "extracted")
+
 	t.Run("allows nested paths inside destination", func(t *testing.T) {
-		resolved, err := ResolveArchiveEntryPath("/tmp/extracted", "folder/file.txt")
+		resolved, err := ResolveArchiveEntryPath(root, "folder/file.txt")
 		require.NoError(t, err)
-		require.Equal(t, filepath.Join("/tmp/extracted", "folder", "file.txt"), resolved)
+		require.Equal(t, filepath.Join(root, "folder", "file.txt"), resolved)
 	})
 
 	t.Run("rejects parent traversal", func(t *testing.T) {
-		_, err := ResolveArchiveEntryPath("/tmp/extracted", "../escape.txt")
+		_, err := ResolveArchiveEntryPath(root, "../escape.txt")
 		require.ErrorIs(t, err, ErrArchivePathTraversal)
 	})
 
 	t.Run("rejects windows style traversal", func(t *testing.T) {
-		_, err := ResolveArchiveEntryPath("/tmp/extracted", `..\\escape.txt`)
+		_, err := ResolveArchiveEntryPath(root, `..\\escape.txt`)
 		require.ErrorIs(t, err, ErrArchivePathTraversal)
 	})
 }

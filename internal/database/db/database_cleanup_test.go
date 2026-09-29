@@ -20,6 +20,12 @@ func TestDatabaseCleanupManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	// Windows can't delete the temp dir while the database file is open.
+	t.Cleanup(func() {
+		if sqlDB, err := database.Gorm().DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 
 	t.Log("Populating database with test data...")
 	populateCleanupTestData(t, database)

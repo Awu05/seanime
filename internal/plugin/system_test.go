@@ -3,6 +3,7 @@ package plugin
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"seanime/internal/extension"
 	"testing"
 
@@ -31,6 +32,9 @@ func newMockAppContext(paths map[string][]string) *mockAppContext {
 }
 
 func TestIsAllowedPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("cases use Unix absolute paths, which Windows treats as relative")
+	}
 	// Create mock context with predefined paths
 	mockCtx := newMockAppContext(map[string][]string{
 		"SEANIME_ANIME_LIBRARY": {"/anime/lib1", "/anime/lib2"},
@@ -183,6 +187,9 @@ func TestIsAllowedPath(t *testing.T) {
 }
 
 func TestIsAllowedCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("cases use Unix absolute paths, which Windows treats as relative")
+	}
 	// Create mock context
 	mockCtx := newMockAppContext(map[string][]string{
 		"HOME":                  {"/home/user"},

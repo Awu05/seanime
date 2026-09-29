@@ -56,6 +56,9 @@ func hasDebridDownloadStatus(ws *events.MockWSEventManager, status string) bool 
 	return false
 }
 
+// downloadWait covers the deliberate one-second pause before moving files on Windows.
+const downloadWait = 5 * time.Second
+
 func setMobileDownload(t *testing.T, mobile bool) {
 	t.Helper()
 
@@ -69,6 +72,8 @@ func TestCreateDownloadTempDirUsesAppTempOnMobile(t *testing.T) {
 
 	tempRoot := t.TempDir()
 	t.Setenv("TMPDIR", tempRoot)
+	t.Setenv("TMP", tempRoot) // Windows reads TMP/TEMP instead of TMPDIR
+	t.Setenv("TEMP", tempRoot)
 	destination := t.TempDir()
 
 	tmpDir, err := createDownloadTempDir(destination)
@@ -153,7 +158,7 @@ func TestTorrentDownloadCancellationOnFailure(t *testing.T) {
 	startDownload(t, repo, "bad zip", destination)
 	require.Eventually(t, func() bool {
 		return hasDebridDownloadStatus(ws, "cancelled")
-	}, time.Second, 10*time.Millisecond)
+	}, downloadWait, 10*time.Millisecond)
 	require.Never(t, func() bool {
 		return hasDebridDownloadStatus(ws, "completed")
 	}, 100*time.Millisecond, 10*time.Millisecond)
@@ -188,14 +193,14 @@ func TestRDDownload(t *testing.T) {
 	startDownload(t, repo, "", destination)
 	require.Eventually(t, func() bool {
 		return hasDebridDownloadStatus(ws, "completed")
-	}, time.Second, 10*time.Millisecond)
+	}, downloadWait, 10*time.Millisecond)
 
 	var data []byte
 	require.Eventually(t, func() bool {
 		var err error
 		data, err = os.ReadFile(filepath.Join(destination, "Episode 01.mkv"))
 		return err == nil
-	}, time.Second, 10*time.Millisecond)
+	}, downloadWait, 10*time.Millisecond)
 	require.Equal(t, string(body), string(data))
 }
 
@@ -231,14 +236,14 @@ func TestTorBoxZip(t *testing.T) {
 	startDownload(t, repo, "torbox", destination)
 	require.Eventually(t, func() bool {
 		return hasDebridDownloadStatus(ws, "completed")
-	}, time.Second, 10*time.Millisecond)
+	}, downloadWait, 10*time.Millisecond)
 
 	var data []byte
 	require.Eventually(t, func() bool {
 		var err error
 		data, err = os.ReadFile(filepath.Join(destination, "Episode 01.mkv"))
 		return err == nil
-	}, time.Second, 10*time.Millisecond)
+	}, downloadWait, 10*time.Millisecond)
 	require.Equal(t, "torbox data", string(data))
 }
 
