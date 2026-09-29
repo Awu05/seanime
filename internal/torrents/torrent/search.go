@@ -161,7 +161,7 @@ func (r *Repository) searchAnime(ctx context.Context, opts AnimeSearchOptions, f
 
 	var cacheHit bool
 	if searchCacheKey != "" && !fresh {
-		cache := getAnimeSearchCache(r.animeProviderSearchCaches, providerCacheKey)
+		cache := getAnimeSearchCache(r.animeProviderSearchCaches.Load(), providerCacheKey)
 		ret, cacheHit = cache.Get(searchCacheKey)
 	}
 
@@ -177,7 +177,7 @@ func (r *Repository) searchAnime(ctx context.Context, opts AnimeSearchOptions, f
 			ret = new(*ret)
 			ret.Previews = previews
 			if searchCacheKey != "" {
-				cache := getAnimeSearchCache(r.animeProviderSearchCaches, providerCacheKey)
+				cache := getAnimeSearchCache(r.animeProviderSearchCaches.Load(), providerCacheKey)
 				setSearchCache(cache, searchCacheKey, ret, opts)
 			}
 		}
@@ -386,7 +386,7 @@ func (r *Repository) searchAnime(ctx context.Context, opts AnimeSearchOptions, f
 	}
 
 	if searchCacheKey != "" {
-		cache := getAnimeSearchCache(r.animeProviderSearchCaches, providerCacheKey)
+		cache := getAnimeSearchCache(r.animeProviderSearchCaches.Load(), providerCacheKey)
 		setSearchCache(cache, searchCacheKey, ret, opts)
 	}
 

@@ -7,15 +7,19 @@ import (
 	"seanime/internal/util/result"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/rs/zerolog"
 )
+
+// searchCaches holds one search cache per torrent provider.
+type searchCaches = result.Map[string, *result.Cache[string, *SearchData]]
 
 type (
 	Repository struct {
 		logger                    *zerolog.Logger
 		extensionBankRef          *util.Ref[*extension.UnifiedBank]
-		animeProviderSearchCaches *result.Map[string, *result.Cache[string, *SearchData]]
+		animeProviderSearchCaches atomic.Pointer[searchCaches] // replaced when extensions reload, read by searches without the lock
 		settings                  RepositorySettings
 		metadataProviderRef       *util.Ref[metadata_provider.Provider]
 		mu                        sync.Mutex
@@ -35,13 +39,14 @@ type NewRepositoryOptions struct {
 
 func NewRepository(opts *NewRepositoryOptions) *Repository {
 	ret := &Repository{
-		logger:                    opts.Logger,
-		metadataProviderRef:       opts.MetadataProviderRef,
-		extensionBankRef:          opts.ExtensionBankRef,
-		animeProviderSearchCaches: result.NewMap[string, *result.Cache[string, *SearchData]](),
-		settings:                  RepositorySettings{},
-		mu:                        sync.Mutex{},
+		logger:              opts.Logger,
+		metadataProviderRef: opts.MetadataProviderRef,
+		extensionBankRef:    opts.ExtensionBankRef,
+		settings:            RepositorySettings{},
+		mu:                  sync.Mutex{},
 	}
+
+	ret.animeProviderSearchCaches.Store(new(searchCaches))
 
 	sub := ret.extensionBankRef.Get().Subscribe("torrent-repository")
 
@@ -68,12 +73,13 @@ func (r *Repository) OnExtensionReloaded() {
 // This is called each time a new extension is added or removed
 func (r *Repository) reloadExtensions() {
 	// Clear the search caches
-	r.animeProviderSearchCaches = result.NewMap[string, *result.Cache[string, *SearchData]]()
+	caches := new(searchCaches)
+	r.animeProviderSearchCaches.Store(caches)
 
 	go func() {
 		// Create new caches for each provider
 		extension.RangeExtensions(r.extensionBankRef.Get(), func(provider string, value extension.AnimeTorrentProviderExtension) bool {
-			r.animeProviderSearchCaches.Set(provider, result.NewCache[string, *SearchData]())
+			caches.Set(provider, result.NewCache[string, *SearchData]())
 			return true
 		})
 	}()

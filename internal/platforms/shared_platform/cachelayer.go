@@ -120,7 +120,7 @@ type (
 		bucketTTLs             map[string]time.Duration // How long a cached entry is served without hitting the network
 		logger                 *zerolog.Logger
 		collectionMediaIDs     *result.Map[int, struct{}] // Track which media IDs are in collections
-		lastCollectionUpdate   time.Time                  // When collections were last fetched
+		lastCollectionUpdate   atomic.Int64               // Unix nanoseconds when collections were last fetched; written from background goroutines
 		logoutFunc             func()                     // called when an invalid token is detected
 		pendingUpdateSyncMutex sync.Mutex
 	}
@@ -551,13 +551,13 @@ func (c *CacheLayer) isInCollection(mediaID int) bool {
 
 // updateCollectionTracking updates the collection media IDs tracking
 func (c *CacheLayer) updateCollectionTracking() {
-	if time.Since(c.lastCollectionUpdate) < collectionUpdateInterval {
+	if time.Since(time.Unix(0, c.lastCollectionUpdate.Load())) < collectionUpdateInterval {
 		return
 	}
 
 	go func() {
 		defer func() {
-			c.lastCollectionUpdate = time.Now()
+			c.lastCollectionUpdate.Store(time.Now().UnixNano())
 		}()
 
 		// Try to fetch anime collection
@@ -736,7 +736,7 @@ func (c *CacheLayer) updateCollectionTrackingFromAnimeCollection(collection *ani
 			}
 		}
 	}
-	c.lastCollectionUpdate = time.Now()
+	c.lastCollectionUpdate.Store(time.Now().UnixNano())
 }
 
 func (c *CacheLayer) updateCollectionTrackingFromAnimeCollectionWithRelations(collection *anilist.AnimeCollectionWithRelations) {
@@ -757,7 +757,7 @@ func (c *CacheLayer) updateCollectionTrackingFromAnimeCollectionWithRelations(co
 			}
 		}
 	}
-	c.lastCollectionUpdate = time.Now()
+	c.lastCollectionUpdate.Store(time.Now().UnixNano())
 }
 
 func (c *CacheLayer) updateCollectionTrackingFromMangaCollection(collection *anilist.MangaCollection) {
@@ -778,7 +778,7 @@ func (c *CacheLayer) updateCollectionTrackingFromMangaCollection(collection *ani
 			}
 		}
 	}
-	c.lastCollectionUpdate = time.Now()
+	c.lastCollectionUpdate.Store(time.Now().UnixNano())
 }
 
 // invalidateMediaCaches invalidates caches for a specific media ID
@@ -827,7 +827,7 @@ func (c *CacheLayer) invalidateCollectionCaches() {
 
 	// Reset collection tracking
 	c.collectionMediaIDs.Clear()
-	c.lastCollectionUpdate = time.Time{}
+	c.lastCollectionUpdate.Store(0)
 }
 
 // extractBaseAnimeFromCollection attempts to extract BaseAnime data from cached anime collection

@@ -48,9 +48,7 @@ func setupGraceTestServer(t *testing.T) (wsURL string, subscriber *events.Client
 // client's active torrent/native-player stream, even though the client reconnected moments later.
 // A brief grace period should let a quick reconnect (same clientId) cancel the pending teardown.
 func TestWebSocketDisconnect_ReconnectWithinGraceCancelsTermination(t *testing.T) {
-	previousGrace := wsDisconnectGracePeriod
-	wsDisconnectGracePeriod = 300 * time.Millisecond
-	t.Cleanup(func() { wsDisconnectGracePeriod = previousGrace })
+	setDisconnectGracePeriod(t, 300*time.Millisecond)
 
 	wsURL, subscriber := setupGraceTestServer(t)
 
@@ -78,9 +76,7 @@ func TestWebSocketDisconnect_ReconnectWithinGraceCancelsTermination(t *testing.T
 // unconditional reprieve: a client that never comes back must still have its stream cleaned up,
 // just after the grace window instead of instantly.
 func TestWebSocketDisconnect_NoReconnectTerminatesAfterGrace(t *testing.T) {
-	previousGrace := wsDisconnectGracePeriod
-	wsDisconnectGracePeriod = 150 * time.Millisecond
-	t.Cleanup(func() { wsDisconnectGracePeriod = previousGrace })
+	setDisconnectGracePeriod(t, 150*time.Millisecond)
 
 	wsURL, subscriber := setupGraceTestServer(t)
 
@@ -97,4 +93,19 @@ func TestWebSocketDisconnect_NoReconnectTerminatesAfterGrace(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected video-terminated once the grace period elapsed with no reconnect")
 	}
+}
+
+// setDisconnectGracePeriod swaps the grace period under the lock the handler reads it with, since an
+// earlier test's disconnect goroutine may still be reading it.
+func setDisconnectGracePeriod(t *testing.T, d time.Duration) {
+	t.Helper()
+	pendingStreamTerminationsMu.Lock()
+	previous := wsDisconnectGracePeriod
+	wsDisconnectGracePeriod = d
+	pendingStreamTerminationsMu.Unlock()
+	t.Cleanup(func() {
+		pendingStreamTerminationsMu.Lock()
+		wsDisconnectGracePeriod = previous
+		pendingStreamTerminationsMu.Unlock()
+	})
 }
