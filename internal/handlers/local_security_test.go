@@ -1411,6 +1411,8 @@ func TestHandleDirectorySelectorStrictMode(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	// Only admins get past the admin check to the strict-mode guard under test.
+	c.Set("isAdmin", true)
 
 	err := h.HandleDirectorySelector(c)
 	assert.ErrorIs(t, err, errGuardResponseWritten)
@@ -1477,11 +1479,11 @@ func TestUsesPrivilegedCommandSettings(t *testing.T) {
 		settings := &models.Settings{
 			MediaPlayer: &models.MediaPlayerSettings{
 				Default: "vlc",
-				VlcPath: "/Applications/VLC.app/Contents/MacOS/VLC",
+				VlcPath: defaultVLCPaths()[0],
 			},
 			Torrent: &models.TorrentSettings{
 				Default:         "qbittorrent",
-				QBittorrentPath: "/Applications/qbittorrent.app/Contents/MacOS/qbittorrent",
+				QBittorrentPath: defaultQBittorrentPaths()[0],
 			},
 		}
 		mediastreamSettings := &models.MediastreamSettings{

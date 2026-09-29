@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"seanime/internal/util"
 	"testing"
 
@@ -121,6 +122,9 @@ func TestValidateMacAppArchive(t *testing.T) {
 }
 
 func TestExtractMacAppArchive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("macOS app archives contain symlinks, which Windows only allows with admin rights")
+	}
 	archivePath := writeZipArchive(t, []zipArchiveEntry{
 		{name: "Seanime Denshi.app/", mode: os.ModeDir | 0755},
 		{name: "Seanime Denshi.app/Contents/", mode: os.ModeDir | 0755},
