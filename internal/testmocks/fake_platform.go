@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"seanime/internal/api/anilist"
+	"sync"
 )
 
 type FakePlatformBuilder struct {
@@ -11,6 +12,8 @@ type FakePlatformBuilder struct {
 }
 
 type FakePlatform struct {
+	// mu guards the recorded calls, which code under test may write from other goroutines.
+	mu                          sync.Mutex
 	animeByID                   map[int]*anilist.BaseAnime
 	mangaByID                   map[int]*anilist.BaseManga
 	animeCollection             *anilist.AnimeCollection
@@ -126,18 +129,26 @@ func (b *FakePlatformBuilder) Build() *FakePlatform {
 }
 
 func (f *FakePlatform) AnimeCalls(mediaID int) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.animeCalls[mediaID]
 }
 
 func (f *FakePlatform) MangaCalls(mediaID int) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.mangaCalls[mediaID]
 }
 
 func (f *FakePlatform) AnimeCollectionCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.animeCollectionCalls
 }
 
 func (f *FakePlatform) UpdateEntryProgressCalls() []FakeUpdateEntryProgressCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	ret := make([]FakeUpdateEntryProgressCall, len(f.updateEntryProgressCalls))
 	copy(ret, f.updateEntryProgressCalls)
 	return ret
@@ -146,12 +157,16 @@ func (f *FakePlatform) UpdateEntryProgressCalls() []FakeUpdateEntryProgressCall 
 func (f *FakePlatform) SetUsername(string) {}
 
 func (f *FakePlatform) UpdateEntryCalls() []FakeUpdateEntryCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	ret := make([]FakeUpdateEntryCall, len(f.updateEntryCalls))
 	copy(ret, f.updateEntryCalls)
 	return ret
 }
 
 func (f *FakePlatform) UpdateEntry(_ context.Context, mediaID int, status *anilist.MediaListStatus, scoreRaw *int, progress *int, startedAt *anilist.FuzzyDateInput, completedAt *anilist.FuzzyDateInput) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	call := FakeUpdateEntryCall{MediaID: mediaID}
 	if status != nil {
 		statusCopy := *status
@@ -178,6 +193,8 @@ func (f *FakePlatform) UpdateEntry(_ context.Context, mediaID int, status *anili
 }
 
 func (f *FakePlatform) UpdateEntryProgress(_ context.Context, mediaID int, progress int, totalEpisodes *int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	call := FakeUpdateEntryProgressCall{}
 	call.MediaID = mediaID
 	call.Progress = progress
@@ -197,6 +214,8 @@ func (f *FakePlatform) DeleteEntry(context.Context, int, int) error {
 }
 
 func (f *FakePlatform) GetAnime(_ context.Context, mediaID int) (*anilist.BaseAnime, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.animeCalls[mediaID]++
 	anime, ok := f.animeByID[mediaID]
 	if !ok {
@@ -218,6 +237,8 @@ func (f *FakePlatform) GetAnimeDetails(context.Context, int) (*anilist.AnimeDeta
 }
 
 func (f *FakePlatform) GetManga(_ context.Context, mediaID int) (*anilist.BaseManga, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.mangaCalls[mediaID]++
 	manga, ok := f.mangaByID[mediaID]
 	if !ok {
@@ -227,6 +248,8 @@ func (f *FakePlatform) GetManga(_ context.Context, mediaID int) (*anilist.BaseMa
 }
 
 func (f *FakePlatform) GetAnimeCollection(context.Context, bool) (*anilist.AnimeCollection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.animeCollectionCalls++
 	if f.animeCollectionErr != nil {
 		return nil, f.animeCollectionErr
@@ -238,6 +261,8 @@ func (f *FakePlatform) GetAnimeCollection(context.Context, bool) (*anilist.Anime
 }
 
 func (f *FakePlatform) GetRawAnimeCollection(context.Context, bool) (*anilist.AnimeCollection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.rawAnimeCollectionCalls++
 	if f.rawAnimeCollectionErr != nil {
 		return nil, f.rawAnimeCollectionErr
@@ -250,6 +275,8 @@ func (f *FakePlatform) GetMangaDetails(context.Context, int) (*anilist.MangaDeta
 }
 
 func (f *FakePlatform) GetAnimeCollectionWithRelations(context.Context) (*anilist.AnimeCollectionWithRelations, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.animeCollectionWithRelCalls++
 	if f.animeCollectionWithRelErr != nil {
 		return nil, f.animeCollectionWithRelErr
@@ -258,6 +285,8 @@ func (f *FakePlatform) GetAnimeCollectionWithRelations(context.Context) (*anilis
 }
 
 func (f *FakePlatform) GetMangaCollection(context.Context, bool) (*anilist.MangaCollection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.mangaCollectionCalls++
 	if f.mangaCollectionErr != nil {
 		return nil, f.mangaCollectionErr
@@ -266,6 +295,8 @@ func (f *FakePlatform) GetMangaCollection(context.Context, bool) (*anilist.Manga
 }
 
 func (f *FakePlatform) GetRawMangaCollection(context.Context, bool) (*anilist.MangaCollection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.rawMangaCollectionCalls++
 	if f.rawMangaCollectionErr != nil {
 		return nil, f.rawMangaCollectionErr
@@ -294,6 +325,8 @@ func (f *FakePlatform) RefreshMangaCollection(context.Context) (*anilist.MangaCo
 }
 
 func (f *FakePlatform) GetViewerStats(context.Context) (*anilist.ViewerStats, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.viewerStatsCalls++
 	if f.viewerStatsErr != nil {
 		return nil, f.viewerStatsErr
@@ -302,6 +335,8 @@ func (f *FakePlatform) GetViewerStats(context.Context) (*anilist.ViewerStats, er
 }
 
 func (f *FakePlatform) GetAnimeAiringSchedule(context.Context) (*anilist.AnimeAiringSchedule, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.animeAiringScheduleCalls++
 	if f.animeAiringScheduleErr != nil {
 		return nil, f.animeAiringScheduleErr

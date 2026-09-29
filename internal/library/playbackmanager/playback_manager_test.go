@@ -475,7 +475,11 @@ func TestPlaybackManagerUnitStreamPlaybackStatusAndProgressTracking(t *testing.T
 	require.Equal(t, 2, progressCalls[0].Progress)
 	require.NotNil(t, progressCalls[0].TotalEpisodes)
 	require.Equal(t, 24, *progressCalls[0].TotalEpisodes)
-	require.True(t, h.playbackManager.historyMap["Stream"].ProgressUpdated)
+	require.Eventually(t, func() bool {
+		h.playbackManager.eventMu.RLock()
+		defer h.playbackManager.eventMu.RUnlock()
+		return h.playbackManager.historyMap["Stream"].ProgressUpdated
+	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, h.wsEventManager.count(events.PlaybackManagerProgressUpdated))
 
 	h.playbackManager.handleStreamingTrackingStopped("finished")
@@ -546,6 +550,8 @@ func TestPlaybackManagerLiveRepositoryEventsReachCallbacks(t *testing.T) {
 	})
 
 	require.Eventually(t, func() bool {
+		h.playbackManager.mu.Lock()
+		defer h.playbackManager.mu.Unlock()
 		return h.playbackManager.MediaPlayerRepository == repo && h.playbackManager.mediaPlayerRepoSubscriber != nil
 	}, time.Second, 10*time.Millisecond)
 
@@ -598,6 +604,8 @@ func TestPlaybackManagerLiveRepositoryStreamCompletionSyncsProgress(t *testing.T
 	})
 
 	require.Eventually(t, func() bool {
+		h.playbackManager.mu.Lock()
+		defer h.playbackManager.mu.Unlock()
 		return h.playbackManager.MediaPlayerRepository == repo && h.playbackManager.mediaPlayerRepoSubscriber != nil
 	}, time.Second, 10*time.Millisecond)
 
@@ -622,7 +630,11 @@ func TestPlaybackManagerLiveRepositoryStreamCompletionSyncsProgress(t *testing.T
 		calls := h.platform.UpdateEntryProgressCalls()
 		return len(calls) == 1 && calls[0].MediaID == media.ID && calls[0].Progress == 1
 	}, time.Second, 10*time.Millisecond)
-	require.True(t, h.playbackManager.historyMap["Stream"].ProgressUpdated)
+	require.Eventually(t, func() bool {
+		h.playbackManager.eventMu.RLock()
+		defer h.playbackManager.eventMu.RUnlock()
+		return h.playbackManager.historyMap["Stream"].ProgressUpdated
+	}, time.Second, 10*time.Millisecond)
 }
 
 type playbackManagerTestWrapper struct {
@@ -747,4 +759,45 @@ func expectPlaybackEvent[T PlaybackEvent](t *testing.T, ch <-chan PlaybackEvent)
 		t.Fatal("timed out waiting for playback event")
 		return zero
 	}
+}
+
+// A manual sync must record the real playback state, not an empty one.
+func TestSyncCurrentProgressRecordsPlaybackState(t *testing.T) {
+	h := newPlaybackManagerTestWrapper(t)
+	h.seedAutoUpdateProgress(t, false)
+
+	media := testmocks.NewBaseAnimeBuilder(154587, "Frieren").
+		WithUserPreferredTitle("Frieren").
+		WithEpisodes(12).
+		Build()
+	localFiles := anime.NewTestLocalFiles(anime.TestLocalFileGroup{
+		LibraryPath:      "/Anime",
+		FilePathTemplate: "/Anime/Frieren/%ep.mkv",
+		MediaID:          media.ID,
+		Episodes: []anime.TestLocalFileEpisode{
+			{Episode: 1, AniDBEpisode: "1", Type: anime.LocalFileTypeMain},
+			{Episode: 2, AniDBEpisode: "2", Type: anime.LocalFileTypeMain},
+		},
+	})
+	wrapperEntry, ok := anime.NewLocalFileWrapper(localFiles).GetLocalEntryById(media.ID)
+	require.True(t, ok)
+
+	h.playbackManager.currentMediaListEntry = mo.Some(&anilist.AnimeListEntry{Media: media, Progress: new(1)})
+	h.playbackManager.currentLocalFile = mo.Some(localFiles[1])
+	h.playbackManager.currentLocalFileWrapperEntry = mo.Some(wrapperEntry)
+	h.playbackManager.handlePlaybackStatus(&mediaplayer.PlaybackStatus{
+		Filename:             "2.mkv",
+		Filepath:             localFiles[1].Path,
+		CompletionPercentage: 0.5,
+		CurrentTimeInSeconds: 600,
+		DurationInSeconds:    1200,
+		PlaybackType:         mediaplayer.PlaybackTypeFile,
+	})
+
+	require.NoError(t, h.playbackManager.SyncCurrentProgress())
+
+	state := h.playbackManager.historyMap["2.mkv"]
+	require.True(t, state.ProgressUpdated)
+	require.Equal(t, 2, state.EpisodeNumber)
+	require.Equal(t, media.ID, state.MediaId)
 }

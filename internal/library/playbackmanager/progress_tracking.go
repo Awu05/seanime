@@ -147,13 +147,16 @@ func (pm *PlaybackManager) handleVideoCompleted(status *mediaplayer.PlaybackStat
 	pm.Logger.Debug().Msg("playback manager: Received video completed event")
 
 	// Notify subscribers
+	// Snapshot before notifying: autoSyncCurrentProgress updates _ps while subscribers read it.
+	statusEvent := PlaybackStatusChangedEvent{Status: *status, State: _ps}
+	completedEvent := VideoCompletedEvent{Filename: status.Filename}
 	go func() {
 		pm.playbackStatusSubscribers.Range(func(key string, value *PlaybackStatusSubscriber) bool {
 			if value.Canceled.Load() {
 				return true
 			}
-			value.EventCh <- PlaybackStatusChangedEvent{Status: *status, State: _ps}
-			value.EventCh <- VideoCompletedEvent{Filename: status.Filename}
+			value.EventCh <- statusEvent
+			value.EventCh <- completedEvent
 			return true
 		})
 	}()
@@ -375,13 +378,16 @@ func (pm *PlaybackManager) handleStreamingVideoCompleted(status *mediaplayer.Pla
 	pm.Logger.Debug().Msg("playback manager: Received video completed event")
 
 	// Notify subscribers
+	// Snapshot before notifying: autoSyncCurrentProgress updates _ps while subscribers read it.
+	statusEvent := PlaybackStatusChangedEvent{Status: *status, State: _ps}
+	completedEvent := StreamCompletedEvent{Filename: status.Filename}
 	go func() {
 		pm.playbackStatusSubscribers.Range(func(key string, value *PlaybackStatusSubscriber) bool {
 			if value.Canceled.Load() {
 				return true
 			}
-			value.EventCh <- PlaybackStatusChangedEvent{Status: *status, State: _ps}
-			value.EventCh <- StreamCompletedEvent{Filename: status.Filename}
+			value.EventCh <- statusEvent
+			value.EventCh <- completedEvent
 			return true
 		})
 	}()
@@ -560,11 +566,12 @@ func (pm *PlaybackManager) autoSyncCurrentProgress(_ps *PlaybackState) {
 //   - This method will return an error only if the progress update fails on AniList
 //   - This method will refresh the anilist collection
 func (pm *PlaybackManager) SyncCurrentProgress() error {
-	pm.eventMu.RLock()
+	// A full lock: this writes historyMap, and overlapping syncs would otherwise write it together.
+	pm.eventMu.Lock()
+	defer pm.eventMu.Unlock()
 
 	err := pm.updateProgress()
 	if err != nil {
-		pm.eventMu.RUnlock()
 		return err
 	}
 
@@ -573,9 +580,9 @@ func (pm *PlaybackManager) SyncCurrentProgress() error {
 		var _ps PlaybackState
 		switch pm.currentPlaybackType {
 		case LocalFilePlayback:
-			pm.getLocalFilePlaybackState(pm.currentMediaPlaybackStatus)
+			_ps = pm.getLocalFilePlaybackState(pm.currentMediaPlaybackStatus)
 		case StreamPlayback:
-			pm.getStreamPlaybackState(pm.currentMediaPlaybackStatus)
+			_ps = pm.getStreamPlaybackState(pm.currentMediaPlaybackStatus)
 		}
 		_ps.ProgressUpdated = true
 		pm.historyMap[pm.currentMediaPlaybackStatus.Filename] = _ps
@@ -584,7 +591,6 @@ func (pm *PlaybackManager) SyncCurrentProgress() error {
 
 	pm.refreshAnimeCollectionFunc()
 
-	pm.eventMu.RUnlock()
 	return nil
 }
 
