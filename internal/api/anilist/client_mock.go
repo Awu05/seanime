@@ -647,6 +647,26 @@ func (ac *FixtureAnilistClient) CompleteAnimeByID(ctx context.Context, id *int, 
 	return nil, ac.missingFixtureError("CompleteAnimeByID", *id)
 }
 
+func (ac *FixtureAnilistClient) BaseAnimeByIDs(ctx context.Context, ids []int) ([]*BaseAnime, error) {
+	ret := make([]*BaseAnime, 0, len(ids))
+	for _, id := range ids {
+		if res, err := ac.BaseAnimeByID(ctx, &id); err == nil {
+			ret = append(ret, res.GetMedia())
+		}
+	}
+	return ret, nil
+}
+
+func (ac *FixtureAnilistClient) BaseMangaByIDs(ctx context.Context, ids []int) ([]*BaseManga, error) {
+	ret := make([]*BaseManga, 0, len(ids))
+	for _, id := range ids {
+		if res, err := ac.BaseMangaByID(ctx, &id); err == nil {
+			ret = append(ret, res.GetMedia())
+		}
+	}
+	return ret, nil
+}
+
 func (ac *FixtureAnilistClient) CompleteAnimeByIDs(ctx context.Context, ids []int) ([]*CompleteAnime, error) {
 	ret := make([]*CompleteAnime, 0, len(ids))
 	for _, id := range ids {

@@ -74,3 +74,36 @@ func TestCompleteAnimeByIDsSplitsIntoBatchesOf50(t *testing.T) {
 	require.Len(t, batches[0], 50)
 	require.Len(t, batches[2], 20)
 }
+
+func TestBaseMediaByIDsQueryTheirOwnType(t *testing.T) {
+	var queries []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Query string `json:"query"`
+		}
+		require.NoError(t, json.Unmarshal(body, &req))
+		queries = append(queries, req.Query)
+		_, _ = fmt.Fprint(w, `{"data":{"Page":{"media":[{"id":5}]}}}`)
+	}))
+	defer server.Close()
+
+	prevProvider := CurrentRequestProvider()
+	t.Cleanup(func() { require.NoError(t, SetRequestProvider(prevProvider)) })
+	require.NoError(t, UseCustomAPI(CustomClientConfig{Name: "batch-test", Endpoint: server.URL}))
+	client := NewAnilistClient("", t.TempDir())
+
+	anime, err := client.BaseAnimeByIDs(context.Background(), []int{5})
+	require.NoError(t, err)
+	require.Equal(t, 5, anime[0].ID)
+	manga, err := client.BaseMangaByIDs(context.Background(), []int{5})
+	require.NoError(t, err)
+	require.Equal(t, 5, manga[0].ID)
+
+	require.True(t, strings.HasPrefix(queries[0], "query BaseAnimeByIds"))
+	require.Contains(t, queries[0], "type: ANIME")
+	require.Contains(t, queries[0], "fragment baseAnime on Media")
+	require.True(t, strings.HasPrefix(queries[1], "query BaseMangaByIds"))
+	require.Contains(t, queries[1], "type: MANGA")
+	require.Contains(t, queries[1], "fragment baseManga on Media")
+}

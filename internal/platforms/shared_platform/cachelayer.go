@@ -1105,6 +1105,14 @@ func (c *CacheLayer) CompleteAnimeByIDs(ctx context.Context, ids []int) ([]*anil
 	return ret, err
 }
 
+func (c *CacheLayer) BaseAnimeByIDs(ctx context.Context, ids []int) ([]*anilist.BaseAnime, error) {
+	return c.anilistClientRef.Get().BaseAnimeByIDs(ctx, ids)
+}
+
+func (c *CacheLayer) BaseMangaByIDs(ctx context.Context, ids []int) ([]*anilist.BaseManga, error) {
+	return c.anilistClientRef.Get().BaseMangaByIDs(ctx, ids)
+}
+
 func (c *CacheLayer) AnimeDetailsByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.AnimeDetailsByID, error) {
 	if id == nil {
 		return c.anilistClientRef.Get().AnimeDetailsByID(ctx, id, interceptors...)
