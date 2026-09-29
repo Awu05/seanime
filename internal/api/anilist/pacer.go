@@ -20,7 +20,8 @@ func WithBackgroundPriority(ctx context.Context) context.Context {
 	return context.WithValue(ctx, backgroundPriorityKey{}, true)
 }
 
-func isBackgroundPriority(ctx context.Context) bool {
+// IsBackgroundPriority reports whether ctx was marked by WithBackgroundPriority.
+func IsBackgroundPriority(ctx context.Context) bool {
 	background, _ := ctx.Value(backgroundPriorityKey{}).(bool)
 	return background
 }
@@ -61,7 +62,7 @@ func (p *aniListPacer) Wait(ctx context.Context, sleep requestSleepFunc) error {
 	if sleep == nil {
 		sleep = sleepWithContext
 	}
-	background := isBackgroundPriority(ctx)
+	background := IsBackgroundPriority(ctx)
 	if !background {
 		p.mu.Lock()
 		p.browsingWaiting++

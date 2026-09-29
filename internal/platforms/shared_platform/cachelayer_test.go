@@ -9,6 +9,7 @@ import (
 	"seanime/internal/events"
 	"seanime/internal/util"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,6 +38,12 @@ type cacheLayerTestClient struct {
 	saveEntriesRequests    int
 	saveEntriesErr         error
 	rejectMediaIDs         map[int]error
+	mu                     sync.Mutex
+	baseAnimeBatches       [][]int
+	baseAnimeMissing       map[int]bool
+	batchContexts          []context.Context
+	// batchRelease, when set, holds batch lookups until it's closed.
+	batchRelease chan struct{}
 }
 
 type cacheLayerUpdateEntryCall struct {
@@ -82,8 +89,39 @@ func (c *cacheLayerTestClient) CompleteAnimeByID(_ context.Context, id *int, _ .
 	return &anilist.CompleteAnimeByID{Media: &anilist.CompleteAnime{ID: *id}}, nil
 }
 
+func (c *cacheLayerTestClient) BaseAnimeByIDs(ctx context.Context, ids []int) ([]*anilist.BaseAnime, error) {
+	atomic.AddInt32(&c.baseAnimeCalls, 1)
+	c.mu.Lock()
+	c.baseAnimeBatches = append(c.baseAnimeBatches, ids)
+	c.batchContexts = append(c.batchContexts, ctx)
+	c.mu.Unlock()
+	if c.batchRelease != nil {
+		<-c.batchRelease
+	}
+	if c.baseAnimeErr != nil {
+		return nil, c.baseAnimeErr
+	}
+	var ret []*anilist.BaseAnime
+	for _, id := range ids {
+		if !c.baseAnimeMissing[id] {
+			ret = append(ret, &anilist.BaseAnime{ID: id})
+		}
+	}
+	return ret, nil
+}
+
+func (c *cacheLayerTestClient) BaseMangaByIDs(_ context.Context, ids []int) ([]*anilist.BaseManga, error) {
+	ret := make([]*anilist.BaseManga, len(ids))
+	for i, id := range ids {
+		ret[i] = &anilist.BaseManga{ID: id}
+	}
+	return ret, nil
+}
+
 func (c *cacheLayerTestClient) CompleteAnimeByIDs(_ context.Context, ids []int) ([]*anilist.CompleteAnime, error) {
+	c.mu.Lock()
 	c.completeAnimeBatches = append(c.completeAnimeBatches, ids)
+	c.mu.Unlock()
 	if c.completeAnimeErr != nil {
 		return c.completeAnimeBeforeErr, c.completeAnimeErr
 	}
@@ -441,12 +479,12 @@ func TestCacheLayerServesFreshCompleteAnimeWithoutHittingNetwork(t *testing.T) {
 	require.NoError(t, err)
 	_, err = cacheLayer.CompleteAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, atomic.LoadInt32(&client.completeAnimeCalls), "a fresh cached record must skip the network")
+	require.Len(t, client.completeAnimeBatches, 1, "a fresh cached record must skip the network")
 
 	tc.now = func() time.Time { return time.Now().Add(longCacheTTL + time.Minute) }
 	_, err = cacheLayer.CompleteAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, atomic.LoadInt32(&client.completeAnimeCalls), "a stale record must be refetched")
+	require.Len(t, client.completeAnimeBatches, 2, "a stale record must be refetched")
 }
 
 func TestCacheLayerSharesCompleteAnimeAcrossProfiles(t *testing.T) {
@@ -459,7 +497,7 @@ func TestCacheLayerSharesCompleteAnimeAcrossProfiles(t *testing.T) {
 	require.NoError(t, err)
 	_, err = newTestCacheLayer(t, second).CompleteAnimeByID(context.Background(), &id)
 	require.NoError(t, err)
-	require.EqualValues(t, 0, atomic.LoadInt32(&second.completeAnimeCalls))
+	require.Empty(t, second.completeAnimeBatches)
 }
 
 func TestCacheLayerServesStaleCompleteAnimeWhenAniListDown(t *testing.T) {

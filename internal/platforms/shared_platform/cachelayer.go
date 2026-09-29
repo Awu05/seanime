@@ -656,9 +656,10 @@ func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, n
 	return &cached, nil
 }
 
-// titleFirstGet serves a single-title lookup from the shared title cache, refreshing it from the
-// network when stale. A stale copy beats an error when AniList is failing. fallback may be nil.
-func titleFirstGet[T any](c *CacheLayer, cached *T, fresh bool, networkFn func() (*T, error), save func(*T), fallback func() *T) (*T, error) {
+// titleFirstGet serves a single-title lookup from the shared title cache, fetching it with networkFn,
+// which saves what it gets, when stale. A stale copy beats an error when AniList is failing.
+// fallback may be nil.
+func titleFirstGet[T any](c *CacheLayer, cached *T, fresh bool, networkFn func() (*T, error), fallback func() *T) (*T, error) {
 	if cached != nil && fresh {
 		return cached, nil
 	}
@@ -668,7 +669,6 @@ func titleFirstGet[T any](c *CacheLayer, cached *T, fresh bool, networkFn func()
 		res, err := networkFn()
 		c.checkAndUpdateWorkingState(err)
 		if err == nil && res != nil {
-			save(res)
 			return res, nil
 		}
 		networkErr = err
@@ -1019,21 +1019,27 @@ func (c *CacheLayer) BaseAnimeByMalID(ctx context.Context, id *int, interceptors
 }
 
 func (c *CacheLayer) BaseAnimeByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.BaseAnimeByID, error) {
-	networkFn := func() (*anilist.BaseAnimeByID, error) {
-		return c.anilistClientRef.Get().BaseAnimeByID(ctx, id, interceptors...)
-	}
-	if id == nil || !ShouldCache.Load() {
-		return networkFn()
+	client := c.anilistClientRef.Get()
+	if id == nil || !ShouldCache.Load() || len(interceptors) > 0 {
+		return client.BaseAnimeByID(ctx, id, interceptors...)
 	}
 
-	titles := CurrentTitleCache()
 	var cached *anilist.BaseAnimeByID
-	media, fresh, ok := titles.GetAnime(*id)
+	media, fresh, ok := CurrentTitleCache().GetAnime(*id)
 	if ok {
 		cached = &anilist.BaseAnimeByID{Media: media}
 	}
-	return titleFirstGet(c, cached, fresh, networkFn,
-		func(res *anilist.BaseAnimeByID) { titles.PutAnime(res.GetMedia()) },
+	return titleFirstGet(c, cached, fresh,
+		func() (*anilist.BaseAnimeByID, error) {
+			media, err := baseAnimeBatcher.get(ctx, client, *id, func() (*anilist.BaseAnime, error) {
+				res, err := client.BaseAnimeByID(ctx, id)
+				return res.GetMedia(), err
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &anilist.BaseAnimeByID{Media: media}, nil
+		},
 		func() *anilist.BaseAnimeByID { return c.extractBaseAnimeFromCollection(*id) },
 	)
 }
@@ -1046,21 +1052,27 @@ func (c *CacheLayer) SearchBaseAnimeByIds(ctx context.Context, ids []*int, page 
 }
 
 func (c *CacheLayer) CompleteAnimeByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.CompleteAnimeByID, error) {
-	networkFn := func() (*anilist.CompleteAnimeByID, error) {
-		return c.anilistClientRef.Get().CompleteAnimeByID(ctx, id, interceptors...)
-	}
-	if id == nil || !ShouldCache.Load() {
-		return networkFn()
+	client := c.anilistClientRef.Get()
+	if id == nil || !ShouldCache.Load() || len(interceptors) > 0 {
+		return client.CompleteAnimeByID(ctx, id, interceptors...)
 	}
 
-	titles := CurrentTitleCache()
 	var cached *anilist.CompleteAnimeByID
-	media, fresh, ok := titles.GetCompleteAnime(*id)
+	media, fresh, ok := CurrentTitleCache().GetCompleteAnime(*id)
 	if ok {
 		cached = &anilist.CompleteAnimeByID{Media: media}
 	}
-	return titleFirstGet(c, cached, fresh, networkFn,
-		func(res *anilist.CompleteAnimeByID) { titles.PutCompleteAnime(res.GetMedia()) },
+	return titleFirstGet(c, cached, fresh,
+		func() (*anilist.CompleteAnimeByID, error) {
+			media, err := completeAnimeBatcher.get(ctx, client, *id, func() (*anilist.CompleteAnime, error) {
+				res, err := client.CompleteAnimeByID(ctx, id)
+				return res.GetMedia(), err
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &anilist.CompleteAnimeByID{Media: media}, nil
+		},
 		nil,
 	)
 }
@@ -1282,21 +1294,27 @@ func (c *CacheLayer) SearchBaseManga(ctx context.Context, page *int, perPage *in
 }
 
 func (c *CacheLayer) BaseMangaByID(ctx context.Context, id *int, interceptors ...clientv2.RequestInterceptor) (*anilist.BaseMangaByID, error) {
-	networkFn := func() (*anilist.BaseMangaByID, error) {
-		return c.anilistClientRef.Get().BaseMangaByID(ctx, id, interceptors...)
-	}
-	if id == nil || !ShouldCache.Load() {
-		return networkFn()
+	client := c.anilistClientRef.Get()
+	if id == nil || !ShouldCache.Load() || len(interceptors) > 0 {
+		return client.BaseMangaByID(ctx, id, interceptors...)
 	}
 
-	titles := CurrentTitleCache()
 	var cached *anilist.BaseMangaByID
-	media, fresh, ok := titles.GetManga(*id)
+	media, fresh, ok := CurrentTitleCache().GetManga(*id)
 	if ok {
 		cached = &anilist.BaseMangaByID{Media: media}
 	}
-	return titleFirstGet(c, cached, fresh, networkFn,
-		func(res *anilist.BaseMangaByID) { titles.PutManga(res.GetMedia()) },
+	return titleFirstGet(c, cached, fresh,
+		func() (*anilist.BaseMangaByID, error) {
+			media, err := baseMangaBatcher.get(ctx, client, *id, func() (*anilist.BaseManga, error) {
+				res, err := client.BaseMangaByID(ctx, id)
+				return res.GetMedia(), err
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &anilist.BaseMangaByID{Media: media}, nil
+		},
 		func() *anilist.BaseMangaByID { return c.extractBaseMangaFromCollection(*id) },
 	)
 }
