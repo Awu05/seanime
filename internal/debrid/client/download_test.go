@@ -150,7 +150,7 @@ func TestTorrentDownloadCancellationOnFailure(t *testing.T) {
 		ctxMap:         result.NewMap[string, context.CancelFunc](),
 	}
 
-	require.NoError(t, repo.downloadTorrentItem("torrent-1", "bad zip", "", destination))
+	startDownload(t, repo, "bad zip", destination)
 	require.Eventually(t, func() bool {
 		return hasDebridDownloadStatus(ws, "cancelled")
 	}, time.Second, 10*time.Millisecond)
@@ -185,7 +185,7 @@ func TestRDDownload(t *testing.T) {
 		ctxMap:         result.NewMap[string, context.CancelFunc](),
 	}
 
-	require.NoError(t, repo.downloadTorrentItem("torrent-1", "", "", destination))
+	startDownload(t, repo, "", destination)
 	require.Eventually(t, func() bool {
 		return hasDebridDownloadStatus(ws, "completed")
 	}, time.Second, 10*time.Millisecond)
@@ -228,7 +228,7 @@ func TestTorBoxZip(t *testing.T) {
 		ctxMap:         result.NewMap[string, context.CancelFunc](),
 	}
 
-	require.NoError(t, repo.downloadTorrentItem("torrent-1", "torbox", "", destination))
+	startDownload(t, repo, "torbox", destination)
 	require.Eventually(t, func() bool {
 		return hasDebridDownloadStatus(ws, "completed")
 	}, time.Second, 10*time.Millisecond)
@@ -240,4 +240,24 @@ func TestTorBoxZip(t *testing.T) {
 		return err == nil
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, "torbox data", string(data))
+}
+
+// startDownload starts a download and waits for it to finish before the test ends, so its goroutine
+// never outlives the hook manager the test installed.
+func startDownload(t *testing.T, repo *Repository, torrentName string, destination string) {
+	t.Helper()
+	done := make(chan struct{}, 1)
+	require.NoError(t, repo.downloadTorrentItemThen("torrent-1", torrentName, "", destination, func(bool) {
+		select {
+		case done <- struct{}{}:
+		default:
+		}
+	}))
+	t.Cleanup(func() {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("download did not finish")
+		}
+	})
 }

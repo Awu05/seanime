@@ -6,6 +6,8 @@ import (
 	"seanime/internal/events"
 	"seanime/internal/library/anime"
 	"seanime/internal/util"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,7 +17,25 @@ import (
 
 // newCapturingLogger returns a logger writing to buf, for tests that need to assert on log
 // output rather than just PlaybackState/observable side effects.
-func newCapturingLogger(buf *bytes.Buffer) *zerolog.Logger {
+// syncBuffer lets the player log from its goroutine while the test reads the output.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func newCapturingLogger(buf *syncBuffer) *zerolog.Logger {
 	logger := zerolog.New(buf).With().Timestamp().Logger()
 	return &logger
 }
@@ -27,6 +47,7 @@ type recordedWSEvent struct {
 }
 
 type recordingWSEventManager struct {
+	mu                  sync.Mutex // the player sends events from its own goroutine while tests read them
 	videoCoreSubscriber *events.ClientEventSubscriber
 	sent                []recordedWSEvent
 	clientIds           []string
@@ -41,12 +62,37 @@ func newRecordingWSEventManager() *recordingWSEventManager {
 func (m *recordingWSEventManager) SendEvent(string, interface{}) {}
 
 func (m *recordingWSEventManager) SendEventTo(clientId string, eventType string, payload interface{}, _ ...bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sent = append(m.sent, recordedWSEvent{clientId: clientId, eventType: eventType, payload: payload})
 }
 
-func (m *recordingWSEventManager) SendToProfile(profileID string, eventType string, payload interface{}) {}
+func (m *recordingWSEventManager) SendToProfile(profileID string, eventType string, payload interface{}) {
+}
 
-func (m *recordingWSEventManager) GetClientIds() []string { return m.clientIds }
+func (m *recordingWSEventManager) GetClientIds() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.clientIds)
+}
+
+func (m *recordingWSEventManager) setClientIds(ids ...string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.clientIds = ids
+}
+
+func (m *recordingWSEventManager) sentEvents() []recordedWSEvent {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.sent)
+}
+
+func (m *recordingWSEventManager) resetSent() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = nil
+}
 
 func (m *recordingWSEventManager) GetClientPlatform(string) string { return "" }
 
@@ -172,11 +218,11 @@ func TestSetSkipDataSendsSanitizedOverride(t *testing.T) {
 	})
 
 	// overlapping ed ranges should be dropped before they reach the player.
-	require.Len(t, ws.sent, 1)
-	require.Equal(t, "player-client", ws.sent[0].clientId)
-	require.Equal(t, string(events.VideoCoreEventType), ws.sent[0].eventType)
+	require.Len(t, ws.sentEvents(), 1)
+	require.Equal(t, "player-client", ws.sentEvents()[0].clientId)
+	require.Equal(t, string(events.VideoCoreEventType), ws.sentEvents()[0].eventType)
 
-	envelope := decodeVideoCoreEnvelope(t, ws.sent[0].payload)
+	envelope := decodeVideoCoreEnvelope(t, ws.sentEvents()[0].payload)
 	require.Equal(t, string(ServerEventSetSkipData), envelope["type"])
 
 	sentSkipData, ok := envelope["payload"].(map[string]interface{})
@@ -196,8 +242,8 @@ func TestSetSkipDataKeepsExplicitEmptyOverride(t *testing.T) {
 	vc.SetSkipData(&SkipData{})
 
 	// an empty override should stay distinct from clearing so plugins can disable AniSkip fallback.
-	require.Len(t, ws.sent, 1)
-	envelope := decodeVideoCoreEnvelope(t, ws.sent[0].payload)
+	require.Len(t, ws.sentEvents(), 1)
+	envelope := decodeVideoCoreEnvelope(t, ws.sentEvents()[0].payload)
 	require.Equal(t, string(ServerEventSetSkipData), envelope["type"])
 	require.NotNil(t, envelope["payload"])
 }
@@ -211,13 +257,13 @@ func TestClearSkipDataSendsNilOverride(t *testing.T) {
 
 	vc.setPlaybackState(newPlaybackState("playback-1"))
 	vc.SetSkipData(&SkipData{Op: &SkipDataEntry{Interval: SkipInterval{StartTime: 12, EndTime: 42}}})
-	ws.sent = nil
+	ws.resetSent()
 
 	vc.ClearSkipData()
 
-	require.Len(t, ws.sent, 1)
+	require.Len(t, ws.sentEvents(), 1)
 
-	envelope := decodeVideoCoreEnvelope(t, ws.sent[0].payload)
+	envelope := decodeVideoCoreEnvelope(t, ws.sentEvents()[0].payload)
 	require.Equal(t, string(ServerEventSetSkipData), envelope["type"])
 	require.Nil(t, envelope["payload"])
 }
@@ -242,10 +288,10 @@ func TestGetSkipDataReturnsClientOwnedState(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return len(ws.sent) == 1
+		return len(ws.sentEvents()) == 1
 	}, time.Second, 10*time.Millisecond)
 
-	envelope := decodeVideoCoreEnvelope(t, ws.sent[0].payload)
+	envelope := decodeVideoCoreEnvelope(t, ws.sentEvents()[0].payload)
 	require.Equal(t, string(ServerEventGetSkipData), envelope["type"])
 	require.Nil(t, envelope["payload"])
 
@@ -288,7 +334,7 @@ func TestGetSkipDataAllowsEmptyClientState(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return len(ws.sent) == 1
+		return len(ws.sentEvents()) == 1
 	}, time.Second, 10*time.Millisecond)
 
 	ws.MockSendVideoCoreEvent(ClientEvent{
@@ -354,7 +400,7 @@ func TestPlayerStateRequestsTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ws.sent = nil
+			ws.resetSent()
 			resultCh := make(chan bool, 1)
 
 			go func() {
@@ -362,11 +408,11 @@ func TestPlayerStateRequestsTimeout(t *testing.T) {
 			}()
 
 			require.Eventually(t, func() bool {
-				return len(ws.sent) == 1
+				return len(ws.sentEvents()) == 1
 			}, time.Second, 10*time.Millisecond)
 
 			// missing client responses should release
-			envelope := decodeVideoCoreEnvelope(t, ws.sent[0].payload)
+			envelope := decodeVideoCoreEnvelope(t, ws.sentEvents()[0].payload)
 			require.Equal(t, string(tt.eventType), envelope["type"])
 
 			select {
@@ -454,7 +500,7 @@ func TestVideoStatusRecoversAfterZeroDurationLoadedMetadata(t *testing.T) {
 func TestConnectedPlaybackOwnerBlocksAnotherClient(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	ws.clientIds = []string{"owner-client", "new-client"}
+	ws.setClientIds("owner-client", "new-client")
 	vc := newTestVideoCore(ws, logger)
 	t.Cleanup(vc.Shutdown)
 
@@ -479,7 +525,7 @@ func TestConnectedPlaybackOwnerBlocksAnotherClient(t *testing.T) {
 func TestVideoLoadedTakesOverFromDisconnectedOwner(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	ws.clientIds = []string{"new-client"}
+	ws.setClientIds("new-client")
 	vc := newTestVideoCore(ws, logger)
 	t.Cleanup(vc.Shutdown)
 
@@ -514,7 +560,7 @@ func TestVideoLoadedTakesOverFromDisconnectedOwner(t *testing.T) {
 func TestNonLoadEventCannotClaimDisconnectedPlayback(t *testing.T) {
 	logger := util.NewLogger()
 	ws := newRecordingWSEventManager()
-	ws.clientIds = []string{"new-client"}
+	ws.setClientIds("new-client")
 	vc := newTestVideoCore(ws, logger)
 	t.Cleanup(vc.Shutdown)
 
@@ -557,7 +603,7 @@ func TestNonLoadEventCannotClaimDisconnectedPlayback(t *testing.T) {
 // the event" and next time this happens there is nothing to grep for. This test doesn't identify
 // the exact cause of the incident - it verifies the diagnostic instrumentation needed to find it.
 func TestPushEventLogsWarningWhenNoPlaybackState(t *testing.T) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ws := newRecordingWSEventManager()
 	vc := newTestVideoCore(ws, newCapturingLogger(&buf))
 	t.Cleanup(vc.Shutdown)
@@ -572,9 +618,9 @@ func TestPushEventLogsWarningWhenNoPlaybackState(t *testing.T) {
 // behavior (see that test), but it happened completely silently, which is indistinguishable in
 // production logs from the event never having been sent by the client at all.
 func TestOwnershipMismatchDropLogsWarning(t *testing.T) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ws := newRecordingWSEventManager()
-	ws.clientIds = []string{"owner-client", "new-client"}
+	ws.setClientIds("owner-client", "new-client")
 	vc := newTestVideoCore(ws, newCapturingLogger(&buf))
 	t.Cleanup(vc.Shutdown)
 
