@@ -13,6 +13,7 @@ import (
 	"seanime/internal/util"
 	"seanime/internal/util/limiter"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -22,14 +23,15 @@ import (
 
 type (
 	AnilistPlatform struct {
-		logger                 *zerolog.Logger
-		username               mo.Option[string]
-		anilistClient          anilist.AnilistClient
-		useFixtureCollections  bool
-		animeCollection        mo.Option[*anilist.AnimeCollection]
-		rawAnimeCollection     mo.Option[*anilist.AnimeCollection]
-		mangaCollection        mo.Option[*anilist.MangaCollection]
-		rawMangaCollection     mo.Option[*anilist.MangaCollection]
+		logger                *zerolog.Logger
+		username              mo.Option[string]
+		anilistClient         anilist.AnilistClient
+		useFixtureCollections bool
+		// Refreshes replace these while requests read them; nil until first loaded.
+		animeCollection        atomic.Pointer[anilist.AnimeCollection]
+		rawAnimeCollection     atomic.Pointer[anilist.AnimeCollection]
+		mangaCollection        atomic.Pointer[anilist.MangaCollection]
+		rawMangaCollection     atomic.Pointer[anilist.MangaCollection]
 		isOffline              bool
 		offlinePlatformEnabled bool
 		helper                 *shared_platform.PlatformHelper
@@ -50,10 +52,6 @@ func NewAnilistPlatform(anilistClientRef *util.Ref[anilist.AnilistClient], exten
 		logger:                logger,
 		username:              mo.None[string](),
 		useFixtureCollections: useFixtureCollections,
-		animeCollection:       mo.None[*anilist.AnimeCollection](),
-		rawAnimeCollection:    mo.None[*anilist.AnimeCollection](),
-		mangaCollection:       mo.None[*anilist.MangaCollection](),
-		rawMangaCollection:    mo.None[*anilist.MangaCollection](),
 		extensionBankRef:      extensionBankRef,
 		helper:                shared_platform.NewPlatformHelper(extensionBankRef, db, logger),
 		db:                    db,
@@ -133,8 +131,8 @@ func (ap *AnilistPlatform) UpdateEntryProgress(ctx context.Context, mediaID int,
 
 		// Check if the anime is in the repeating list
 		// If it is, set the status to repeating
-		if ap.rawAnimeCollection.IsPresent() {
-			for _, list := range ap.rawAnimeCollection.MustGet().MediaListCollection.Lists {
+		if raw := ap.rawAnimeCollection.Load(); raw != nil {
+			for _, list := range raw.MediaListCollection.Lists {
 				if list.Status != nil && *list.Status == anilist.MediaListStatusRepeating {
 					if list.Entries != nil {
 						for _, entry := range list.Entries {
@@ -352,9 +350,9 @@ func (ap *AnilistPlatform) GetMangaDetails(ctx context.Context, mediaID int) (*a
 }
 
 func (ap *AnilistPlatform) GetAnimeCollection(ctx context.Context, bypassCache bool) (*anilist.AnimeCollection, error) {
-	if !bypassCache && ap.animeCollection.IsPresent() {
+	if cached := ap.animeCollection.Load(); !bypassCache && cached != nil {
 		event := new(platform.GetCachedAnimeCollectionEvent)
-		event.AnimeCollection = ap.animeCollection.MustGet()
+		event.AnimeCollection = cached
 		err := hook.GlobalHookManager.OnGetCachedAnimeCollection().Trigger(event)
 		if err != nil {
 			return nil, err
@@ -372,7 +370,7 @@ func (ap *AnilistPlatform) GetAnimeCollection(ctx context.Context, bypassCache b
 	}
 
 	event := new(platform.GetAnimeCollectionEvent)
-	event.AnimeCollection = ap.animeCollection.MustGet()
+	event.AnimeCollection = ap.animeCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetAnimeCollection().Trigger(event)
 	if err != nil {
@@ -383,9 +381,9 @@ func (ap *AnilistPlatform) GetAnimeCollection(ctx context.Context, bypassCache b
 }
 
 func (ap *AnilistPlatform) GetRawAnimeCollection(ctx context.Context, bypassCache bool) (*anilist.AnimeCollection, error) {
-	if !bypassCache && ap.rawAnimeCollection.IsPresent() {
+	if cached := ap.rawAnimeCollection.Load(); !bypassCache && cached != nil {
 		event := new(platform.GetCachedRawAnimeCollectionEvent)
-		event.AnimeCollection = ap.rawAnimeCollection.MustGet()
+		event.AnimeCollection = cached
 		err := hook.GlobalHookManager.OnGetCachedRawAnimeCollection().Trigger(event)
 		if err != nil {
 			return nil, err
@@ -403,7 +401,7 @@ func (ap *AnilistPlatform) GetRawAnimeCollection(ctx context.Context, bypassCach
 	}
 
 	event := new(platform.GetRawAnimeCollectionEvent)
-	event.AnimeCollection = ap.rawAnimeCollection.MustGet()
+	event.AnimeCollection = ap.rawAnimeCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetRawAnimeCollection().Trigger(event)
 	if err != nil {
@@ -424,7 +422,7 @@ func (ap *AnilistPlatform) RefreshAnimeCollection(ctx context.Context) (*anilist
 	}
 
 	event := new(platform.GetAnimeCollectionEvent)
-	event.AnimeCollection = ap.animeCollection.MustGet()
+	event.AnimeCollection = ap.animeCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetAnimeCollection().Trigger(event)
 	if err != nil {
@@ -432,7 +430,7 @@ func (ap *AnilistPlatform) RefreshAnimeCollection(ctx context.Context) (*anilist
 	}
 
 	event2 := new(platform.GetRawAnimeCollectionEvent)
-	event2.AnimeCollection = ap.rawAnimeCollection.MustGet()
+	event2.AnimeCollection = ap.rawAnimeCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetRawAnimeCollection().Trigger(event2)
 	if err != nil {
@@ -464,18 +462,18 @@ func (ap *AnilistPlatform) doRefreshAnimeCollection(ctx context.Context) error {
 	// Merge the custom entries into the collection
 	ap.helper.MergeCustomSourceAnimeEntries(collection)
 
-	// Save the raw collection to App (retains the lists with no status)
-	ap.rawAnimeCollection = mo.Some(new(*collection))
-	ap.rawAnimeCollection.MustGet().MediaListCollection = new(*collection.MediaListCollection)
+	// The raw collection retains the lists with no status
+	raw := new(*collection)
+	raw.MediaListCollection = new(*collection.MediaListCollection)
 	listsCopy := make([]*anilist.AnimeCollection_MediaListCollection_Lists, len(collection.MediaListCollection.Lists))
 	copy(listsCopy, collection.MediaListCollection.Lists)
-	ap.rawAnimeCollection.MustGet().MediaListCollection.Lists = listsCopy
+	raw.MediaListCollection.Lists = listsCopy
 
 	// Remove lists with no status (custom lists)
 	collection.MediaListCollection.Lists = ap.helper.FilterOutCustomAnimeLists(collection.MediaListCollection.Lists)
 
-	// Save the collection to App
-	ap.animeCollection = mo.Some(collection)
+	ap.rawAnimeCollection.Store(raw)
+	ap.animeCollection.Store(collection)
 
 	return nil
 }
@@ -498,9 +496,9 @@ func (ap *AnilistPlatform) GetAnimeCollectionWithRelations(ctx context.Context) 
 
 func (ap *AnilistPlatform) GetMangaCollection(ctx context.Context, bypassCache bool) (*anilist.MangaCollection, error) {
 
-	if !bypassCache && ap.mangaCollection.IsPresent() {
+	if cached := ap.mangaCollection.Load(); !bypassCache && cached != nil {
 		event := new(platform.GetCachedMangaCollectionEvent)
-		event.MangaCollection = ap.mangaCollection.MustGet()
+		event.MangaCollection = cached
 		err := hook.GlobalHookManager.OnGetCachedMangaCollection().Trigger(event)
 		if err != nil {
 			return nil, err
@@ -518,7 +516,7 @@ func (ap *AnilistPlatform) GetMangaCollection(ctx context.Context, bypassCache b
 	}
 
 	event := new(platform.GetMangaCollectionEvent)
-	event.MangaCollection = ap.mangaCollection.MustGet()
+	event.MangaCollection = ap.mangaCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetMangaCollection().Trigger(event)
 	if err != nil {
@@ -531,10 +529,10 @@ func (ap *AnilistPlatform) GetMangaCollection(ctx context.Context, bypassCache b
 func (ap *AnilistPlatform) GetRawMangaCollection(ctx context.Context, bypassCache bool) (*anilist.MangaCollection, error) {
 	ap.logger.Trace().Msg("anilist platform: Fetching raw manga collection")
 
-	if !bypassCache && ap.rawMangaCollection.IsPresent() {
+	if cached := ap.rawMangaCollection.Load(); !bypassCache && cached != nil {
 		ap.logger.Trace().Msg("anilist platform: Returning raw manga collection from cache")
 		event := new(platform.GetCachedRawMangaCollectionEvent)
-		event.MangaCollection = ap.rawMangaCollection.MustGet()
+		event.MangaCollection = cached
 		err := hook.GlobalHookManager.OnGetCachedRawMangaCollection().Trigger(event)
 		if err != nil {
 			return nil, err
@@ -552,7 +550,7 @@ func (ap *AnilistPlatform) GetRawMangaCollection(ctx context.Context, bypassCach
 	}
 
 	event := new(platform.GetRawMangaCollectionEvent)
-	event.MangaCollection = ap.rawMangaCollection.MustGet()
+	event.MangaCollection = ap.rawMangaCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetRawMangaCollection().Trigger(event)
 	if err != nil {
@@ -573,7 +571,7 @@ func (ap *AnilistPlatform) RefreshMangaCollection(ctx context.Context) (*anilist
 	}
 
 	event := new(platform.GetMangaCollectionEvent)
-	event.MangaCollection = ap.mangaCollection.MustGet()
+	event.MangaCollection = ap.mangaCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetMangaCollection().Trigger(event)
 	if err != nil {
@@ -581,7 +579,7 @@ func (ap *AnilistPlatform) RefreshMangaCollection(ctx context.Context) (*anilist
 	}
 
 	event2 := new(platform.GetRawMangaCollectionEvent)
-	event2.MangaCollection = ap.rawMangaCollection.MustGet()
+	event2.MangaCollection = ap.rawMangaCollection.Load()
 
 	err = hook.GlobalHookManager.OnGetRawMangaCollection().Trigger(event2)
 	if err != nil {
@@ -612,22 +610,22 @@ func (ap *AnilistPlatform) doRefreshMangaCollection(ctx context.Context) error {
 	// Merge the custom entries into the collection
 	ap.helper.MergeCustomSourceMangaEntries(collection)
 
-	// Save the raw collection to App (retains the lists with no status)
-	ap.rawMangaCollection = mo.Some(new(*collection))
-	ap.rawMangaCollection.MustGet().MediaListCollection = new(*collection.MediaListCollection)
+	// The raw collection retains the lists with no status
+	raw := new(*collection)
+	raw.MediaListCollection = new(*collection.MediaListCollection)
 	listsCopy := make([]*anilist.MangaCollection_MediaListCollection_Lists, len(collection.MediaListCollection.Lists))
 	copy(listsCopy, collection.MediaListCollection.Lists)
-	ap.rawMangaCollection.MustGet().MediaListCollection.Lists = listsCopy
+	raw.MediaListCollection.Lists = listsCopy
 
 	// Remove lists with no status (custom lists)
 	collection.MediaListCollection.Lists = ap.helper.FilterOutCustomMangaLists(collection.MediaListCollection.Lists)
 
 	// Remove Novels from both collections
 	ap.helper.RemoveNovelsFromMangaCollection(collection)
-	ap.helper.RemoveNovelsFromMangaCollection(ap.rawMangaCollection.MustGet())
+	ap.helper.RemoveNovelsFromMangaCollection(raw)
 
-	// Save the collection to App
-	ap.mangaCollection = mo.Some(collection)
+	ap.rawMangaCollection.Store(raw)
+	ap.mangaCollection.Store(collection)
 
 	return nil
 }

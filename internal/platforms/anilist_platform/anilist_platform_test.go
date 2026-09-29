@@ -42,12 +42,11 @@ func TestAnilistPlatform_GetAnimeCollection_CoalescesConcurrentNetworkFetches(t 
 	logger := util.NewLogger()
 
 	ap := &AnilistPlatform{
-		anilistClient:   client,
-		logger:          logger,
-		username:        mo.Some("testuser"),
-		animeCollection: mo.None[*anilist.AnimeCollection](),
-		helper:          &shared_platform.PlatformHelper{},
-		refreshGroup:    &singleflight.Group{},
+		anilistClient: client,
+		logger:        logger,
+		username:      mo.Some("testuser"),
+		helper:        &shared_platform.PlatformHelper{},
+		refreshGroup:  &singleflight.Group{},
 	}
 
 	const concurrency = 10
