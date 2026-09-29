@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"seanime/internal/database/models"
-	"seanime/internal/testutil"
 
 	"github.com/stretchr/testify/require"
 )
@@ -43,10 +42,9 @@ func TestCanProceed(t *testing.T) {
 }
 
 func TestNotify(t *testing.T) {
-	cfg := testutil.InitTestProvider(t)
 	t.Run("pushes when enabled", func(t *testing.T) {
 		n := NewNotifier()
-		n.SetSettings(cfg.Path.DataDir, &models.NotificationSettings{}, nil)
+		n.SetSettings(t.TempDir(), &models.NotificationSettings{}, nil)
 
 		called := make(chan struct{}, 1)
 		n.push = func(title, message, icon string) error {
@@ -67,7 +65,7 @@ func TestNotify(t *testing.T) {
 
 	t.Run("skips push when disabled", func(t *testing.T) {
 		n := NewNotifier()
-		n.SetSettings(cfg.Path.DataDir, &models.NotificationSettings{DisableNotifications: true}, nil)
+		n.SetSettings(t.TempDir(), &models.NotificationSettings{DisableNotifications: true}, nil)
 
 		var calls atomic.Int32
 		n.push = func(title, message, icon string) error {
