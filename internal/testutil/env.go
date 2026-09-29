@@ -143,6 +143,12 @@ func (env *TestEnv) NewDatabase(name string) *db.Database {
 	if err != nil {
 		env.t.Fatalf("testutil: could not create database: %v", err)
 	}
+	// Windows can't delete the temp dir while the database file is open.
+	env.t.Cleanup(func() {
+		if sqlDB, err := database.Gorm().DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 
 	return database
 }
