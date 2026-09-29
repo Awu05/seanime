@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"seanime/internal/api/anilist"
@@ -62,16 +63,16 @@ func (a *App) initModulesOnce() {
 	}
 
 	a.LocalManager.SetRefreshAnilistCollectionsFunc(func() {
-		_, _ = a.RefreshAnimeCollection()
-		_, _ = a.RefreshMangaCollection()
+		_, _ = a.RefreshAnimeCollection(context.Background())
+		_, _ = a.RefreshMangaCollection(context.Background())
 	})
 
 	plugin.GlobalAppContext.SetModulesPartial(plugin.AppContextModules{
 		OnRefreshAnilistAnimeCollection: func() {
-			_, _ = a.RefreshAnimeCollection()
+			_, _ = a.RefreshAnimeCollection(context.Background())
 		},
 		OnRefreshAnilistMangaCollection: func() {
-			_, _ = a.RefreshMangaCollection()
+			_, _ = a.RefreshMangaCollection(context.Background())
 		},
 	})
 
@@ -126,7 +127,7 @@ func (a *App) initModulesOnce() {
 		IsOfflineRef:        a.IsOfflineRef(),
 		ContinuityManager:   a.ContinuityManager,
 		RefreshAnimeCollectionFunc: func() {
-			_, _ = a.RefreshAnimeCollection()
+			_, _ = a.RefreshAnimeCollection(context.Background())
 		},
 	})
 
@@ -183,7 +184,7 @@ func (a *App) initModulesOnce() {
 		DiscordPresence:     a.DiscordPresence,
 		PlatformRef:         a.AnilistPlatformRef,
 		RefreshAnimeCollectionFunc: func() {
-			_, _ = a.RefreshAnimeCollection()
+			_, _ = a.RefreshAnimeCollection(context.Background())
 		},
 		IsOfflineRef: a.IsOfflineRef(),
 	})
@@ -211,7 +212,7 @@ func (a *App) initModulesOnce() {
 		DiscordPresence:     a.DiscordPresence,
 		PlatformRef:         a.AnilistPlatformRef,
 		RefreshAnimeCollectionFunc: func() {
-			_, _ = a.RefreshAnimeCollection()
+			_, _ = a.RefreshAnimeCollection(context.Background())
 		},
 		IsOfflineRef: a.IsOfflineRef(),
 		NativePlayer: a.NativePlayer,
@@ -298,7 +299,7 @@ func (a *App) initModulesOnce() {
 		LogsDir:             a.Config.Logs.Dir,
 		OnRefreshCollection: func() {
 			go func() {
-				_, _ = a.RefreshAnimeCollection()
+				_, _ = a.RefreshAnimeCollection(context.Background())
 			}()
 		},
 	})
@@ -931,7 +932,7 @@ func (a *App) InitOrRefreshAnilistData() {
 	a.Logger.Info().Msg("app: Authenticated to AniList")
 
 	go func() {
-		_, err = a.RefreshAnimeCollection()
+		_, err = a.RefreshAnimeCollection(context.Background())
 		if err != nil {
 			a.Logger.Error().Err(err).Msg("app: Failed to fetch Anilist anime collection")
 		}
@@ -939,7 +940,7 @@ func (a *App) InitOrRefreshAnilistData() {
 		a.ServerReady = true
 		a.WSEventManager.SendEvent(events.ServerReady, nil)
 
-		_, err = a.RefreshMangaCollection()
+		_, err = a.RefreshMangaCollection(context.Background())
 		if err != nil {
 			a.Logger.Error().Err(err).Msg("app: Failed to fetch Anilist manga collection")
 		}

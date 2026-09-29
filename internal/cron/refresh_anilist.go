@@ -1,6 +1,8 @@
 package cron
 
 import (
+	"context"
+	"seanime/internal/api/anilist"
 	"seanime/internal/events"
 )
 
@@ -14,11 +16,14 @@ func RefreshAnilistDataJob(c *JobCtx) {
 		return
 	}
 
+	// A scheduled refresh only uses the AniList budget that people browsing can spare.
+	ctx := anilist.WithBackgroundPriority(context.Background())
+
 	// Refresh the Anilist Collection
-	animeCollection, _ := c.App.RefreshAnimeCollection()
+	animeCollection, _ := c.App.RefreshAnimeCollection(ctx)
 	c.App.WSEventManager.SendEvent(events.RefreshedAnilistAnimeCollection, animeCollection)
 
-	mangaCollection, _ := c.App.RefreshMangaCollection()
+	mangaCollection, _ := c.App.RefreshMangaCollection(ctx)
 	c.App.WSEventManager.SendEvent(events.RefreshedAnilistMangaCollection, mangaCollection)
 }
 

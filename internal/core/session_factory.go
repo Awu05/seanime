@@ -75,7 +75,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	plat, isProfilePlatform := a.sessionPlatform(profileID)
 	platformRef := a.AnilistPlatformRef
 	refreshAnimeCollection := func() {
-		_, _ = a.RefreshAnimeCollection()
+		_, _ = a.RefreshAnimeCollection(context.Background())
 	}
 	if isProfilePlatform {
 		platformRef = util.NewRef[platform.Platform](plat)

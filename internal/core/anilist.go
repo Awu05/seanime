@@ -138,11 +138,11 @@ func (a *App) applyRuntimeAnilistClient(client anilist.AnilistClient) error {
 		a.DiscordPresence.SetUsername(nextUser.Viewer.Name)
 	}
 
-	if _, err := a.RefreshAnimeCollection(); err != nil {
+	if _, err := a.RefreshAnimeCollection(context.Background()); err != nil {
 		return err
 	}
 
-	if _, err := a.RefreshMangaCollection(); err != nil {
+	if _, err := a.RefreshMangaCollection(context.Background()); err != nil {
 		return err
 	}
 
@@ -271,7 +271,7 @@ func (a *App) SyncAnilistToSimulatedCollection() {
 }
 
 // RefreshAnimeCollection queries Anilist for the user's collection
-func (a *App) RefreshAnimeCollection() (*anilist.AnimeCollection, error) {
+func (a *App) RefreshAnimeCollection(ctx context.Context) (*anilist.AnimeCollection, error) {
 	go func() {
 		a.OnRefreshAnilistCollectionFuncs.Range(func(key string, f func()) bool {
 			go f()
@@ -279,7 +279,7 @@ func (a *App) RefreshAnimeCollection() (*anilist.AnimeCollection, error) {
 		})
 	}()
 
-	ret, err := a.AnilistPlatformRef.Get().RefreshAnimeCollection(context.Background())
+	ret, err := a.AnilistPlatformRef.Get().RefreshAnimeCollection(ctx)
 
 	if err != nil {
 		return nil, err
@@ -331,8 +331,8 @@ func (a *App) GetRawMangaCollection(bypassCache bool) (*anilist.MangaCollection,
 }
 
 // RefreshMangaCollection queries Anilist for the user's manga collection
-func (a *App) RefreshMangaCollection() (*anilist.MangaCollection, error) {
-	mc, err := a.AnilistPlatformRef.Get().RefreshMangaCollection(context.Background())
+func (a *App) RefreshMangaCollection(ctx context.Context) (*anilist.MangaCollection, error) {
+	mc, err := a.AnilistPlatformRef.Get().RefreshMangaCollection(ctx)
 
 	if err != nil {
 		return nil, err
