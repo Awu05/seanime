@@ -57,6 +57,14 @@ func NewTestManager(t *testing.T, db *db.Database) Manager {
 		IsOffline:           false,
 	})
 	require.NoError(t, err)
+	// Windows can't delete the temp dir while the database file is open.
+	if impl, ok := m.(*ManagerImpl); ok {
+		t.Cleanup(func() {
+			if sqlDB, err := impl.localDb.gormdb.DB(); err == nil {
+				_ = sqlDB.Close()
+			}
+		})
+	}
 
 	return m
 }

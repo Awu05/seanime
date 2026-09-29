@@ -10,6 +10,7 @@ import (
 	"seanime/internal/hook"
 	"seanime/internal/hook_resolver"
 	"seanime/internal/library/anime"
+	"seanime/internal/testutil"
 	"seanime/internal/torrent_clients/torrent_client"
 	"seanime/internal/util"
 	"testing"
@@ -38,6 +39,7 @@ func useTestHookManager(t *testing.T) hook.Manager {
 
 func newTestAnimeCollection(t *testing.T, mediaId int) *anilist.AnimeCollection {
 	t.Helper()
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 
 	anilistClient := anilist.NewTestAnilistClient()
 	animeCollection, err := anilistClient.AnimeCollection(context.Background(), nil)
@@ -1004,6 +1006,7 @@ func TestIsProfileValidChecks(t *testing.T) {
 }
 
 func TestIntegration(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	anilistClient := anilist.NewTestAnilistClient()
 	animeCollection, err := anilistClient.AnimeCollection(context.Background(), nil)
 	require.NoError(t, err)
@@ -1242,6 +1245,7 @@ func TestIntegration(t *testing.T) {
 }
 
 func TestDelayIntegration(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	anilistClient := anilist.NewTestAnilistClient()
 	animeCollection, err := anilistClient.AnimeCollection(context.Background(), nil)
 	require.NoError(t, err)

@@ -38,6 +38,7 @@ func testSetupManager(t *testing.T) (Manager, *anilist.AnimeCollection, *anilist
 }
 
 func TestSync2(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	manager, animeCollection, _ := testSetupManager(t)
 
 	err := manager.TrackAnime(130003) // Bocchi the rock
@@ -94,6 +95,7 @@ func TestSync2(t *testing.T) {
 }
 
 func TestSync(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	manager, _, _ := testSetupManager(t)
 
 	err := manager.TrackAnime(130003) // Bocchi the rock
@@ -129,6 +131,7 @@ func TestSync(t *testing.T) {
 }
 
 func TestSynchronizeAnilistDoesNotPanicWithoutLocalCollections(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	manager, _, _ := testSetupManager(t)
 
 	require.NotPanics(t, func() {
@@ -137,6 +140,7 @@ func TestSynchronizeAnilistDoesNotPanicWithoutLocalCollections(t *testing.T) {
 }
 
 func TestSynchronizeSimulatedCollectionToAnilistCreatesMissingEntries(t *testing.T) {
+	testutil.RequireAnilistFixtures(t, "AnimeCollection")
 	manager, animeCollection, mangaCollection := testSetupManager(t)
 	managerImpl := manager.(*ManagerImpl)
 

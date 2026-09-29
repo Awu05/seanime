@@ -3,9 +3,9 @@ package autodownloader
 import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata_provider"
-	"seanime/internal/database/db"
 	"seanime/internal/database/models"
 	"seanime/internal/library/anime"
+	"seanime/internal/testutil"
 	"seanime/internal/util"
 	"testing"
 
@@ -15,7 +15,7 @@ import (
 )
 
 func TestComparison(t *testing.T) {
-	database, _ := db.NewDatabase(t.TempDir(), "test", util.NewLogger())
+	database := testutil.NewTestEnv(t).MustNewDatabase(util.NewLogger())
 	ad := AutoDownloader{
 		metadataProviderRef: util.NewRef(metadata_provider.NewTestProvider(t, database)),
 		settings: &models.AutoDownloaderSettings{
@@ -140,7 +140,7 @@ func TestComparison(t *testing.T) {
 }
 
 func TestComparison2(t *testing.T) {
-	database, _ := db.NewDatabase(t.TempDir(), "test", util.NewLogger())
+	database := testutil.NewTestEnv(t).MustNewDatabase(util.NewLogger())
 	ad := AutoDownloader{
 		metadataProviderRef: util.NewRef(metadata_provider.NewTestProvider(t, database)),
 		settings: &models.AutoDownloaderSettings{
@@ -237,7 +237,7 @@ func TestComparison2(t *testing.T) {
 }
 
 func TestComparison3(t *testing.T) {
-	database, _ := db.NewDatabase(t.TempDir(), "test", util.NewLogger())
+	database := testutil.NewTestEnv(t).MustNewDatabase(util.NewLogger())
 	ad := AutoDownloader{
 		metadataProviderRef: util.NewRef(metadata_provider.NewTestProvider(t, database)),
 		settings: &models.AutoDownloaderSettings{
