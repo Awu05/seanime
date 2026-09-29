@@ -712,10 +712,10 @@ func (h *Handler) HandleAnilistListSeasonAnime(c echo.Context) error {
 	perPage := 50
 	results := make([]*anilist.BaseAnime, 0, 100)
 	page := 1
-	cacheLayer := shared_platform.NewCacheLayer(h.App.AnilistClientRef)
+	anilistClient := h.App.AnilistPlatformRef.Get().GetAnilistClient()
 	for {
 		ret, err := anilist.ListAnimeM(
-			cacheLayer,
+			anilistClient,
 			&page,
 			nil, // search
 			&perPage,
