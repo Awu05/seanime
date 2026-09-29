@@ -36,6 +36,15 @@ const (
 var logBuffer bytes.Buffer
 var logBufferMutex = &sync.Mutex{}
 
+// lockedLogBuffer serializes writes to logBuffer, since loggers everywhere write to it concurrently.
+type lockedLogBuffer struct{}
+
+func (lockedLogBuffer) Write(p []byte) (int, error) {
+	logBufferMutex.Lock()
+	defer logBufferMutex.Unlock()
+	return logBuffer.Write(p)
+}
+
 func NewLogger() *zerolog.Logger {
 
 	timeFormat := fmt.Sprintf("%s", time.DateTime)
@@ -53,7 +62,7 @@ func NewLogger() *zerolog.Logger {
 	}
 
 	fileOutput := zerolog.ConsoleWriter{
-		Out:           &logBuffer,
+		Out:           lockedLogBuffer{},
 		TimeFormat:    timeFormat,
 		FormatMessage: ZerologFormatMessageSimple,
 		FormatLevel:   ZerologFormatLevelSimple,
