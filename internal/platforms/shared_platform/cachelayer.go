@@ -1200,6 +1200,10 @@ func (c *CacheLayer) UpdateMediaListEntryProgress(ctx context.Context, mediaID *
 	return res, err
 }
 
+func (c *CacheLayer) SaveMediaListEntries(ctx context.Context, updates []anilist.MediaListEntryUpdate) ([]error, error) {
+	return c.anilistClientRef.Get().SaveMediaListEntries(ctx, updates)
+}
+
 func (c *CacheLayer) UpdateMediaListEntryRepeat(ctx context.Context, mediaID *int, repeat *int, interceptors ...clientv2.RequestInterceptor) (*anilist.UpdateMediaListEntryRepeat, error) {
 	// Mutations require the API to be working
 	if !IsWorking.Load() {

@@ -41,6 +41,7 @@ type AnilistClient interface {
 	ListRecentAnime(ctx context.Context, page *int, perPage *int, airingAtGreater *int, airingAtLesser *int, notYetAired *bool, interceptors ...clientv2.RequestInterceptor) (*ListRecentAnime, error)
 	UpdateMediaListEntry(ctx context.Context, mediaID *int, status *MediaListStatus, scoreRaw *int, progress *int, startedAt *FuzzyDateInput, completedAt *FuzzyDateInput, interceptors ...clientv2.RequestInterceptor) (*UpdateMediaListEntry, error)
 	UpdateMediaListEntryProgress(ctx context.Context, mediaID *int, progress *int, status *MediaListStatus, interceptors ...clientv2.RequestInterceptor) (*UpdateMediaListEntryProgress, error)
+	SaveMediaListEntries(ctx context.Context, updates []MediaListEntryUpdate) ([]error, error)
 	UpdateMediaListEntryRepeat(ctx context.Context, mediaID *int, repeat *int, interceptors ...clientv2.RequestInterceptor) (*UpdateMediaListEntryRepeat, error)
 	DeleteEntry(ctx context.Context, mediaListEntryID *int, interceptors ...clientv2.RequestInterceptor) (*DeleteEntry, error)
 	MangaCollection(ctx context.Context, userName *string, interceptors ...clientv2.RequestInterceptor) (*MangaCollection, error)
@@ -479,6 +480,24 @@ func closeAniListResponseBody(resp *http.Response) {
 	resp.Body = nil
 }
 
+// readResponseBody reads resp's body, decompressing it when AniList sent it gzipped.
+func readResponseBody(resp *http.Response) ([]byte, error) {
+	body := resp.Body
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		gz, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("gzip decode failed: %w", err)
+		}
+		defer gz.Close()
+		body = gz
+	}
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+	return data, nil
+}
+
 func sleepWithContext(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
@@ -547,17 +566,10 @@ func (ac *AnilistClientImpl) customDoFunc(ctx context.Context, req *http.Request
 
 	defer resp.Body.Close()
 
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		resp.Body, err = gzip.NewReader(resp.Body)
-		if err != nil {
-			return fmt.Errorf("gzip decode failed: %w", err)
-		}
-	}
-
 	var body []byte
-	body, err = io.ReadAll(resp.Body)
+	body, err = readResponseBody(resp)
 	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+		return err
 	}
 
 	err = parseResponse(body, resp.StatusCode, res)

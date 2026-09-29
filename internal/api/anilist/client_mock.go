@@ -558,6 +558,11 @@ func (ac *FixtureAnilistClient) UpdateMediaListEntryProgress(ctx context.Context
 	return &UpdateMediaListEntryProgress{}, nil
 }
 
+func (ac *FixtureAnilistClient) SaveMediaListEntries(ctx context.Context, updates []MediaListEntryUpdate) ([]error, error) {
+	ac.logger.Debug().Int("count", len(updates)).Msg("anilist: Saving media list entries")
+	return make([]error, len(updates)), nil
+}
+
 func (ac *FixtureAnilistClient) UpdateMediaListEntryRepeat(ctx context.Context, mediaID *int, repeat *int, interceptors ...clientv2.RequestInterceptor) (*UpdateMediaListEntryRepeat, error) {
 	ac.logger.Debug().Int("mediaId", *mediaID).Msg("anilist: Updating media list entry repeat")
 	return &UpdateMediaListEntryRepeat{}, nil
