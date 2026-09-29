@@ -50,22 +50,26 @@ func TestAnilistPlatform_GetAnimeCollection_CoalescesConcurrentNetworkFetches(t 
 	}
 
 	const concurrency = 10
-	var wg sync.WaitGroup
+	var wg, started sync.WaitGroup
 	wg.Add(concurrency)
+	started.Add(concurrency)
 	errs := make([]error, concurrency)
 	for i := 0; i < concurrency; i++ {
 		go func(i int) {
 			defer wg.Done()
+			started.Done()
 			_, err := ap.GetAnimeCollection(context.Background(), false)
 			errs[i] = err
 		}(i)
 	}
 
-	// Wait for at least one goroutine to reach the network call before releasing it -
-	// otherwise calls could finish serially without ever actually overlapping.
+	// Hold the network call until every goroutine has started and had a moment to join it; releasing
+	// earlier lets a slow goroutine under load arrive after the fetch and make a second, legitimate one.
+	started.Wait()
 	require.Eventually(t, func() bool {
 		return client.calls.Load() >= 1
 	}, time.Second, time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	close(client.release)
 	wg.Wait()
