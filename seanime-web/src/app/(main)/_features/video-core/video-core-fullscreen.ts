@@ -24,6 +24,7 @@ export class VideoCoreFullscreenManager extends EventTarget {
     private onFullscreenChange: (isFullscreen: boolean) => void
     private isElectronNativeFullscreen = false
     private attachVideoListeners?: () => void
+    private reportedFullscreen: boolean | null = null
 
     constructor(onFullscreenChange: (isFullscreen: boolean) => void) {
         super()
@@ -31,6 +32,7 @@ export class VideoCoreFullscreenManager extends EventTarget {
         this.attachDocumentListeners()
         this.attachElectronListeners()
         this.initElectronFullscreenState()
+        this.syncFullscreenState()
     }
 
     public get isFullscreen(): boolean {
@@ -116,7 +118,11 @@ export class VideoCoreFullscreenManager extends EventTarget {
     async exitFullscreen() {
         const attemptEvent: FullscreenManagerAttemptEvent = new CustomEvent("exitattempt", { detail: { method: "exit" } })
         this.dispatchEvent(attemptEvent)
+        await settleWithin(this._exitFullscreen())
+        this.syncFullscreenState()
+    }
 
+    private async _exitFullscreen() {
         try {
             if (this._isElectron() && this._shouldUseElectronFullscreen()) {
                 await this._exitElectronFullscreen()
@@ -151,7 +157,11 @@ export class VideoCoreFullscreenManager extends EventTarget {
     async enterFullscreen() {
         const attemptEvent: FullscreenManagerAttemptEvent = new CustomEvent("enterattempt", { detail: { method: "enter" } })
         this.dispatchEvent(attemptEvent)
+        await settleWithin(this._enterFullscreen())
+        this.syncFullscreenState()
+    }
 
+    private async _enterFullscreen() {
         if (!this.containerElement) {
             log.warning("Container element not set")
             return
@@ -210,8 +220,7 @@ export class VideoCoreFullscreenManager extends EventTarget {
         }
 
         try {
-            this.isElectronNativeFullscreen = await window.electron.window.isFullscreen()
-            log.info("Initial Electron fullscreen state:", this.isElectronNativeFullscreen)
+            this.setElectronFullscreen(await window.electron.window.isFullscreen())
         }
         catch (error) {
             log.error("Failed to get initial Electron fullscreen state", error)
@@ -281,37 +290,31 @@ export class VideoCoreFullscreenManager extends EventTarget {
     }
 
     private setElectronFullscreen(isFullscreen: boolean) {
-        if (this.isElectronNativeFullscreen === isFullscreen) return
-
         this.isElectronNativeFullscreen = isFullscreen
-
-        const event: FullscreenManagerChangedEvent = new CustomEvent("fullscreenchanged", { detail: { isFullscreen } })
-        this.dispatchEvent(event)
-
-        this.onFullscreenChange(isFullscreen)
+        this.syncFullscreenState()
     }
 
     private attachDocumentListeners() {
-        document.addEventListener("fullscreenchange", this.handleFullscreenChange, {
+        document.addEventListener("fullscreenchange", this.syncFullscreenState, {
             signal: this.controller.signal,
         })
-        document.addEventListener("webkitfullscreenchange", this.handleFullscreenChange, {
+        document.addEventListener("webkitfullscreenchange", this.syncFullscreenState, {
             signal: this.controller.signal,
         })
-        document.addEventListener("mozfullscreenchange", this.handleFullscreenChange, {
+        document.addEventListener("mozfullscreenchange", this.syncFullscreenState, {
             signal: this.controller.signal,
         })
-        document.addEventListener("msfullscreenchange", this.handleFullscreenChange, {
+        document.addEventListener("msfullscreenchange", this.syncFullscreenState, {
             signal: this.controller.signal,
         })
 
         if (isApple()) {
             const attachVideoListeners = () => {
                 if (this.videoElement) {
-                    this.videoElement.addEventListener("webkitbeginfullscreen", this.handleFullscreenChange, {
+                    this.videoElement.addEventListener("webkitbeginfullscreen", this.syncFullscreenState, {
                         signal: this.controller.signal,
                     })
-                    this.videoElement.addEventListener("webkitendfullscreen", this.handleFullscreenChange, {
+                    this.videoElement.addEventListener("webkitendfullscreen", this.syncFullscreenState, {
                         signal: this.controller.signal,
                     })
                 }
@@ -323,8 +326,13 @@ export class VideoCoreFullscreenManager extends EventTarget {
         }
     }
 
-    private handleFullscreenChange = () => {
+    // Reports the current state when it differs from the last one reported. Some browsers (Android
+    // WebView-based ones like TV Bro) never fire fullscreenchange, so this also runs when the manager
+    // is created and after every enter/exit attempt, rather than trusting the event alone.
+    private syncFullscreenState = () => {
         const isFullscreen = this.isFullscreen
+        if (isFullscreen === this.reportedFullscreen) return
+        this.reportedFullscreen = isFullscreen
         log.info("Fullscreen state changed:", isFullscreen)
 
         const event: FullscreenManagerChangedEvent = new CustomEvent("fullscreenchanged", { detail: { isFullscreen } })
@@ -334,15 +342,7 @@ export class VideoCoreFullscreenManager extends EventTarget {
     }
 }
 
-// Some browsers (notably Android WebView-based ones like TV Bro) have an incomplete Fullscreen
-// API implementation - exitFullscreen() can resolve without actually exiting, or its promise can
-// simply never settle. Callers that chain a follow-up action (e.g. entering mini player) after
-// exiting fullscreen should use this instead of awaiting exitFullscreen() directly, so a
-// non-compliant browser can't make that follow-up action hang indefinitely.
-export function exitFullscreenSafely(manager: VideoCoreFullscreenManager | null, timeoutMs = 300): Promise<void> {
-    if (!manager) return Promise.resolve()
-    return Promise.race([
-        manager.exitFullscreen(),
-        new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
-    ])
+// Waits for a fullscreen request at most 300ms, since some browsers (like TV Bro) never settle it.
+function settleWithin(request: Promise<void>): Promise<void> {
+    return Promise.race([request, new Promise<void>(resolve => setTimeout(resolve, 300))])
 }

@@ -182,7 +182,7 @@ export function startVideoCoreMiniPlayerTransition(update: () => void) {
         })
 
         // Some browsers (notably Android WebView-based ones like TV Bro - see
-        // exitFullscreenSafely for the same issue with the Fullscreen API) can leave
+        // VideoCoreFullscreenManager for the same issue with the Fullscreen API) can leave
         // transition.finished permanently unsettled. Since the player keeps
         // view-transition-name set on [data-vc-element="drawer-content"] for as long as
         // data-vc-miniplayer-view-transition is present, an unsettled promise leaves the real
