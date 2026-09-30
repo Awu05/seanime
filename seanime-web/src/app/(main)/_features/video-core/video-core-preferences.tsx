@@ -5,6 +5,7 @@ import { vc_subtitleManager } from "@/app/(main)/_features/video-core/video-core
 import { vc_mediaCaptionsManager } from "@/app/(main)/_features/video-core/video-core"
 import { vc_audioManager } from "@/app/(main)/_features/video-core/video-core"
 import { VideoCoreChapterCue } from "@/app/(main)/_features/video-core/video-core"
+import { hardwareVolumeKey } from "@/app/(main)/_features/video-core/_lib/volume-keys"
 import { vc_videoElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_isMuted } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_volume } from "@/app/(main)/_features/video-core/video-core-atoms"
@@ -1016,6 +1017,19 @@ export function VideoCoreKeybindingController(props: {
             }
 
             const video = videoElement
+
+            // A remote's or keyboard's own volume keys, which don't use the volume keybindings.
+            const volumeKey = hardwareVolumeKey(e)
+            if (volumeKey) {
+                e.preventDefault()
+                if (volumeKey === "mute") {
+                    setMuted(!muted)
+                } else {
+                    const step = (volumeKey === "up" ? keybindings.volumeUp.value : -keybindings.volumeDown.value) / 100
+                    setVolume(Math.min(1, Math.max(0, volume + step)))
+                }
+                return
+            }
 
             if (isMiniPlayer) {
                 if (e.code === keybindings.fullscreen.key) {
