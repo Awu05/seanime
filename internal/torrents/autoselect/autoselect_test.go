@@ -322,6 +322,23 @@ func TestAutoSelect_UnsupportedCodecMatchesReleaseTags(t *testing.T) {
 	}
 }
 
+// Browsers that can't play MKV (e.g. Firefox) report "MKV" as unsupported, so an MP4 release wins
+// when there is one.
+func TestAutoSelect_SortDeprioritizesMKVWhenUnsupported(t *testing.T) {
+	s := newTestAutoSelect()
+	mkv := &hibiketorrent.AnimeTorrent{Name: "[SubsPlease] Show - 01 (1080p) [ABCD1234].mkv", Seeders: 1200, Provider: "nyaa"}
+	mp4 := &hibiketorrent.AnimeTorrent{Name: "[Group] Show - 01 [1080p].mp4", Seeders: 40, Provider: "nyaa"}
+	profile := &anime.AutoSelectProfile{Resolutions: []string{"1080p"}}
+
+	torrents := []*hibiketorrent.AnimeTorrent{mkv, mp4}
+	s.sort(torrents, profile, "MKV")
+	assert.Equal(t, []string{mp4.Name, mkv.Name}, []string{torrents[0].Name, torrents[1].Name})
+
+	torrents = []*hibiketorrent.AnimeTorrent{mkv, mp4}
+	s.sort(torrents, profile)
+	assert.Equal(t, mkv.Name, torrents[0].Name, "MKV isn't penalized for browsers that play it")
+}
+
 func TestDetectVideoCodecs(t *testing.T) {
 	assert.Equal(t, []string{"HEVC"}, DetectVideoCodecs("[Judas] Show - 01 [1080p][HEVC x265 10bit].mkv"))
 	assert.Equal(t, []string{"Hi10P"}, DetectVideoCodecs("[Group] Show - 01 [1080p][x264 10bit].mkv"))

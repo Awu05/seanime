@@ -1,5 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { checkCodecSupport, getLearnedUnsupportedVideoCodecs, getUnsupportedVideoCodecs, learnUnsupportedVideoCodecs } from "./codec-utils"
+import {
+    checkCodecSupport,
+    getLearnedUnsupportedVideoCodecs,
+    getUnsupportedVideoCodecs,
+    isMatroskaUnsupported,
+    learnUnsupportedVideoCodecs,
+    matroskaPlaybackError,
+} from "./codec-utils"
+
+describe("isMatroskaUnsupported", () => {
+    it("flags a non-Chromium browser that says it can't play MKV, like Firefox or Safari", () => {
+        expect(isMatroskaUnsupported({ isChromium: false, canPlayType: () => "" })).toBe(true)
+    })
+
+    it("trusts a non-Chromium browser that reports MKV support", () => {
+        expect(isMatroskaUnsupported({ isChromium: false, canPlayType: () => "maybe" })).toBe(false)
+    })
+
+    it("never flags Chromium browsers, which play MKV even when they report otherwise", () => {
+        expect(isMatroskaUnsupported({ isChromium: true, canPlayType: () => "" })).toBe(false)
+    })
+})
+
+describe("matroskaPlaybackError", () => {
+    it("explains why an MKV file can't play in this browser", () => {
+        expect(matroskaPlaybackError("/Show/Episode 01.MKV", true)).toContain("can't play MKV")
+    })
+
+    it("stays quiet for other files or browsers that play MKV", () => {
+        expect(matroskaPlaybackError("/Show/Episode 01.mp4", true)).toBeNull()
+        expect(matroskaPlaybackError("/Show/Episode 01.mkv", false)).toBeNull()
+        expect(matroskaPlaybackError(undefined, true)).toBeNull()
+    })
+})
 
 describe("checkCodecSupport", () => {
     const defaultOptions = {

@@ -1,3 +1,5 @@
+import { isChromiumBased } from "@/lib/utils/browser-detection"
+
 export function checkCodecSupport(
     codec: string,
     options: {
@@ -41,6 +43,32 @@ export function getUnsupportedVideoCodecs(canPlayType: (codec: string) => "proba
     return KNOWN_PROBLEM_CODECS
         .filter(({ mimeCodec }) => canPlayType(mimeCodec) === "")
         .map(({ name }) => name)
+}
+
+// isMatroskaUnsupported reports whether the browser can't play MKV files, the format most anime
+// releases use. Chromium plays H.264/AAC MKVs even when canPlayType says otherwise; other browsers
+// (Firefox, Safari) are asked, so one that gains MKV support isn't flagged.
+export function isMatroskaUnsupported(options: {
+    isChromium: boolean
+    canPlayType: (codec: string) => "probably" | "maybe" | ""
+}): boolean {
+    return !options.isChromium && options.canPlayType("video/x-matroska; codecs=\"avc1.640028, mp4a.40.2\"") === ""
+}
+
+// browserCannotPlayMatroska is isMatroskaUnsupported for the current browser.
+export function browserCannotPlayMatroska(): boolean {
+    const video = document.createElement("video")
+    return isMatroskaUnsupported({
+        isChromium: isChromiumBased(),
+        canPlayType: codec => video.canPlayType(codec) as "probably" | "maybe" | "",
+    })
+}
+
+// matroskaPlaybackError explains why streamPath can't play, or returns null when it can. Firefox
+// accepts MKV served as video/webm but can't decode it, so it waits without an error.
+export function matroskaPlaybackError(streamPath: string | undefined, matroskaUnsupported: boolean): string | null {
+    if (!matroskaUnsupported || !streamPath?.toLowerCase().endsWith(".mkv")) return null
+    return "This browser can't play MKV videos. Use Chrome, Edge, Opera or the Seanime desktop app, or use an external player like VLC or MPV."
 }
 
 const LEARNED_UNSUPPORTED_CODECS_KEY = "sea-learned-unsupported-video-codecs"

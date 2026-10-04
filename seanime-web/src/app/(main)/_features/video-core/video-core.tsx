@@ -8,6 +8,7 @@ import { MediaCoreBufferingOverlay, MediaCoreErrorOverlay, MediaCoreLoadingOverl
 import { useNakamaWatchParty } from "@/app/(main)/_features/nakama/nakama-manager"
 import { nativePlayer_initialState, nativePlayer_stateAtom } from "@/app/(main)/_features/native-player/native-player.atoms"
 import { type NormalizedSkipData } from "@/app/(main)/_features/video-core/_lib/aniskip.utils"
+import { browserCannotPlayMatroska, matroskaPlaybackError } from "@/app/(main)/_features/video-core/_lib/codec-utils"
 import { vc_anime4kOption, VideoCoreAnime4K } from "@/app/(main)/_features/video-core/video-core-anime-4k"
 import { Anime4KOption, VideoCoreAnime4KManager } from "@/app/(main)/_features/video-core/video-core-anime-4k-manager"
 import { vc_menuOpen } from "@/app/(main)/_features/video-core/video-core-atoms"
@@ -1096,6 +1097,12 @@ export function VideoCore(props: VideoCoreProps) {
         // relying solely on the transient toast fired alongside it.
         onUnsupported: message => onError?.(message),
     })
+
+    // A browser that can't play MKV just sits on the file, so say why up front.
+    React.useEffect(() => {
+        const message = matroskaPlaybackError(state.playbackInfo?.streamPath, browserCannotPlayMatroska())
+        if (message) onError?.(message)
+    }, [state.playbackInfo?.id])
 
     React.useEffect(() => {
         if (!state.playbackInfo?.id || !streamUrl || !buffering) return

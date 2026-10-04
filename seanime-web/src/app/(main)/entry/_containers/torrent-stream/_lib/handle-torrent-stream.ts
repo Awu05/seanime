@@ -1,6 +1,6 @@
 import { HibikeTorrent_AnimeTorrent, HibikeTorrent_BatchEpisodeFiles } from "@/api/generated/types"
 import { useTorrentstreamStartStream } from "@/api/hooks/torrentstream.hooks"
-import { getLearnedUnsupportedVideoCodecs, getUnsupportedVideoCodecs } from "@/app/(main)/_features/video-core/_lib/codec-utils"
+import { browserCannotPlayMatroska, getLearnedUnsupportedVideoCodecs, getUnsupportedVideoCodecs } from "@/app/(main)/_features/video-core/_lib/codec-utils"
 import {
     ElectronPlaybackMethod,
     PlaybackTorrentStreaming,
@@ -53,6 +53,8 @@ function getRelevantUnsupportedVideoCodecs(playbackType: string): string[] | und
     if (playbackType !== "nativeplayer" || typeof document === "undefined") return undefined
     const video = document.createElement("video")
     const probed = getUnsupportedVideoCodecs(codec => video.canPlayType(codec) as "probably" | "maybe" | "")
+    // Auto-select deprioritizes releases whose name says MKV, the same way it does these codecs.
+    if (browserCannotPlayMatroska()) probed.push("MKV")
     return [...new Set([...probed, ...getLearnedUnsupportedVideoCodecs()])]
 }
 
