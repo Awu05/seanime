@@ -33,6 +33,9 @@ import { useAtom, useSetAtom } from "jotai/react"
 import { atomWithStorage } from "jotai/utils"
 import { mediaCorePreferencesAtom } from "@/app/(main)/_features/media-core/media-core-preferences"
 import React from "react"
+import { useWindowSize } from "react-use"
+import { fullscreenButtonAction, windowFillsScreen } from "./_lib/fullscreen-button"
+import { startVideoCoreMiniPlayerTransition } from "./video-core"
 
 export function VideoCoreControlBar(props: {
     children?: React.ReactNode
@@ -250,18 +253,40 @@ export function VideoCorePipButton() {
 export function VideoCoreFullscreenButton() {
     const fullscreenManager = useAtomValue(vc_fullscreenManager)
     const isFullscreen = useAtomValue(vc_isFullscreen)
-    const [, setMiniPlayer] = useAtom(vc_miniPlayer)
+    const [isMiniPlayer, setMiniPlayer] = useAtom(vc_miniPlayer)
     const isMobile = useAtomValue(vc_isMobile)
-    const isMiniPlayer = useAtomValue(vc_miniPlayer)
+    const { width, height } = useWindowSize()
+
+    const action = fullscreenButtonAction({
+        isMiniPlayer,
+        isFullscreen,
+        fillsScreen: windowFillsScreen(width, height, window.screen),
+    })
 
     const onToggleFullscreen = React.useCallback(() => {
-        setMiniPlayer(false)
-        fullscreenManager?.toggleFullscreen()
-    }, [fullscreenManager, setMiniPlayer])
+        switch (action) {
+            case "expand":
+                setMiniPlayer(false)
+                break
+            case "expand-fullscreen":
+                setMiniPlayer(false)
+                fullscreenManager?.enterFullscreen()
+                break
+            case "mini-player":
+                startVideoCoreMiniPlayerTransition(() => setMiniPlayer(true))
+                break
+            case "enter-fullscreen":
+                fullscreenManager?.enterFullscreen()
+                break
+            case "exit-fullscreen":
+                fullscreenManager?.exitFullscreen()
+                break
+        }
+    }, [action, fullscreenManager, setMiniPlayer])
 
     return (
         <MediaCoreFullscreenButton
-            isFullscreen={isFullscreen}
+            isFullscreen={action === "exit-fullscreen" || action === "mini-player"}
             onToggleFullscreen={onToggleFullscreen}
             isMobile={isMobile}
             isMiniPlayer={isMiniPlayer}
