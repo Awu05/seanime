@@ -150,7 +150,7 @@ const log = logger("VIDEO CORE")
 
 export const VIDEOCORE_DEBUG_ELEMENTS = false
 
-const DELAY_BEFORE_NOT_BUSY = 1_000 //ms
+const DELAY_BEFORE_NOT_BUSY = 3_000 //ms
 
 type ViewTransitionDocument = Document & {
     startViewTransition?: (callback: () => void) => {
@@ -559,6 +559,7 @@ const PlayerContent = React.memo<PlayerContentProps>(({
                         )}
 
                         {!isMobile ? <VideoCoreControlBar
+                            fillsWindow={!inline || fullscreen}
                             timeRange={<VideoCoreTimeRange chapterCues={chapterCues ?? []} />}
                         >
                             <VideoCorePlayButton />
@@ -580,6 +581,7 @@ const PlayerContent = React.memo<PlayerContentProps>(({
                             <VideoCorePipButton />
                             <VideoCoreFullscreenButton />
                         </VideoCoreControlBar> : <VideoCoreMobileControlBar
+                            fillsWindow={!inline || fullscreen}
                             timeRange={<VideoCoreTimeRange chapterCues={chapterCues ?? []} />}
                             topLeftSection={<>
                                 <VideoCorePlaylistControl />
@@ -1468,6 +1470,7 @@ export function VideoCore(props: VideoCoreProps) {
 
     const handlePlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
         // log.info("Video resumed")
+        scheduleNotBusy()
         onPlay?.()
     }
 
@@ -1682,17 +1685,10 @@ export function VideoCore(props: VideoCoreProps) {
         }
     }, [])
 
-    const handleContainerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-        const { x, y } = e.nativeEvent
-        const dx = x - lastPointerPosition.current.x
-        const dy = y - lastPointerPosition.current.y
-        if (Math.abs(dx) < 15 && Math.abs(dy) < 15) return
-        if (setNotBusyTimeout?.current) {
+    // Hides the controls after DELAY_BEFORE_NOT_BUSY unless the pointer is on them or a menu is open.
+    const scheduleNotBusy = () => {
+        if (setNotBusyTimeout.current) {
             clearTimeout(setNotBusyTimeout.current)
-        }
-        if (!busyRef.current) {
-            busyRef.current = true
-            setBusy(true)
         }
         setNotBusyTimeout.current = setTimeout(() => {
             if (!cursorBusyRef.current) {
@@ -1700,6 +1696,20 @@ export function VideoCore(props: VideoCoreProps) {
                 setBusy(false)
             }
         }, DELAY_BEFORE_NOT_BUSY)
+    }
+
+    const handleContainerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        // Touch drags are gestures like swipe-to-seek, not a request for the controls.
+        if (e.pointerType === "touch") return
+        const { x, y } = e.nativeEvent
+        const dx = x - lastPointerPosition.current.x
+        const dy = y - lastPointerPosition.current.y
+        if (Math.abs(dx) < 15 && Math.abs(dy) < 15) return
+        if (!busyRef.current) {
+            busyRef.current = true
+            setBusy(true)
+        }
+        scheduleNotBusy()
         lastPointerPosition.current = { x, y }
     }
 

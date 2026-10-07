@@ -236,6 +236,7 @@ export interface MediaCoreMobileControlBarViewProps {
     topRightSection?: React.ReactNode
     bottomLeftSection?: React.ReactNode
     bottomRightSection?: React.ReactNode
+    onHoveringControlBarChange?: (hovering: boolean) => void
 }
 
 export function MediaCoreMobileControlBarView(props: MediaCoreMobileControlBarViewProps) {
@@ -250,7 +251,18 @@ export function MediaCoreMobileControlBarView(props: MediaCoreMobileControlBarVi
         topRightSection,
         bottomLeftSection,
         bottomRightSection,
+        onHoveringControlBarChange,
     } = props
+
+    // Only a mouse (or a TV browser's virtual cursor) hovers; touches leave this untouched.
+    const hoverHandlers = {
+        onPointerEnter: (e: React.PointerEvent) => {
+            if (e.pointerType === "mouse") onHoveringControlBarChange?.(true)
+        },
+        onPointerLeave: (e: React.PointerEvent) => {
+            if (e.pointerType === "mouse") onHoveringControlBarChange?.(false)
+        },
+    }
 
     const [isSwipingDebounced, setIsSwipingDebounced] = React.useState(false)
     const sieT = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -302,6 +314,7 @@ export function MediaCoreMobileControlBarView(props: MediaCoreMobileControlBarVi
                 style={{
                     transform: `translateY(${-bottomSectionTranslateY}px)`,
                 }}
+                {...hoverHandlers}
             >
                 <div data-vc-element="mobile-control-bar-top-content" className="transform-gpu duration-100 flex items-center">
                     {topLeftSection}
@@ -320,6 +333,7 @@ export function MediaCoreMobileControlBarView(props: MediaCoreMobileControlBarVi
                 style={{
                     transform: isSwiping ? "translateY(0px)" : `translateY(${bottomSectionTranslateY}px)`,
                 }}
+                {...hoverHandlers}
             >
                 <div
                     data-vc-element="mobile-control-bar-bottom-content"

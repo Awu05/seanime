@@ -11,6 +11,7 @@ import { vc_paused } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_miniPlayer } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_cursorBusy } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_containerElement } from "@/app/(main)/_features/video-core/video-core-atoms"
+import { vc_busy } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_fullscreenManager } from "@/app/(main)/_features/video-core/video-core-fullscreen"
 import { vc_pip } from "@/app/(main)/_features/video-core/video-core-pip"
 import { vc_pipManager } from "@/app/(main)/_features/video-core/video-core-pip"
@@ -37,15 +38,25 @@ import { useWindowSize } from "react-use"
 import { fullscreenButtonAction, windowFillsScreen } from "./_lib/fullscreen-button"
 import { startVideoCoreMiniPlayerTransition } from "./video-core"
 
+// Whether the controls should stay up: the pointer is on them, a menu is open, or, when the player
+// fills the window, the pointer moved recently anywhere over it.
+function useControlsActive(fillsWindow: boolean) {
+    const cursorBusy = useAtomValue(vc_cursorBusy)
+    const busy = useAtomValue(vc_busy)
+    const isMiniPlayer = useAtomValue(vc_miniPlayer)
+    return cursorBusy || (busy && fillsWindow && !isMiniPlayer)
+}
+
 export function VideoCoreControlBar(props: {
     children?: React.ReactNode
     timeRange: React.ReactNode
+    fillsWindow: boolean
 }) {
-    const { children, timeRange } = props
+    const { children, timeRange, fillsWindow } = props
 
     const paused = useAtomValue(vc_paused)
     const isMiniPlayer = useAtomValue(vc_miniPlayer)
-    const cursorBusy = useAtomValue(vc_cursorBusy)
+    const controlsActive = useControlsActive(fillsWindow)
     const [hoveringControlBar, setHoveringControlBar] = useAtom(vc_hoveringControlBar)
     const containerElement = useAtomValue(vc_containerElement)
     const isMobile = useAtomValue(vc_isMobile)
@@ -54,7 +65,7 @@ export function VideoCoreControlBar(props: {
         <MediaCoreControlBarView
             paused={paused}
             isMiniPlayer={isMiniPlayer}
-            cursorBusy={cursorBusy}
+            cursorBusy={controlsActive}
             hoveringControlBar={hoveringControlBar}
             onHoveringControlBarChange={setHoveringControlBar}
             containerElement={containerElement}
@@ -73,15 +84,16 @@ export function VideoCoreMobileControlBar(props: {
     topRightSection: React.ReactNode
     bottomLeftSection: React.ReactNode
     bottomRightSection: React.ReactNode
+    fillsWindow: boolean
 }) {
-    const { timeRange, topLeftSection, topRightSection, bottomLeftSection, bottomRightSection } = props
+    const { timeRange, topLeftSection, topRightSection, bottomLeftSection, bottomRightSection, fillsWindow } = props
 
     const paused = useAtomValue(vc_paused)
     const isMiniPlayer = useAtomValue(vc_miniPlayer)
-    const cursorBusy = useAtomValue(vc_cursorBusy)
+    const controlsActive = useControlsActive(fillsWindow)
     const seeking = useAtomValue(vc_seeking)
     const isSwiping = useAtomValue(vc_isSwiping)
-    const [, setHoveringControlBar] = useAtom(vc_hoveringControlBar)
+    const setHoveringControlBar = useSetAtom(vc_hoveringControlBar)
 
     React.useEffect(() => {
         setHoveringControlBar(false)
@@ -91,7 +103,7 @@ export function VideoCoreMobileControlBar(props: {
         <MediaCoreMobileControlBarView
             paused={paused}
             isMiniPlayer={isMiniPlayer}
-            cursorBusy={cursorBusy}
+            cursorBusy={controlsActive}
             seeking={seeking}
             isSwiping={isSwiping}
             timeRange={timeRange}
@@ -99,6 +111,7 @@ export function VideoCoreMobileControlBar(props: {
             topRightSection={topRightSection}
             bottomLeftSection={bottomLeftSection}
             bottomRightSection={bottomRightSection}
+            onHoveringControlBarChange={setHoveringControlBar}
         />
     )
 }
