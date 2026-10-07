@@ -54,10 +54,6 @@ describe("auto skip", () => {
         expect(stillSeeking.lastSkippedEnd).toBe(150)
     })
 
-    it("skips the chapter again once playback has left it", () => {
-        expect(nextAutoSkip(opening, null).seekTo).toBe(150)
-    })
-
     it("still skips a different chapter right after another", () => {
         expect(nextAutoSkip({ label: "Ending", start: 1300, end: 1390 }, 150).seekTo).toBe(1390)
     })

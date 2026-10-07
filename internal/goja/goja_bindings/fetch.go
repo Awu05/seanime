@@ -316,8 +316,10 @@ func (f *Fetch) Fetch(call goja.FunctionCall) goja.Value {
 					options.Method = strings.ToUpper(v)
 				}
 			}
-			if o := rawOpts.Get("timeout"); o != nil && !goja.IsUndefined(o) && o.ToInteger() > 0 {
-				options.Timeout = int(o.ToInteger())
+			if o := rawOpts.Get("timeout"); o != nil && !goja.IsUndefined(o) {
+				if v := o.ToInteger(); v > 0 {
+					options.Timeout = int(v)
+				}
 			}
 			if o := rawOpts.Get("headers"); o != nil && !goja.IsUndefined(o) {
 				if v, ok := o.Export().(map[string]interface{}); ok {

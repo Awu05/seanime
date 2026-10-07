@@ -661,9 +661,9 @@ func networkFirstGet[T any](c *CacheLayer, bucketName string, cacheKey string, n
 	return &cached, nil
 }
 
-// titleFirstGet serves a single-title lookup from the shared title cache, fetching it with networkFn,
-// which saves what it gets, when stale. A stale copy beats an error when AniList is failing.
-// fallback may be nil.
+// titleFirstGet serves a single-title lookup from the shared title cache, or from networkFn when the
+// cached copy is stale (networkFn saves what it fetches). A stale copy beats an error when AniList is
+// failing. fallback may be nil.
 func titleFirstGet[T any](c *CacheLayer, cached *T, fresh bool, networkFn func() (*T, error), fallback func() *T) (*T, error) {
 	if cached != nil && fresh {
 		return cached, nil

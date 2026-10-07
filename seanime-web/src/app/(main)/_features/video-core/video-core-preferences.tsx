@@ -1017,16 +1017,19 @@ export function VideoCoreKeybindingController(props: {
             }
 
             const video = videoElement
+            const volumeUp = () => setVolume(Math.min(1, volume + keybindings.volumeUp.value / 100))
+            const volumeDown = () => setVolume(Math.max(0, volume - keybindings.volumeDown.value / 100))
 
             // A remote's or keyboard's own volume keys, which don't use the volume keybindings.
             const volumeKey = hardwareVolumeKey(e)
             if (volumeKey) {
                 e.preventDefault()
-                if (volumeKey === "mute") {
-                    setMuted(!muted)
+                if (volumeKey === "up") {
+                    volumeUp()
+                } else if (volumeKey === "down") {
+                    volumeDown()
                 } else {
-                    const step = (volumeKey === "up" ? keybindings.volumeUp.value : -keybindings.volumeDown.value) / 100
-                    setVolume(Math.min(1, Math.max(0, volume + step)))
+                    setMuted(!muted)
                 }
                 return
             }
@@ -1157,12 +1160,10 @@ export function VideoCoreKeybindingController(props: {
                 handlePreviousChapter()
             } else if (e.code === keybindings.volumeUp.key) {
                 e.preventDefault()
-                const newVolume = Math.min(1, volume + keybindings.volumeUp.value / 100)
-                setVolume(newVolume)
+                volumeUp()
             } else if (e.code === keybindings.volumeDown.key) {
                 e.preventDefault()
-                const newVolume = Math.max(0, volume - keybindings.volumeDown.value / 100)
-                setVolume(newVolume)
+                volumeDown()
             } else if (e.code === keybindings.mute.key) {
                 e.preventDefault()
                 setMuted(!muted)

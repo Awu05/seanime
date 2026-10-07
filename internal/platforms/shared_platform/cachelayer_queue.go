@@ -294,6 +294,7 @@ func (c *CacheLayer) syncQueuedUpdates(ctx context.Context) {
 		cancel()
 
 		if err != nil {
+			c.logger.Warn().Err(err).Int("count", end-start).Msg("anilist cache: Failed to sync queued list updates")
 			for _, update := range due[start:end] {
 				c.setQueuedUpdateSyncFailed(update)
 			}
