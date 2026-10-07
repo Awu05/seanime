@@ -1,4 +1,4 @@
-import { getSkipChapters, getSkipLabel } from "@/app/(main)/_features/media-core/media-core-chapters"
+import { getSkipChapters, getSkipLabel, nextAutoSkip } from "@/app/(main)/_features/media-core/media-core-chapters"
 import { MediaCoreTimeRangeView } from "@/app/(main)/_features/media-core/media-core-control-bar"
 import { mediaCorePreferencesAtom } from "@/app/(main)/_features/media-core/media-core-preferences"
 import { useNakamaWatchParty } from "@/app/(main)/_features/nakama/nakama-manager"
@@ -125,6 +125,7 @@ export function VideoCoreTimeRange(props: VideoCoreTimeRangeProps) {
     }, [currentTime, duration, isSwiping, swipeSeekTime])
 
     const skipChapters = React.useMemo(() => getSkipChapters(chapters, skipPatterns), [chapters, skipPatterns])
+    const lastAutoSkippedEnd = React.useRef<number | null>(null)
 
     // handle auto skip
     React.useEffect(() => {
@@ -141,6 +142,7 @@ export function VideoCoreTimeRange(props: VideoCoreTimeRangeProps) {
             chapter.end && currentTime >= chapter.start && currentTime < chapter.end
         ))
         if (!chapter) {
+            lastAutoSkippedEnd.current = null
             setSkipChapter(null)
             return
         }
@@ -148,8 +150,12 @@ export function VideoCoreTimeRange(props: VideoCoreTimeRangeProps) {
         const label = getSkipLabel(chapter.label)
         if (autoSkipIntroOutro && !restoreProgressTo) {
             setSkipChapter(null)
-            action({ type: "seekTo", payload: { time: chapter.end } })
-            showOverlayFeedback({ message: `Skipped ${label}`, duration: 1000 })
+            const autoSkip = nextAutoSkip(chapter, lastAutoSkippedEnd.current)
+            lastAutoSkippedEnd.current = autoSkip.lastSkippedEnd
+            if (autoSkip.seekTo !== null) {
+                action({ type: "seekTo", payload: { time: autoSkip.seekTo } })
+                showOverlayFeedback({ message: `Skipped ${label}`, duration: 1000 })
+            }
             return
         }
 

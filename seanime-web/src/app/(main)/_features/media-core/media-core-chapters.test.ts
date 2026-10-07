@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { getSkipChapters, getSkipPatternError } from "./media-core-chapters"
+import { getSkipChapters, getSkipPatternError, nextAutoSkip } from "./media-core-chapters"
 
 function chapters(...labels: string[]) {
     return labels.map((label, index) => ({
@@ -38,5 +38,27 @@ describe("chapter skipping", () => {
     it("reports invalid regexes", () => {
         expect(getSkipPatternError("^Preview$,(")).toBe("Invalid regex: (")
         expect(getSkipPatternError("^Preview$")).toBe("")
+    })
+})
+
+describe("auto skip", () => {
+    const opening = { label: "Opening", start: 60, end: 150 }
+
+    it("seeks past a chapter once while the browser still reports a position inside it", () => {
+        const first = nextAutoSkip(opening, null)
+        expect(first.seekTo).toBe(150)
+
+        // TV Bro keeps reporting the old position until the seek finishes.
+        const stillSeeking = nextAutoSkip(opening, first.lastSkippedEnd)
+        expect(stillSeeking.seekTo).toBeNull()
+        expect(stillSeeking.lastSkippedEnd).toBe(150)
+    })
+
+    it("skips the chapter again once playback has left it", () => {
+        expect(nextAutoSkip(opening, null).seekTo).toBe(150)
+    })
+
+    it("still skips a different chapter right after another", () => {
+        expect(nextAutoSkip({ label: "Ending", start: 1300, end: 1390 }, 150).seekTo).toBe(1390)
     })
 })

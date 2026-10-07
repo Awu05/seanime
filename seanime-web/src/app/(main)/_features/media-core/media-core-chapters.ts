@@ -79,6 +79,15 @@ export function getSkipChapters<T extends { label: string | null }>(chapters: T[
     })
 }
 
+// nextAutoSkip decides whether to seek past chapter, the skippable chapter playback is in.
+// lastSkippedEnd is the end of the chapter already being skipped (null once playback leaves it):
+// browsers like TV Bro keep reporting the old position until a seek finishes, and seeking again on
+// every update would restart it forever, so a chapter is skipped once per visit.
+export function nextAutoSkip(chapter: MediaCoreChapter, lastSkippedEnd: number | null) {
+    if (chapter.end === lastSkippedEnd) return { seekTo: null, lastSkippedEnd }
+    return { seekTo: chapter.end, lastSkippedEnd: chapter.end }
+}
+
 export function getSkipLabel(name: string | null) {
     const type = getChapterType(name)
     if (type === "Opening" || type === "Ending") return type
