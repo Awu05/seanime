@@ -23,6 +23,7 @@ const (
 	piecesForNext       = int64(30)
 	piecesForReadahead  = int64(30)
 	defaultUpdateStride = int64(512 * 1024)
+	slowReadThreshold   = time.Second
 )
 
 // readerInfo tracks information about an active reader
@@ -391,9 +392,22 @@ func (rs *ReadSeeker) SetContext(ctx context.Context) {
 }
 
 func (rs *ReadSeeker) Read(p []byte) (n int, err error) {
+	pos := rs.position.Load()
+	// A read still waiting after slowReadThreshold records the state of the piece it's waiting on,
+	// which tells a download stall (piece incomplete) from a reader stall (piece already complete).
+	var waitingOn atomic.Pointer[torrent.PieceState]
+	timer := time.AfterFunc(slowReadThreshold, func() {
+		if state, ok := rs.pieceState(pos); ok {
+			waitingOn.Store(&state)
+		}
+	})
+	start := time.Now()
 	rs.mu.Lock()
 	n, err = rs.reader.Read(p)
 	rs.mu.Unlock()
+	if !timer.Stop() {
+		rs.logSlowRead(pos, time.Since(start), waitingOn.Load())
+	}
 	if n > 0 {
 		newOffset := rs.position.Add(int64(n))
 		if rs.shouldRefreshPriority(newOffset) {
@@ -404,6 +418,39 @@ func (rs *ReadSeeker) Read(p []byte) (n int, err error) {
 		}
 	}
 	return n, err
+}
+
+func (rs *ReadSeeker) pieceIndex(pos int64) (int, bool) {
+	info := rs.torrent.Info()
+	if info == nil || info.PieceLength <= 0 {
+		return 0, false
+	}
+	return int((rs.file.Offset() + pos) / info.PieceLength), true
+}
+
+func (rs *ReadSeeker) pieceState(pos int64) (torrent.PieceState, bool) {
+	idx, ok := rs.pieceIndex(pos)
+	if !ok {
+		return torrent.PieceState{}, false
+	}
+	return rs.torrent.PieceState(idx), true
+}
+
+// logSlowRead reports a read that waited at least slowReadThreshold. state is the waited-on piece's
+// state at the threshold, or nil if it wasn't captured in time.
+func (rs *ReadSeeker) logSlowRead(pos int64, waited time.Duration, state *torrent.PieceState) {
+	event := rs.logger.Warn().
+		Str("reader", rs.id).
+		Int64("offset", pos).
+		Dur("waited", waited).
+		Int("peers", rs.torrent.Stats().ActivePeers)
+	if idx, ok := rs.pieceIndex(pos); ok {
+		event = event.Int("piece", idx)
+	}
+	if state != nil {
+		event = event.Bool("pieceComplete", state.Complete).Int("piecePriority", int(state.Priority))
+	}
+	event.Msg("torrentutil: Slow torrent read")
 }
 
 func (rs *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
