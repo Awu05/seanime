@@ -12,7 +12,7 @@ import (
 // options with plain values and filters that only transform frames are accepted. Otherwise a
 // settings change could make ffmpeg read or write arbitrary files.
 //
-// Ported from upstream 5rahim/seanime (internal/mediastream/cassette/hwaccel.go).
+// Ported from upstream Seanime's cassette hwaccel validation.
 
 var customFlagValues = map[string]*regexp.Regexp{
 	"-c:v":                   customTokenPattern,

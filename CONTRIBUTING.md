@@ -100,7 +100,7 @@ See [DEVELOPMENT_AND_BUILD.md](DEVELOPMENT_AND_BUILD.md) for setup, backend, fro
 Recommended workflow:
 
 ```bash
-git remote add upstream https://github.com/5rahim/seanime.git
+git remote add upstream https://github.com/Awu05/seanime.git
 git checkout main
 git pull upstream main
 git checkout -b <feature-or-fix-name>

@@ -277,8 +277,13 @@ func TestValidateReleaseUrl(t *testing.T) {
 		expectedOutput bool
 	}{
 		{
-			url:            "https://github.com/5rahim/seanime/releases/download/v3.5.1/seanime-denshi-3.5.1_MacOS_arm64.dmg",
+			url:            "https://github.com/Awu05/seanime/releases/download/v3.5.1/seanime-denshi-3.5.1_MacOS_arm64.dmg",
 			expectedOutput: true,
+		},
+		{
+			// upstream releases are not this fork's builds
+			url:            "https://github.com/5rahim/seanime/releases/download/v3.5.1/seanime-denshi-3.5.1_MacOS_arm64.dmg",
+			expectedOutput: false,
 		},
 		{
 			url:            "https://github.com/rando/seanime/releases/download/v3.5.1/seanime-denshi-3.5.1_MacOS_arm64.dmg",
@@ -286,7 +291,7 @@ func TestValidateReleaseUrl(t *testing.T) {
 		},
 		{
 			url:            "https://seanime.app/api/updates/stable/seanime-denshi-3.5.1_MacOS_arm64.dmg",
-			expectedOutput: true,
+			expectedOutput: false,
 		},
 		{
 			url:            "http://example.com/badstuff.dmg",

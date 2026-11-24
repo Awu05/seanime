@@ -28,7 +28,6 @@ import { TorrentstreamSettings } from "@/app/(main)/settings/_containers/torrent
 import { SimklSettingsContainer } from "@/app/(main)/settings/_containers/simkl-settings"
 import { UISettings } from "@/app/(main)/settings/_containers/ui-settings"
 import { PageWrapper } from "@/components/shared/page-wrapper"
-import { SeaLink } from "@/components/shared/sea-link"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -50,7 +49,6 @@ import { useAtom, useAtomValue } from "jotai/react"
 import capitalize from "lodash/capitalize"
 import React from "react"
 import { UseFormReturn, useFormContext, useWatch } from "react-hook-form"
-import { BiDonateHeart } from "react-icons/bi"
 import { CgMediaPodcast } from "react-icons/cg"
 import { FaDiscord } from "react-icons/fa"
 import { HiOutlineServerStack } from "react-icons/hi2"
@@ -383,22 +381,6 @@ export default function Page() {
 
                                 </p>
                             </div>
-
-                            <div className="flex justify-center !mt-0 pb-4">
-                                <SeaLink
-                                    href="https://github.com/sponsors/5rahim"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    <Button
-                                        intent="gray-link"
-                                        size="md"
-                                        leftIcon={<BiDonateHeart className="text-lg" />}
-                                    >
-                                        Donate
-                                    </Button>
-                                </SeaLink>
-                            </div>
                         </div>
                     </TabsList>
 
@@ -435,7 +417,7 @@ export default function Page() {
                                         useFallbackMetadataProvider: data.useFallbackMetadataProvider ?? false,
                                         scannerUseLegacyMatching: data.scannerUseLegacyMatching ?? false,
                                         scannerConfig: data.scannerConfig ?? "",
-                                        updateChannel: data.updateChannel || "github",
+                                        updateChannel: "github", // updates only come from this fork's GitHub releases
                                         enableExtensionSecureMode: data.enableExtensionSecureMode ?? false,
                                         defaultPlaybackSource: data.defaultPlaybackSource === "-" ? "" : data.defaultPlaybackSource,
                                         showTorrentAvailability: data.showTorrentAvailability ?? false,
@@ -554,7 +536,7 @@ export default function Page() {
                                     const denshiSettings = await window.electron.denshiSettings.get()
                                     await window.electron.denshiSettings.set({
                                         ...denshiSettings,
-                                        updateChannel: data.updateChannel || "github",
+                                        updateChannel: "github", // updates only come from this fork's GitHub releases
                                     })
                                 }
                             }}
