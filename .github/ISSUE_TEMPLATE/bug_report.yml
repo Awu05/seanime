@@ -15,10 +15,7 @@ body:
             My version of the app is the latest available
           required: true
         - label: >-
-            I have checked open and closed [issues](https://github.com/5rahim/seanime/issues)
-          required: true
-        - label: >-
-            I have checked the [docs](https://seanime.app/docs) for a fix
+            I have checked open and closed [issues](https://github.com/Awu05/seanime/issues)
           required: true
   - type: dropdown
     id: '2'

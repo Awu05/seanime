@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## v4.8.11
+
+- 🔒️ Screenshots: Only written into the folder set in settings (fixes writing files outside it)
+- 🔒️ Transcoding: Custom hardware acceleration settings only accept known ffmpeg options, and invalid settings are rejected when saved
+- 🔒️ Settings: Changing the mpv/IINA socket or the screenshot folder now requires a trusted request
+- ⬆️ Torrent streaming: Updated the torrent library, with security fixes for malicious peers and crafted torrents
+- 🦺 Plugins: Fixed a crash when anime and manga API calls fail
+- 🦺 InSight: Character data now loads again (switched from Jikan to Tenrai)
+- 📝 Updates and links now only point to this fork: removed the upstream update channels and announcements
+
+## v4.8.10
+
+- 🦺 Torrent streaming: Fixed buffering after resuming an episode past its halfway point
+  - The next-episode preload now waits until the current stream is fully downloaded instead of taking its bandwidth
+- 🦺 Torrent streaming: Fixed a rare server hang when stopping a stream while another session starts
+
 ## v3.10.2
 
 - ⚡️ Perf (Directstream): Improved torrent streaming handling
@@ -650,7 +666,7 @@ All notable changes to this project will be documented in this file.
 
 ## v3.0.0
 
-- 📝 BREAKING: Seanime Desktop is now deprecated. Download the new desktop client https://seanime.app/download
+- 📝 BREAKING: Seanime Desktop is now deprecated. Download the new desktop client (Seanime Denshi) from the releases page
 - 🎉 Seanime Denshi: New desktop client & built-in player
   - Seanime Denshi (based on Electron) replaces Seanime Desktop (based on Tauri)
   - New built-in player for local/torrent/debrid streaming

@@ -509,4 +509,4 @@ jobs:
             ${{ env.RELEASE_BODY }}
 
             ---
-            [Open an issue](https://github.com/5rahim/seanime/issues/new/choose)
+            [Open an issue](https://github.com/Awu05/seanime/issues/new/choose)
