@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"seanime/internal/util"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -53,27 +54,28 @@ func (h *Handler) HandleVideoCoreSaveScreenshot(c echo.Context) error {
 		return h.RespondWithError(c, fmt.Errorf("missing required fields"))
 	}
 
+	// A filename with a path could write outside the screenshot folder.
+	if filepath.Base(req.Filename) != req.Filename {
+		return h.RespondWithError(c, fmt.Errorf("filename must not contain a path"))
+	}
+
+	if err := h.guardPrivilegedLocalExecution(c); err != nil {
+		return err
+	}
+
 	settings, err := h.getSettings(c)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}
-	if err := h.guardPrivilegedMediaPlayer(c, settings); err != nil {
-		return err
+	// Screenshots only go to the folder set in settings, never to one the request names.
+	configuredDir := settings.GetMediaPlayer().ScreenshotDir
+	if configuredDir == "" {
+		return h.RespondWithError(c, fmt.Errorf("set a screenshot folder in settings first"))
 	}
-
-	dir := req.Dir
-	if !filepath.IsAbs(dir) {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			dir = filepath.Join(home, dir)
-		} else {
-			absDir, err := filepath.Abs(dir)
-			if err == nil {
-				dir = absDir
-			}
-		}
+	dir := resolveScreenshotDir(configuredDir)
+	if !util.IsSameDir(resolveScreenshotDir(req.Dir), dir) {
+		return h.RespondWithError(c, fmt.Errorf("screenshots must be saved to the configured folder"))
 	}
-	dir = filepath.Clean(dir)
 
 	if err := h.guardStrictFilesystemPath(c, dir); err != nil {
 		return err
@@ -88,11 +90,28 @@ func (h *Handler) HandleVideoCoreSaveScreenshot(c echo.Context) error {
 		return h.RespondWithError(c, fmt.Errorf("failed to create directory: %w", err))
 	}
 
-	filePath := filepath.Join(dir, req.Filename)
-
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	// os.Root refuses writes that resolve outside dir, e.g. through a symlink in it.
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return h.RespondWithError(c, fmt.Errorf("failed to open screenshot directory: %w", err))
+	}
+	defer root.Close()
+	if err := root.WriteFile(req.Filename, data, 0644); err != nil {
 		return h.RespondWithError(c, fmt.Errorf("failed to write file: %w", err))
 	}
 
 	return h.RespondWithData(c, true)
+}
+
+// resolveScreenshotDir makes a screenshot folder absolute: a relative one is under the home folder.
+func resolveScreenshotDir(dir string) string {
+	dir = util.ResolvePhysicalPath(dir)
+	if !filepath.IsAbs(dir) {
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, dir)
+		} else if absDir, err := filepath.Abs(dir); err == nil {
+			dir = absDir
+		}
+	}
+	return filepath.Clean(dir)
 }
