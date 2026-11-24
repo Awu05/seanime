@@ -149,6 +149,18 @@ func NewClient(repository *Repository) *Client {
 	return ret
 }
 
+// snapshotClients returns every live wrapper. Callers lock each one only after allClientsMu is
+// released: StopStream takes allClientsMu (via claimedHashes) while holding its c.mu.
+func snapshotClients() []*Client {
+	allClientsMu.RLock()
+	defer allClientsMu.RUnlock()
+	clients := make([]*Client, 0, len(allClients))
+	for cl := range allClients {
+		clients = append(clients, cl)
+	}
+	return clients
+}
+
 // unregisterClient removes a wrapper from the shared registry when its
 // session is evicted, releasing its torrent claims.
 func unregisterClient(c *Client) {
@@ -193,9 +205,8 @@ func (c *Client) GetActiveStreamInfo() (name string, status TorrentStatus, ok bo
 // currentTorrentAndFile() is always safe regardless of selfHeld.
 func claimedHashes(selfHeld *Client) map[metainfo.Hash]bool {
 	keep := make(map[metainfo.Hash]bool)
-	allClientsMu.RLock()
-	defer allClientsMu.RUnlock()
-	for cl := range allClients {
+	// allClientsMu is released before any cl.mu is taken (see snapshotClients).
+	for _, cl := range snapshotClients() {
 		// Only used for diagnostic logging below - identifies which session's claim kept a
 		// torrent alive, so a torrent that unexpectedly survives a drop can be traced back to
 		// its source instead of guessing.

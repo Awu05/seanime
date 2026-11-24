@@ -259,6 +259,9 @@ func (r *Repository) StartStream(ctx context.Context, opts *StartStreamOptions) 
 	r.client.currentTorrent = mo.Some(torrentToStream.Torrent)
 	r.client.mu.Unlock()
 	r.client.SetActiveStream(opts.ClientId, torrentToStream.Torrent, torrentToStream.File)
+	// A preload may have paused this torrent's download (holdPreloadDownload). This runs after
+	// SetActiveStream so a preload deciding whether to pause it sees this stream.
+	torrentToStream.Torrent.AllowDataDownload()
 
 	r.sendLoadingStatus(opts.ClientId, TLSStateSendingStreamToMediaPlayer, "")
 
@@ -605,12 +608,14 @@ func (r *Repository) PreloadStream(ctx context.Context, opts *StartStreamOptions
 		Str("torrent", torrentToStream.Torrent.Name()).
 		Msg("torrentstream: Started preloading stream")
 
-	r.setPreloadedStream(&preloadedStream{
+	ps := &preloadedStream{
 		Torrent: torrentToStream.Torrent,
 		File:    torrentToStream.File,
 		Options: opts,
 		Release: torrentToStream.Release,
-	})
+	}
+	r.setPreloadedStream(ps)
+	r.holdPreloadDownload(ps)
 
 	return nil
 }

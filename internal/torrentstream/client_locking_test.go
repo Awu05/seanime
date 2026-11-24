@@ -192,3 +192,42 @@ func TestSetActiveStreamClearsAddGracePeriod(t *testing.T) {
 	require.False(t, isWithinAddGracePeriod(hash),
 		"once the claim is registered via SetActiveStream, the add-grace-period stopgap must stop protecting the torrent")
 }
+
+// TestClaimedHashesDoesNotDeadlockWithPendingRegistration guards the lock order between
+// allClientsMu and each Client's c.mu. StopStream holds its c.mu and then takes
+// allClientsMu.RLock (claimedHashes via dropUnclaimedTorrentsLocked). If another goroutine
+// held allClientsMu.RLock while waiting on that c.mu, a session registering in between
+// (allClientsMu.Lock) would block the StopStream's RLock, and all three would hang.
+func TestClaimedHashesDoesNotDeadlockWithPendingRegistration(t *testing.T) {
+	repo := &Repository{logger: util.NewLogger()}
+	a := NewClient(repo)
+	t.Cleanup(func() { unregisterClient(a) })
+
+	a.mu.Lock()
+
+	// Another session checks claims and waits on a.mu.
+	go claimedHashes(nil)
+	time.Sleep(50 * time.Millisecond)
+
+	// A new session registers.
+	registered := make(chan *Client, 1)
+	go func() { registered <- NewClient(&Repository{logger: util.NewLogger()}) }()
+	time.Sleep(50 * time.Millisecond)
+
+	// a's StopStream checks claims while holding a.mu.
+	done := make(chan struct{})
+	go func() {
+		claimedHashes(a)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		a.mu.Unlock()
+	case <-time.After(2 * time.Second):
+		// Unlocking breaks the cycle, so the cleanup's unregisterClient can't hang too.
+		a.mu.Unlock()
+		t.Fatal("claimedHashes deadlocked against a pending client registration")
+	}
+	unregisterClient(<-registered)
+}
