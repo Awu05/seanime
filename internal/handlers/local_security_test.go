@@ -770,6 +770,30 @@ func TestCanMutatePrivilegedSettings(t *testing.T) {
 		want           bool
 	}{
 		{
+			name:    "rejects untrusted origin when mpv socket changes",
+			origin:  "https://evil.example",
+			reqHost: "192.168.1.10:43211",
+			nextMedia: &models.MediaPlayerSettings{
+				Default:   "vlc",
+				VlcPath:   "/Applications/VLC.app/Contents/MacOS/VLC",
+				MpvArgs:   "--no-config",
+				MpvSocket: "/tmp/evil-socket",
+			},
+			want: false,
+		},
+		{
+			name:    "rejects untrusted origin when screenshot folder changes",
+			origin:  "https://evil.example",
+			reqHost: "192.168.1.10:43211",
+			nextMedia: &models.MediaPlayerSettings{
+				Default:       "vlc",
+				VlcPath:       "/Applications/VLC.app/Contents/MacOS/VLC",
+				MpvArgs:       "--no-config",
+				ScreenshotDir: "/etc",
+			},
+			want: false,
+		},
+		{
 			name:    "allows unrelated settings changes without trusted origin",
 			origin:  "https://evil.example",
 			reqHost: "192.168.1.10:43211",
@@ -963,6 +987,29 @@ func TestCanMutatePrivilegedMediastreamSettings(t *testing.T) {
 		next           *models.MediastreamSettings
 		want           bool
 	}{
+		{
+			name:    "rejects untrusted origin when hwaccel switches to custom",
+			origin:  "https://evil.example",
+			reqHost: "192.168.1.10:43211",
+			next: &models.MediastreamSettings{
+				FfmpegPath:                     "ffmpeg",
+				FfprobePath:                    "ffprobe",
+				TranscodeHwAccel:               "custom",
+				TranscodeHwAccelCustomSettings: `{"name":"custom","encodeFlags":["-f","mpegts"]}`,
+			},
+			want: false,
+		},
+		{
+			name:    "allows untrusted origin when hwaccel is not custom",
+			origin:  "https://evil.example",
+			reqHost: "192.168.1.10:43211",
+			next: &models.MediastreamSettings{
+				FfmpegPath:       "ffmpeg",
+				FfprobePath:      "ffprobe",
+				TranscodeHwAccel: "nvidia",
+			},
+			want: true,
+		},
 		{
 			name:    "allows unrelated mediastream changes without trusted origin",
 			origin:  "https://evil.example",

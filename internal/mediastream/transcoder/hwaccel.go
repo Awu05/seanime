@@ -27,6 +27,9 @@ func GetHardwareAccelSettings(opts HwAccelOptions) HwAccelSettings {
 		if err != nil {
 			streamLogger.Error().Err(err).Msg("transcoder: Failed to parse custom hardware acceleration settings, falling back to CPU")
 			name = "disabled"
+		} else if err := validateCustomHwAccel(&customHwAccelSettings); err != nil {
+			streamLogger.Error().Err(err).Msg("transcoder: Invalid custom hardware acceleration settings, falling back to CPU")
+			name = "disabled"
 		}
 		customHwAccelSettings.Name = "custom"
 	} else if opts.CustomSettings == "" && name == "custom" {
