@@ -8,6 +8,7 @@ import (
 	"seanime/internal/core"
 	"seanime/internal/database/models"
 	"seanime/internal/mediastream"
+	"seanime/internal/mediastream/transcoder"
 	"seanime/internal/util"
 	"strings"
 
@@ -43,6 +44,13 @@ func (h *Handler) HandleSaveMediastreamSettings(c echo.Context) error {
 	var b body
 	if err := c.Bind(&b); err != nil {
 		return h.RespondWithError(c, err)
+	}
+
+	// Invalid custom hwaccel settings would otherwise only show up as a silent CPU fallback.
+	if b.Settings.TranscodeHwAccel == "custom" {
+		if err := transcoder.ValidateCustomHwAccelSettings(b.Settings.TranscodeHwAccelCustomSettings); err != nil {
+			return h.RespondWithError(c, err)
+		}
 	}
 
 	prevSettings := h.getMediastreamSettings(c)
