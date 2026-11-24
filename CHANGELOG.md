@@ -2,8 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## v4.8.11
+## v4.8.12
 
+- 🦺 Video player: Fixed the loading spinner staying on after pausing while a video was still loading
 - 🔒️ Screenshots: Only written into the folder set in settings (fixes writing files outside it)
 - 🔒️ Transcoding: Custom hardware acceleration settings only accept known ffmpeg options, and invalid settings are rejected when saved
 - 🔒️ Settings: Changing the mpv/IINA socket or the screenshot folder now requires a trusted request

@@ -25,6 +25,7 @@ import { vc_currentTime } from "@/app/(main)/_features/video-core/video-core-ato
 import { vc_playbackRate } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_readyState } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_buffering } from "@/app/(main)/_features/video-core/video-core-atoms"
+import { isVideoBuffering } from "@/app/(main)/_features/video-core/video-core-buffering"
 import { vc_isMuted } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_volume } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_subtitleDelay } from "@/app/(main)/_features/video-core/video-core-atoms"
@@ -1517,7 +1518,7 @@ export function VideoCore(props: VideoCoreProps) {
     }
 
     const handleWaiting = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-        setBuffering(true)
+        setBuffering(isVideoBuffering(e.currentTarget))
     }
 
     function restoreSeekTime(time: number, showMessage: boolean, paused?: boolean) {
@@ -1546,7 +1547,7 @@ export function VideoCore(props: VideoCoreProps) {
     }
 
     const handleCanPlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-        setBuffering(false)
+        setBuffering(isVideoBuffering(e.currentTarget))
 
         if (!hasSoughtRef.current) {
             if (!state.playbackInfo || !videoRef.current) return
@@ -1590,7 +1591,7 @@ export function VideoCore(props: VideoCoreProps) {
     }
 
     const handleStalled = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-        setBuffering(true)
+        setBuffering(isVideoBuffering(e.currentTarget))
     }
 
     // external state

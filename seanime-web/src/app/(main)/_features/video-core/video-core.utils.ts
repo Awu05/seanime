@@ -9,6 +9,7 @@ import { vc_currentTime } from "@/app/(main)/_features/video-core/video-core-ato
 import { vc_playbackRate } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_readyState } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_buffering } from "@/app/(main)/_features/video-core/video-core-atoms"
+import { isVideoBuffering } from "@/app/(main)/_features/video-core/video-core-buffering"
 import { vc_isMuted } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_volume } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_timeRanges } from "@/app/(main)/_features/video-core/video-core-atoms"
@@ -80,7 +81,6 @@ export function useVideoCoreBindings(videoElement: HTMLVideoElement | null,
         currentTime: 0,
         playbackRate: 0,
         readyState: 0,
-        buffering: false,
         isMuted: false,
         volume: 0,
         ended: false,
@@ -116,12 +116,9 @@ export function useVideoCoreBindings(videoElement: HTMLVideoElement | null,
                 prev.readyState = v.readyState
                 setReadyState(v.readyState)
             }
-            // Set buffering to true if readyState is less than HAVE_ENOUGH_DATA (3) and video is not paused
-            const isBuffering = v.readyState < 3 && !v.paused
-            if (prev.buffering !== isBuffering) {
-                prev.buffering = isBuffering
-                setBuffering(isBuffering)
-            }
+            // Always write it: other code may have set the atom since, so a cached comparison could
+            // leave the spinner stuck. Jotai ignores writes of an unchanged value.
+            setBuffering(isVideoBuffering(v))
             if (prev.isMuted !== v.muted) {
                 prev.isMuted = v.muted
                 setIsMuted(v.muted)
@@ -157,7 +154,7 @@ export function useVideoCoreBindings(videoElement: HTMLVideoElement | null,
             }
         }
         const events = ["timeupdate", "loadedmetadata", "progress", "play", "pause", "ratechange", "volumechange", "ended", "loadeddata", "resize",
-            "waiting", "canplay", "stalled"]
+            "waiting", "canplay", "canplaythrough", "playing", "stalled", "seeking", "seeked", "emptied"]
         events.forEach(e => v.addEventListener(e, handler))
         handler() // initialize state once
 
