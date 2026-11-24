@@ -86,9 +86,35 @@ func TestValidateCustomFilterRejectsFileOptions(t *testing.T) {
 	} {
 		assert.Error(t, validateCustomHwAccel(&HwAccelSettings{ScaleFilter: filter}), filter)
 	}
-	for _, filter := range []string{"scale=%d:%d", "scale=%[1]d:%[2]d", "scale=iw/2:ih/2"} {
+	for _, filter := range []string{"scale=%d:%d", "scale=%[1]d:%[2]d"} {
 		assert.NoError(t, validateCustomHwAccel(&HwAccelSettings{ScaleFilter: filter}), filter)
 	}
+	// division is fine inside a filter, it just isn't a valid scale filter on its own
+	assert.NoError(t, validateCustomFilter("scale=iw/2:ih/2"))
+}
+
+// The scale filter is formatted with the width and height, so anything but two size placeholders
+// would hand ffmpeg a broken -vf value.
+func TestValidateCustomHwAccelRequiresTwoSizePlaceholders(t *testing.T) {
+	for _, filter := range []string{"", "scale=iw/2:ih/2", "scale=%d:-2", "scale=%d:%d:%d", "scale=%%d:%%d"} {
+		assert.Error(t, validateCustomHwAccel(&HwAccelSettings{ScaleFilter: filter}), filter)
+	}
+}
+
+func TestValidateCustomHwAccelAllowsGPUIndexDevice(t *testing.T) {
+	s := HwAccelSettings{
+		DecodeFlags: []string{"-hwaccel", "cuda", "-hwaccel_device", "0"},
+		EncodeFlags: []string{"-c:v", "h264_nvenc"},
+		ScaleFilter: "scale_cuda=%d:%d",
+	}
+	assert.NoError(t, validateCustomHwAccel(&s))
+}
+
+func TestValidateCustomHwAccelSettings(t *testing.T) {
+	assert.NoError(t, ValidateCustomHwAccelSettings(`{"encodeFlags":["-c:v","libx264"],"scaleFilter":"scale=%d:%d"}`))
+	assert.Error(t, ValidateCustomHwAccelSettings(""))
+	assert.Error(t, ValidateCustomHwAccelSettings("{not json"))
+	assert.Error(t, ValidateCustomHwAccelSettings(`{"encodeFlags":["-y","/tmp/x"],"scaleFilter":"scale=%d:%d"}`))
 }
 
 func TestGetHardwareAccelSettingsCustom(t *testing.T) {
