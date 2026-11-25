@@ -58,7 +58,8 @@ jobs:
         # 6 binaries: 2 for Windows, 2 for Linux, 2 for macOS
         include:
           # This is the systray version of the Windows binary used for the server build
-          - os: macos-latest # seanime-server-systray-windows.exe
+          # Cross-compiled with mingw-w64 on Linux (macOS runners are often unavailable)
+          - os: ubuntu-latest # seanime-server-systray-windows.exe
             id: seanime-server-systray-windows
             go_flags: -trimpath -buildmode=exe -ldflags="-s -w -H=windowsgui -extldflags '-static'"
 
@@ -128,13 +129,12 @@ jobs:
       #---
 
       # ONLY for Windows systray build (seanime-server-systray-windows)
-      # For the Windows systray build (built on macOS runner), we need to install the necessary dependencies
-      - name: Install C dependencies ⬇️ # macos windows systray build
+      # The Windows systray build needs cgo, so install the mingw-w64 cross compiler on the Linux runner
+      - name: Install C dependencies ⬇️ # linux windows systray build
         if: matrix.id == 'seanime-server-systray-windows'
         run: |
-          brew install filosottile/musl-cross/musl-cross
-          brew install llvm
-          brew install mingw-w64
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
 
       # Build the Windows systray binary
       # ./binaries/seanime-server-systray-windows.exe
