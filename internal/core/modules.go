@@ -289,8 +289,15 @@ func (a *App) initModulesOnce() {
 	// +---------------------+
 
 	a.AutoScanner = autoscanner.New(&autoscanner.NewAutoScannerOptions{
-		Database:            a.Database,
-		PlatformRef:         a.AnilistPlatformRef,
+		Database:           a.Database,
+		PlatformRef:        a.AnilistPlatformRef,
+		ProfilePlatformRef: a.ScanPlatformRef,
+		ProfileLibrarySettings: func(profileID string) *models.LibrarySettings {
+			if !a.MultiUserEnabled.Load() {
+				return nil // single-user: the settings pushed through SetSettings
+			}
+			return a.ScanLibrarySettings(profileID)
+		},
 		Logger:              a.Logger,
 		WSEventManager:      a.WSEventManager,
 		Enabled:             false, // Will be set in InitOrRefreshModules
@@ -425,10 +432,10 @@ func (a *App) InitOrRefreshModules(profileID string) {
 			}
 		}
 		exists, _ := a.Database.AdminExists()
-		a.MultiUserEnabled = exists
+		a.MultiUserEnabled.Store(exists)
 	} else {
 		exists, _ := a.Database.AdminExists()
-		a.MultiUserEnabled = exists
+		a.MultiUserEnabled.Store(exists)
 		if !exists {
 			a.ensureDefaultProfile()
 		}

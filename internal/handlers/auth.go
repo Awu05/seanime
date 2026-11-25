@@ -36,7 +36,7 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 	}
 
 	profileID := core.GetProfileIDFromContext(c)
-	isProfileLogin := h.App.MultiUserEnabled && profileID != ""
+	isProfileLogin := h.App.MultiUserEnabled.Load() && profileID != ""
 
 	// Validate the token and fetch viewer data.
 	// In multi-user mode this must use a throwaway client: mutating the global
@@ -98,7 +98,7 @@ func (h *Handler) HandleLogin(c echo.Context) error {
 		currentSettings, settingsErr := h.getSettings(c)
 		if settingsErr == nil && currentSettings.Anilist != nil && currentSettings.Anilist.EnableAdultContent != anilistAdult {
 			currentSettings.Anilist.EnableAdultContent = anilistAdult
-			if h.App.MultiUserEnabled && profileID != "" {
+			if h.App.MultiUserEnabled.Load() && profileID != "" {
 				_, _ = h.App.Database.UpsertSettingsForProfile(profileID, currentSettings)
 			} else {
 				_, _ = h.App.Database.UpsertSettings(currentSettings)

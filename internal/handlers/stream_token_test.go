@@ -23,7 +23,8 @@ func TestExternalStreamToken(t *testing.T) {
 	profile, err := database.CreateProfile(&models.Profile{UUIDBaseModel: models.UUIDBaseModel{ID: "profile-1"}, Name: "Alice"})
 	require.NoError(t, err)
 
-	app := &core.App{Config: &core.Config{}, MultiUserEnabled: true, JWTSecret: secret, Database: database}
+	app := &core.App{Config: &core.Config{}, JWTSecret: secret, Database: database}
+	app.MultiUserEnabled.Store(true)
 	h := &Handler{App: app}
 	token, err := core.GenerateStreamToken(secret, profile.ID)
 	require.NoError(t, err)

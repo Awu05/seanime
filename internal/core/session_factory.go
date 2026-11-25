@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"seanime/internal/api/anilist"
+	"seanime/internal/database/models"
 	"seanime/internal/directstream"
 	"seanime/internal/library/playbackmanager"
 	"seanime/internal/nativeplayer"
@@ -18,10 +19,39 @@ import (
 // collection fetches go to the profile's own AniList account — never the
 // global platform, which carries whichever account logged in last.
 func (a *App) sessionPlatform(profileID string) (platform.Platform, bool) {
-	if a.MultiUserEnabled && profileID != "" && profileID != DefaultProfileID && a.AnilistPool != nil {
+	if a.MultiUserEnabled.Load() && profileID != "" && profileID != DefaultProfileID && a.AnilistPool != nil {
 		return a.AnilistPool.GetPlatformForProfile(profileID), true
 	}
 	return a.AnilistPlatformRef.Get(), false
+}
+
+// ScanPlatformRef returns the platform ref a library scan for profileID must use.
+// The scanner fetches its matching candidates from this platform's AniList
+// collection, so a profile has to scan with its own account. The ref is live:
+// it follows the profile across logins, logouts and account switches made
+// while a scan runs. Outside multi-user mode it is the global ref.
+func (a *App) ScanPlatformRef(profileID string) *util.Ref[platform.Platform] {
+	if a.MultiUserEnabled.Load() && profileID != "" && profileID != DefaultProfileID && a.AnilistPool != nil {
+		return a.AnilistPool.LiveRefForProfile(profileID)
+	}
+	return a.AnilistPlatformRef
+}
+
+// ScanLibrarySettings returns the library settings (matching threshold,
+// algorithm, legacy matching, scanner config) a scan for profileID must use:
+// the profile's own settings in multi-user mode, the global ones otherwise.
+// It never returns nil.
+func (a *App) ScanLibrarySettings(profileID string) *models.LibrarySettings {
+	var settings *models.Settings
+	if a.MultiUserEnabled.Load() && profileID != "" {
+		settings, _ = a.Database.GetSettingsForProfile(profileID)
+	} else {
+		settings, _ = a.Database.GetSettings()
+	}
+	if lib := settings.GetLibrary(); lib != nil {
+		return lib
+	}
+	return &models.LibrarySettings{}
 }
 
 // Shutdown releases per-session streaming resources without touching shared infrastructure
@@ -145,7 +175,7 @@ func (a *App) CreateStreamSession(profileID string) *ProfileStreamSession {
 	})
 
 	streamToken := func() string {
-		if !a.MultiUserEnabled {
+		if !a.MultiUserEnabled.Load() {
 			return ""
 		}
 		token, err := GenerateStreamToken(a.JWTSecret, profileID)

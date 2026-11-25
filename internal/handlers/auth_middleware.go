@@ -98,7 +98,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 		// In Electron sidecar mode without multi-user, still allow public paths
 		// (setup-check, setup) so first-time registration works.
 		// Only auto-grant admin for non-public paths after admin exists.
-		if h.App.IsDesktopSidecar && !h.App.MultiUserEnabled {
+		if h.App.IsDesktopSidecar && !h.App.MultiUserEnabled.Load() {
 			path := c.Request().URL.Path
 			isPublic := false
 			for _, p := range publicPaths {
@@ -123,7 +123,7 @@ func (h *Handler) MultiUserAuthMiddleware(next echo.HandlerFunc) echo.HandlerFun
 			if path == p {
 				// For public paths, still try to extract profile from JWT if present
 				// This allows status endpoint to return per-profile settings
-				if authenticated := h.tryExtractProfile(c); !authenticated && h.App.MultiUserEnabled {
+				if authenticated := h.tryExtractProfile(c); !authenticated && h.App.MultiUserEnabled.Load() {
 					// No valid profile/admin token: strip secrets from responses (e.g. /status)
 					c.Set("unauthenticated", true)
 				}

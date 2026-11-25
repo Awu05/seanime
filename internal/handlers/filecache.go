@@ -112,7 +112,7 @@ func (h *Handler) HandleClearFileCacheMediastreamVideoFiles(c echo.Context) erro
 // canManageSharedCaches reports whether the request may manage caches every profile shares:
 // anyone on a single-user install, only the admin once there are profiles.
 func (h *Handler) canManageSharedCaches(c echo.Context) bool {
-	return !h.App.MultiUserEnabled || core.GetIsAdminFromContext(c)
+	return !h.App.MultiUserEnabled.Load() || core.GetIsAdminFromContext(c)
 }
 
 func respondAdminRequired(c echo.Context) error {

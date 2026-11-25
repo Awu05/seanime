@@ -53,7 +53,7 @@ func isStrictModeSensitive(req *http.Request, serverPassword string) bool {
 // goes through the same strict-mode local-only gates as password auth, it just proves the
 // request isn't an anonymous/CSRF-style request on a multi-user instance.
 func isAuthenticatedMultiUserSession(app *core.App, req *http.Request) bool {
-	if app == nil || !app.MultiUserEnabled || req == nil {
+	if app == nil || !app.MultiUserEnabled.Load() || req == nil {
 		return false
 	}
 
@@ -357,7 +357,7 @@ func (h *Handler) trustedLocalRequestMiddleware(next echo.HandlerFunc) echo.Hand
 			return next(c)
 		}
 
-		if h.App.MultiUserEnabled && isMultiUserBootstrapPath(req.URL.Path) {
+		if h.App.MultiUserEnabled.Load() && isMultiUserBootstrapPath(req.URL.Path) {
 			return next(c)
 		}
 

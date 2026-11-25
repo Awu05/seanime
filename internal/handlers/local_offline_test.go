@@ -13,7 +13,8 @@ import (
 
 func runSingleUserOnly(t *testing.T, multiUser bool) (*httptest.ResponseRecorder, bool) {
 	t.Helper()
-	h := &Handler{App: &core.App{Logger: util.NewLogger(), MultiUserEnabled: multiUser}}
+	h := &Handler{App: &core.App{Logger: util.NewLogger()}}
+	h.App.MultiUserEnabled.Store(multiUser)
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodPost, "/api/v1/local/offline", nil), rec)
 	called := false

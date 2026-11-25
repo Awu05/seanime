@@ -60,7 +60,7 @@ func (h *Handler) newRestrictedStatus() *Status {
 		User:              user.NewSimulatedUser(),
 		ServerReady:       h.App.ServerReady,
 		ServerHasPassword: h.App.Config.Server.Password != "",
-		MultiUserEnabled:  h.App.MultiUserEnabled,
+		MultiUserEnabled:  h.App.MultiUserEnabled.Load(),
 		AnilistHealthy:    shared_platform.EffectiveAnilistHealthy(),
 	}
 }
@@ -88,7 +88,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 	// Get the user from the database (if logged in)
 	// In multi-user mode, load the profile-specific AniList account
 	profileID := core.GetProfileIDFromContext(c)
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		if profileAcc, err := h.App.Database.GetAccountByProfileID(profileID); err == nil && profileAcc != nil && profileAcc.Token != "" {
 			currentUser, _ = user.NewUser(profileAcc)
 			if currentUser != nil {
@@ -111,7 +111,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		currentUser = user.NewSimulatedUser()
 	}
 
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		settings, _ = h.App.Database.GetSettingsForProfile(profileID)
 	} else {
 		settings, _ = h.App.Database.GetSettings()
@@ -153,7 +153,7 @@ func (h *Handler) NewStatus(c echo.Context) *Status {
 		FeatureFlags:          h.App.FeatureFlags,
 		ServerReady:           h.App.ServerReady,
 		ServerHasPassword:     h.App.Config.Server.Password != "",
-		MultiUserEnabled:      h.App.MultiUserEnabled,
+		MultiUserEnabled:      h.App.MultiUserEnabled.Load(),
 		DisabledFeatures:      h.App.FeatureManager.DisabledFeatures,
 		ShowChangelogTour:     h.App.ShowTour,
 	}

@@ -63,6 +63,8 @@ type AppContextModules struct {
 	DirectStreamManager             *directstream.Manager
 	AutoSelect                      *autoselect.AutoSelect
 	OnRefreshAnilistAnimeCollection func()
+	// ScanPlatformRef returns the platform a library scan for a profile matches against.
+	ScanPlatformRef                 func(profileID string) *util.Ref[platform.Platform]
 	OnRefreshAnilistMangaCollection func()
 	PromptManager                   *prompt.Manager
 	Auth                            AuthActions
@@ -232,6 +234,7 @@ type AppContextImpl struct {
 	autoDownloader                  mo.Option[*autodownloader.AutoDownloader]
 	fileCacher                      mo.Option[*filecache.Cacher]
 	onRefreshAnilistAnimeCollection mo.Option[func()]
+	scanPlatformRef                 mo.Option[func(profileID string) *util.Ref[platform.Platform]]
 	onRefreshAnilistMangaCollection mo.Option[func()]
 	videoCore                       mo.Option[*videocore.VideoCore]
 	mediacoreCoordinator            mo.Option[*mediacore.Coordinator]
@@ -268,6 +271,7 @@ func NewAppContext() AppContext {
 		autoDownloader:                  mo.None[*autodownloader.AutoDownloader](),
 		fileCacher:                      mo.None[*filecache.Cacher](),
 		onRefreshAnilistAnimeCollection: mo.None[func()](),
+		scanPlatformRef:                 mo.None[func(profileID string) *util.Ref[platform.Platform]](),
 		onRefreshAnilistMangaCollection: mo.None[func()](),
 		videoCore:                       mo.None[*videocore.VideoCore](),
 		mediacoreCoordinator:            mo.None[*mediacore.Coordinator](),
@@ -355,6 +359,10 @@ func (a *AppContextImpl) SetModulesPartial(modules AppContextModules) {
 
 	if modules.FillerManager != nil {
 		a.fillerManager = mo.Some(modules.FillerManager)
+	}
+
+	if modules.ScanPlatformRef != nil {
+		a.scanPlatformRef = mo.Some(modules.ScanPlatformRef)
 	}
 
 	if modules.OnRefreshAnilistAnimeCollection != nil {

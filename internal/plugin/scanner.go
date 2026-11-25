@@ -48,6 +48,12 @@ func (a *AppContextImpl) BindScannerToContextObj(vm *goja.Runtime, obj *goja.Obj
 		autoDownloader, _ := a.autoDownloader.Get()
 		refreshAnimeCollection, _ := a.onRefreshAnilistAnimeCollection.Get()
 		profileID := getProfileIDFromVM(vm)
+		// Match against the plugin profile's own AniList collection, not the global one
+		if scanPlatformRef, ok := a.scanPlatformRef.Get(); ok {
+			if ref := scanPlatformRef(profileID); ref.IsPresent() {
+				platformRef = ref
+			}
+		}
 
 		go func() {
 			settings, err := database.GetSettingsForProfile(profileID)

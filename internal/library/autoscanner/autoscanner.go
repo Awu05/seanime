@@ -3,7 +3,6 @@ package autoscanner
 import (
 	"context"
 	"errors"
-	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata_provider"
 	"seanime/internal/database/db"
 	"seanime/internal/database/db_bridge"
@@ -33,6 +32,7 @@ type (
 		enabled             bool
 		settings            models.LibrarySettings
 		platformRef         *util.Ref[platform.Platform]
+		profilePlatformRef  func(profileID string) *util.Ref[platform.Platform]
 		logger              *zerolog.Logger
 		wsEventManager      events.WSEventManagerInterface
 		db                  *db.Database                   // Database instance is required to update the local files.
@@ -41,19 +41,27 @@ type (
 		logsDir             string
 		scanning            atomic.Bool
 		onRefreshCollection func()
-		animeCollection     *anilist.AnimeCollection
+		// profileLibrarySettings returns the matching settings for a profile's scan.
+		profileLibrarySettings func(profileID string) *models.LibrarySettings
 	}
 	NewAutoScannerOptions struct {
-		Database            *db.Database
-		PlatformRef         *util.Ref[platform.Platform]
-		Logger              *zerolog.Logger
-		WSEventManager      events.WSEventManagerInterface
-		Enabled             bool
-		AutoDownloader      *autodownloader.AutoDownloader
-		WaitTime            time.Duration
-		MetadataProviderRef *util.Ref[metadata_provider.Provider]
-		LogsDir             string
-		OnRefreshCollection func()
+		Database    *db.Database
+		PlatformRef *util.Ref[platform.Platform]
+		// ProfilePlatformRef returns the platform a profile's scan matches against.
+		// When nil, every profile scans with PlatformRef.
+		ProfilePlatformRef func(profileID string) *util.Ref[platform.Platform]
+		// ProfileLibrarySettings returns the matching settings (threshold, algorithm,
+		// legacy matching, scanner config) for a profile's scan. When nil, every
+		// profile uses the settings passed to SetSettings.
+		ProfileLibrarySettings func(profileID string) *models.LibrarySettings
+		Logger                 *zerolog.Logger
+		WSEventManager         events.WSEventManagerInterface
+		Enabled                bool
+		AutoDownloader         *autodownloader.AutoDownloader
+		WaitTime               time.Duration
+		MetadataProviderRef    *util.Ref[metadata_provider.Provider]
+		LogsDir                string
+		OnRefreshCollection    func()
 	}
 )
 
@@ -72,6 +80,7 @@ func New(opts *NewAutoScannerOptions) *AutoScanner {
 		waitTime:            wt,
 		enabled:             opts.Enabled,
 		platformRef:         opts.PlatformRef,
+		profilePlatformRef:  opts.ProfilePlatformRef,
 		logger:              opts.Logger,
 		wsEventManager:      opts.WSEventManager,
 		db:                  opts.Database,
@@ -79,11 +88,30 @@ func New(opts *NewAutoScannerOptions) *AutoScanner {
 		metadataProviderRef: opts.MetadataProviderRef,
 		logsDir:             opts.LogsDir,
 		onRefreshCollection: opts.OnRefreshCollection,
+
+		profileLibrarySettings: opts.ProfileLibrarySettings,
 	}
 }
 
-func (as *AutoScanner) SetAnimeCollection(ac *anilist.AnimeCollection) {
-	as.animeCollection = ac
+// platformRefFor returns the platform whose AniList collection profileID's scan matches against.
+func (as *AutoScanner) platformRefFor(profileID string) *util.Ref[platform.Platform] {
+	if as.profilePlatformRef != nil {
+		if ref := as.profilePlatformRef(profileID); ref.IsPresent() {
+			return ref
+		}
+	}
+	return as.platformRef
+}
+
+// librarySettingsFor returns the matching settings for profileID's scan, falling
+// back to the global snapshot taken when the scan started.
+func (as *AutoScanner) librarySettingsFor(profileID string, global models.LibrarySettings) models.LibrarySettings {
+	if as.profileLibrarySettings != nil {
+		if lib := as.profileLibrarySettings(profileID); lib != nil {
+			return *lib
+		}
+	}
+	return global
 }
 
 // Notify is used to notify the AutoScanner that a file action has occurred.
@@ -264,9 +292,21 @@ func (as *AutoScanner) scan() {
 		}
 	}
 
+	// Snapshot the settings pushed by SetSettings; it runs on other goroutines.
+	as.mu.Lock()
+	globalLibrary := as.settings
+	as.mu.Unlock()
+
 	scannedAny := false
 	for _, profileID := range profileIDs {
-		if as.scanForProfile(profileID, settings) {
+		// The profile list was read before the loop. Skip a profile deleted since,
+		// rather than creating AniList clients and local files for it.
+		if profileID != "" {
+			if _, err := as.db.GetProfileByID(profileID); err != nil {
+				continue
+			}
+		}
+		if as.scanForProfile(profileID, settings, globalLibrary) {
 			scannedAny = true
 		}
 	}
@@ -283,11 +323,13 @@ func (as *AutoScanner) scan() {
 	}
 }
 
-// scanForProfile runs one scan for a single profile's library view.
-// The disk walk is repeated per profile, but matching/metadata results come
-// from caches after the first profile, and each profile's existing locked and
-// ignored flags are merged by the scanner via ExistingLocalFiles.
-func (as *AutoScanner) scanForProfile(profileID string, settings *models.Settings) (ok bool) {
+// scanForProfile runs one scan for a single profile's library view, the same
+// way a manual scan from that profile would: against the profile's own AniList
+// collection, with its own matching settings and extra library folders. The
+// disk walk and the AniList collection fetch are repeated per profile, and each
+// profile's existing locked and ignored flags are merged by the scanner via
+// ExistingLocalFiles.
+func (as *AutoScanner) scanForProfile(profileID string, settings *models.Settings, globalLibrary models.LibrarySettings) (ok bool) {
 	defer util.HandlePanicInModuleThen("scanner/autoscanner/scanForProfile", func() {
 		as.logger.Error().Str("profileId", profileID).Msg("autoscanner: Recovered from panic")
 	})
@@ -319,13 +361,26 @@ func (as *AutoScanner) scanForProfile(profileID string, settings *models.Setting
 		defer scanLogger.Done()
 	}
 
+	ctx := context.Background()
+
+	// Match against this profile's own AniList collection. It also supplies the
+	// custom-source candidates, so it must come from the same platform.
+	platformRef := as.platformRefFor(profileID)
+	animeCollection, err := platformRef.Get().GetAnimeCollection(ctx, false)
+	if err != nil {
+		as.logger.Warn().Err(err).Str("profileId", profileID).Msg("autoscanner: Failed to get anime collection")
+		animeCollection = nil
+	}
+
+	library := as.librarySettingsFor(profileID, globalLibrary)
+
 	// Create a new scanner
 	sc := scanner.Scanner{
 		ProfileID:            profileID,
 		DirPath:              settings.Library.LibraryPath,
-		OtherDirPaths:        settings.Library.LibraryPaths,
-		Enhanced:             false, // Do not use enhanced mode for auto scanner.
-		PlatformRef:          as.platformRef,
+		OtherDirPaths:        as.otherLibraryPaths(profileID, settings.Library),
+		Enhanced:             false, // Collection-only matching; the media fetcher falls back to the offline database when the collection is empty.
+		PlatformRef:          platformRef,
 		Logger:               as.logger,
 		WSEventManager:       as.wsEventManager,
 		ExistingLocalFiles:   existingLfs,
@@ -334,15 +389,16 @@ func (as *AutoScanner) scanForProfile(profileID string, settings *models.Setting
 		ScanSummaryLogger:    scanSummaryLogger,
 		ScanLogger:           scanLogger,
 		MetadataProviderRef:  as.metadataProviderRef,
-		MatchingThreshold:    as.settings.ScannerMatchingThreshold,
-		MatchingAlgorithm:    as.settings.ScannerMatchingAlgorithm,
+		MatchingThreshold:    library.ScannerMatchingThreshold,
+		MatchingAlgorithm:    library.ScannerMatchingAlgorithm,
+		UseLegacyMatching:    library.ScannerUseLegacyMatching,
 		WithShelving:         true,
 		ExistingShelvedFiles: existingShelvedLfs,
-		ConfigAsString:       as.settings.ScannerConfig,
-		AnimeCollection:      as.animeCollection,
+		ConfigAsString:       library.ScannerConfig,
+		AnimeCollection:      animeCollection,
 	}
 
-	allLfs, err := sc.Scan(context.Background())
+	allLfs, err := sc.Scan(ctx)
 	if err != nil {
 		if errors.Is(err, scanner.ErrNoLocalFiles) {
 			return false
@@ -379,4 +435,33 @@ func (as *AutoScanner) scanForProfile(profileID string, settings *models.Setting
 	}
 
 	return true
+}
+
+// otherLibraryPaths returns the extra folders a profile's scan walks: the global
+// additional library paths plus the profile's own library_paths, as a manual scan
+// from that profile does. Leaving the profile's folders out would make the scanner
+// drop or shelve every file it previously found there.
+func (as *AutoScanner) otherLibraryPaths(profileID string, library *models.LibrarySettings) []string {
+	paths := make([]string, 0, len(library.LibraryPaths))
+	seen := map[string]bool{library.LibraryPath: true}
+	add := func(p string) {
+		if p == "" || seen[p] {
+			return
+		}
+		seen[p] = true
+		paths = append(paths, p)
+	}
+	for _, p := range library.LibraryPaths {
+		add(p)
+	}
+	if profileID != "" {
+		profilePaths, err := as.db.GetLibraryPathStringsForProfile(profileID)
+		if err != nil {
+			as.logger.Warn().Err(err).Str("profileId", profileID).Msg("autoscanner: Failed to get profile library paths")
+		}
+		for _, p := range profilePaths {
+			add(p)
+		}
+	}
+	return paths
 }

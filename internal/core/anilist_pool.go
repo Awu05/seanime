@@ -14,13 +14,19 @@ import (
 // to avoid cross-profile data leaking.
 type AnilistClientPool struct {
 	platforms map[string]platform.Platform // keyed by profileID
-	mu        sync.RWMutex
-	app       *App
+	// liveRefs are handed to long-running work (library scans) that must keep
+	// following the profile's platform across logins, logouts and account switches.
+	liveRefs map[string]*util.Ref[platform.Platform] // keyed by profileID
+	mu       sync.RWMutex
+	app      *App
+	// newPlatform replaces the AniList-backed constructor in tests.
+	newPlatform func(profileID string) platform.Platform
 }
 
 func NewAnilistClientPool(app *App) *AnilistClientPool {
 	return &AnilistClientPool{
 		platforms: make(map[string]platform.Platform),
+		liveRefs:  make(map[string]*util.Ref[platform.Platform]),
 		app:       app,
 	}
 }
@@ -45,6 +51,14 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 		return plat
 	}
 	p.mu.RUnlock()
+
+	if p.newPlatform != nil {
+		plat := p.newPlatform(profileID)
+		p.mu.Lock()
+		p.platforms[profileID] = plat
+		p.mu.Unlock()
+		return plat
+	}
 
 	// Create a new platform for this profile
 	acc, _ := p.app.Database.GetAccountByProfileID(profileID)
@@ -102,15 +116,61 @@ func (p *AnilistClientPool) GetPlatformForProfile(profileID string) platform.Pla
 	return plat
 }
 
+// LiveRefForProfile returns a ref that always holds the profile's current platform.
+// Unlike GetPlatformForProfile's return value, it is repointed when the profile
+// logs in, logs out or switches accounts, so work that outlives the request
+// (a library scan) never keeps talking to the account the user just left.
+func (p *AnilistClientPool) LiveRefForProfile(profileID string) *util.Ref[platform.Platform] {
+	if profileID == "" {
+		return p.app.AnilistPlatformRef
+	}
+
+	plat := p.GetPlatformForProfile(profileID)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if ref, ok := p.liveRefs[profileID]; ok {
+		return ref
+	}
+	if cur, ok := p.platforms[profileID]; ok {
+		plat = cur // invalidated and rebuilt since the lookup above
+	}
+	ref := util.NewRef(plat)
+	p.liveRefs[profileID] = ref
+	return ref
+}
+
 // InvalidateProfile removes the cached platform for a profile (e.g. on login/logout).
+// Live refs handed out for the profile are repointed to its rebuilt platform, or
+// dropped if the profile no longer exists.
 func (p *AnilistClientPool) InvalidateProfile(profileID string) {
 	p.mu.Lock()
 	plat := p.platforms[profileID]
 	delete(p.platforms, profileID)
+	ref, hasRef := p.liveRefs[profileID]
 	p.mu.Unlock()
+
+	if hasRef {
+		if p.profileExists(profileID) {
+			ref.Set(p.GetPlatformForProfile(profileID))
+		} else {
+			p.mu.Lock()
+			delete(p.liveRefs, profileID)
+			p.mu.Unlock()
+		}
+	}
 
 	// Close the platform outside the lock — Close may block on I/O or acquire other locks.
 	if plat != nil {
 		plat.Close()
 	}
+}
+
+// profileExists reports whether profileID is still a profile in the database.
+func (p *AnilistClientPool) profileExists(profileID string) bool {
+	if p.app.Database == nil {
+		return true
+	}
+	_, err := p.app.Database.GetProfileByID(profileID)
+	return err == nil
 }

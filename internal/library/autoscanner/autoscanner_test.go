@@ -1,7 +1,6 @@
 package autoscanner
 
 import (
-	"seanime/internal/api/anilist"
 	"seanime/internal/database/db"
 	"seanime/internal/database/models"
 	"seanime/internal/events"
@@ -23,10 +22,6 @@ func TestNewAutoScannerAppliesDefaultsAndSetters(t *testing.T) {
 	require.NotNil(t, h.autoScanner.fileActionCh)
 	require.NotNil(t, h.autoScanner.scannedCh)
 	require.False(t, h.autoScanner.enabled)
-
-	collection := &anilist.AnimeCollection{}
-	h.autoScanner.SetAnimeCollection(collection)
-	require.Same(t, collection, h.autoScanner.animeCollection)
 
 	settings := models.LibrarySettings{
 		AutoScan: true,

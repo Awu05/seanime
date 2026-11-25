@@ -84,7 +84,7 @@ func (h *Handler) HandleGetRawAnimeCollectionTags(c echo.Context) error {
 	})
 
 	profileID := ""
-	if h.App.MultiUserEnabled {
+	if h.App.MultiUserEnabled.Load() {
 		profileID = core.GetProfileIDFromContext(c)
 	}
 
@@ -93,7 +93,7 @@ func (h *Handler) HandleGetRawAnimeCollectionTags(c echo.Context) error {
 	}
 
 	var userName string
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		acc, _ := h.App.Database.GetAccountByProfileID(profileID)
 		if acc == nil || acc.Token == "" || acc.Username == "" {
 			return h.RespondWithData(c, anilist.MediaTagMap{})

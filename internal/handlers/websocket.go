@@ -100,7 +100,7 @@ func (h *Handler) webSocketEventHandler(c echo.Context) error {
 
 	// In multi-user mode, only authenticated profiles may connect:
 	// broadcasts carry playback/scan/notification data and client events feed plugin handlers.
-	if h.App.MultiUserEnabled && !authenticated {
+	if h.App.MultiUserEnabled.Load() && !authenticated {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	}
 

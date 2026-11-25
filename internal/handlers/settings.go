@@ -122,7 +122,7 @@ func (h *Handler) HandleGettingStarted(c echo.Context) error {
 
 	var settings *models.Settings
 	var err error
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		settings, err = h.App.Database.UpsertSettingsForProfile(profileID, newSettings)
 	} else {
 		newSettings.BaseModel = models.BaseModel{
@@ -315,7 +315,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 	}
 
 	var settings *models.Settings
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		settings, err = h.App.Database.UpsertSettingsForProfile(profileID, newSettings)
 	} else {
 		newSettings.BaseModel = models.BaseModel{
@@ -337,7 +337,7 @@ func (h *Handler) HandleSaveSettings(c echo.Context) error {
 			defer util.HandlePanicThen(func() {})
 			var account *models.Account
 			var accErr error
-			if h.App.MultiUserEnabled && profileID != "" {
+			if h.App.MultiUserEnabled.Load() && profileID != "" {
 				account, accErr = h.App.Database.GetAccountByProfileID(profileID)
 			} else {
 				account, accErr = h.App.Database.GetAccount()
@@ -418,7 +418,7 @@ func (h *Handler) HandlePatchSetting(c echo.Context) error {
 	profileID := core.GetProfileIDFromContext(c)
 
 	var settings *models.Settings
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		settings, err = h.App.Database.UpsertSettingsForProfile(profileID, nextSettings)
 	} else {
 		nextSettings.BaseModel = models.BaseModel{
@@ -498,7 +498,7 @@ func (h *Handler) HandleSaveAutoDownloaderSettings(c echo.Context) error {
 	nextSettings := *currSettings
 	nextSettings.AutoDownloader = autoDownloaderSettings
 
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		_, err = h.App.Database.UpsertSettingsForProfile(profileID, &nextSettings)
 	} else {
 		nextSettings.BaseModel = models.BaseModel{
@@ -590,7 +590,7 @@ func (h *Handler) HandleSaveMediaPlayerSettings(c echo.Context) error {
 	nextSettings := *currSettings
 	nextSettings.MediaPlayer = b.MediaPlayer
 
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		_, err = h.App.Database.UpsertSettingsForProfile(profileID, &nextSettings)
 	} else {
 		nextSettings.BaseModel = models.BaseModel{

@@ -387,7 +387,9 @@ func TestIsAuthenticatedMultiUserSession(t *testing.T) {
 	const secret = "test-jwt-secret"
 
 	newApp := func(multiUserEnabled bool) *core.App {
-		return &core.App{Config: &core.Config{}, MultiUserEnabled: multiUserEnabled, JWTSecret: secret}
+		app := &core.App{Config: &core.Config{}, JWTSecret: secret}
+		app.MultiUserEnabled.Store(multiUserEnabled)
+		return app
 	}
 
 	profileToken, err := core.GenerateToken(secret, "profile-1", false, "profile", time.Hour)
@@ -463,7 +465,8 @@ func TestTrustedLocalRequestMiddlewareAllowsMultiUserBootstrapPaths(t *testing.T
 	})
 
 	e := echo.New()
-	h := &Handler{App: &core.App{Config: &core.Config{}, MultiUserEnabled: true}}
+	h := &Handler{App: &core.App{Config: &core.Config{}}}
+	h.App.MultiUserEnabled.Store(true)
 
 	next := func(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
@@ -560,8 +563,7 @@ func TestTrustedLocalRequestMiddlewareAllowsAuthenticatedNakamaPeers(t *testing.
 	e := echo.New()
 	h := &Handler{
 		App: &core.App{
-			Config:           &core.Config{},
-			MultiUserEnabled: true,
+			Config: &core.Config{},
 			Settings: &models.Settings{
 				Nakama: &models.NakamaSettings{
 					Enabled:      true,
@@ -571,6 +573,7 @@ func TestTrustedLocalRequestMiddlewareAllowsAuthenticatedNakamaPeers(t *testing.
 			},
 		},
 	}
+	h.App.MultiUserEnabled.Store(true)
 
 	next := func(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
@@ -617,8 +620,7 @@ func TestMultiUserAuthMiddlewareAllowsAuthenticatedNakamaPeers(t *testing.T) {
 	e := echo.New()
 	h := &Handler{
 		App: &core.App{
-			Config:           &core.Config{},
-			MultiUserEnabled: true,
+			Config: &core.Config{},
 			Settings: &models.Settings{
 				Nakama: &models.NakamaSettings{
 					Enabled:      true,
@@ -628,6 +630,7 @@ func TestMultiUserAuthMiddlewareAllowsAuthenticatedNakamaPeers(t *testing.T) {
 			},
 		},
 	}
+	h.App.MultiUserEnabled.Store(true)
 
 	next := func(c echo.Context) error {
 		return c.NoContent(http.StatusOK)

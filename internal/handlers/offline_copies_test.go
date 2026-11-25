@@ -26,7 +26,9 @@ func newOfflineCopiesHandler(t *testing.T, multiUser bool) *Handler {
 	require.NoError(t, err)
 	titles, err := shared_platform.NewTitleCache(t.TempDir(), 1<<30, logger)
 	require.NoError(t, err)
-	return &Handler{App: &core.App{Logger: logger, MultiUserEnabled: multiUser, EpisodeInfoStore: episodeInfo, ImageCache: images, TitleCache: titles}}
+	h := &Handler{App: &core.App{Logger: logger, EpisodeInfoStore: episodeInfo, ImageCache: images, TitleCache: titles}}
+	h.App.MultiUserEnabled.Store(multiUser)
+	return h
 }
 
 // Saved title records live under offline-copies too, so the card must count and clear them.

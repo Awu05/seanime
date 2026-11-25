@@ -173,7 +173,7 @@ type (
 		FeatureManager    *FeatureManager
 		Settings          *models.Settings
 		JWTSecret        string
-		MultiUserEnabled bool
+		MultiUserEnabled  atomic.Bool // set at startup and when the first admin is created; read from request and background goroutines
 		SecondarySettings struct {
 			Mediastream   *models.MediastreamSettings
 			Torrentstream *models.TorrentstreamSettings
@@ -606,6 +606,7 @@ func NewApp(configOpts *ConfigOptions, selfupdater *updater.SelfUpdater) *App {
 		OnlinestreamRepository:  app.OnlinestreamRepository,
 		MediastreamRepository:   app.MediastreamRepository,
 		TorrentstreamRepository: app.TorrentstreamRepository,
+		ScanPlatformRef:         app.ScanPlatformRef,
 	})
 
 	if !app.IsOffline() {

@@ -20,11 +20,11 @@ func (h *Handler) continuityEnabledForRequest(c echo.Context) bool {
 	profileID := core.GetProfileIDFromContext(c)
 
 	var profileSettings *models.Settings
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		profileSettings, _ = h.App.Database.GetSettingsForProfile(profileID)
 	}
 
-	return continuityEnabled(h.App.MultiUserEnabled, profileID, profileSettings, h.App.ContinuityManager.GetSettings().WatchContinuityEnabled)
+	return continuityEnabled(h.App.MultiUserEnabled.Load(), profileID, profileSettings, h.App.ContinuityManager.GetSettings().WatchContinuityEnabled)
 }
 
 func continuityEnabled(multiUserEnabled bool, profileID string, profileSettings *models.Settings, globalFlagEnabled bool) bool {

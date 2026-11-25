@@ -15,7 +15,7 @@ func (h *Handler) OptionalAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc
 		}
 
 		// Skip instance password check if multi-user JWT auth already validated
-		if h.App.MultiUserEnabled {
+		if h.App.MultiUserEnabled.Load() {
 			authScope := c.Get("authScope")
 			if authScope != nil && authScope != "" {
 				return next(c)

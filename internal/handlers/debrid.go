@@ -57,7 +57,7 @@ func (h *Handler) HandleSaveDebridSettings(c echo.Context) error {
 	var settings *models.DebridSettings
 	var err error
 	profileID := core.GetProfileIDFromContext(c)
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		settings, err = h.App.Database.UpsertDebridSettingsForProfile(profileID, &b.Settings)
 	} else {
 		b.Settings.BaseModel = models.BaseModel{ID: 1}
