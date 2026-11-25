@@ -16,10 +16,43 @@ describe("chapter skipping", () => {
         expect(getSkipChapters(list, "")).toEqual([list[0], list[3]])
     })
 
-    it("keeps the existing intro chapter rule", () => {
+    it("treats an opening-length Intro as the opening when there is no Opening chapter", () => {
+        // the chapter layout of a real release: cold open, 90s intro, episode, 90s credits, preview
+        const list = [
+            { label: "Episode", start: 0, end: 38 },
+            { label: "Intro", start: 38, end: 128 },
+            { label: "Episode", start: 128, end: 1315 },
+            { label: "Credits", start: 1315, end: 1405 },
+            { label: "Episode", start: 1405, end: 1420 },
+        ]
+
+        expect(getSkipChapters(list, "")).toEqual([list[1], list[3]])
+    })
+
+    it("doesn't skip an Intro that is too short to be an opening, but still skips the ending", () => {
+        // a short "Intro" is usually a cold open with story in it
+        const list = [
+            { label: "Intro", start: 0, end: 30 },
+            { label: "Episode", start: 30, end: 1300 },
+            { label: "Ending", start: 1300, end: 1390 },
+        ]
+
+        expect(getSkipChapters(list, "")).toEqual([list[2]])
+    })
+
+    it("prefers an Opening chapter over an Intro", () => {
+        const list = [
+            { label: "Intro", start: 0, end: 90 },
+            { label: "Opening", start: 90, end: 180 },
+            { label: "Episode", start: 180, end: 1300 },
+        ]
+
+        expect(getSkipChapters(list, "")).toEqual([list[1]])
+    })
+
+    it("skips the first Intro without the length check when the guard is off", () => {
         const list = chapters("Intro", "Episode", "Ending")
 
-        expect(getSkipChapters(list, "")).toEqual([])
         expect(getSkipChapters(list, "", { guardIntro: false })).toEqual([list[2]])
     })
 
