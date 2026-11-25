@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v4.8.16
+
+- 🦺 Transcoding / Direct Play: Fixed "no file has been loaded" when playing files from the local library in the browser
+  - Direct play, subtitles and fonts now find the file that was loaded for the current browser tab
+  - Transcoding now works when the server has a password
+  - Stopping a transcode now stops the right stream
+
 ## v4.8.15
 
 - 🦺 Library scanner: Fixed scans failing with "no media fed into the matcher" for profiles in multi-user mode

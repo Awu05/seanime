@@ -190,11 +190,12 @@ function MediastreamPage() {
 
         if (mediaContainer.streamUrl) {
             let _newUrl = `${getServerBaseUrl()}${mediaContainer.streamUrl}`
-            // Append HMAC token for direct play URLs
-            if (mediaContainer.streamType === "direct" && directToken) {
-                _newUrl += directToken
-            } else if (mediaContainer.streamType === "transcode" && transcodeToken) {
-                _newUrl += transcodeToken
+            // Append the HMAC token. The transcode URL already carries ?clientId=, so join with & instead of a second ?
+            const token = mediaContainer.streamType === "direct" ? directToken
+                : mediaContainer.streamType === "transcode" ? transcodeToken
+                    : ""
+            if (token) {
+                _newUrl += _newUrl.includes("?") ? token.replace(/^\?/, "&") : token
             }
             log.info("Setting stream URL", _newUrl)
             changeUrl(_newUrl)
@@ -202,7 +203,7 @@ function MediastreamPage() {
             changeUrl(null)
         }
 
-    }, [mediaContainer, isMediaContainerPending, mediastreamSettings, isCodecSupported, directToken])
+    }, [mediaContainer, isMediaContainerPending, mediastreamSettings, isCodecSupported, directToken, transcodeToken])
 
 
     // handle fatal errors

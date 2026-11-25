@@ -188,11 +188,7 @@ func (h *Handler) HandleMediastreamGetSubtitles(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
-	clientId := c.QueryParam("clientId")
-	if clientId == "" {
-		clientId = "default"
-	}
-	return h.App.MediastreamRepository.ServeEchoExtractedSubtitles(c, clientId)
+	return h.App.MediastreamRepository.ServeEchoExtractedSubtitles(c, h.mediastreamClientId(c))
 }
 
 func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
@@ -200,11 +196,41 @@ func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
-	clientId := c.QueryParam("clientId")
-	if clientId == "" {
-		clientId = "default"
+	return h.App.MediastreamRepository.ServeEchoExtractedAttachments(c, h.mediastreamClientId(c))
+}
+
+// mediastreamClientId returns the client whose loaded file a stream request is for.
+func (h *Handler) mediastreamClientId(c echo.Context) string {
+	return mediastreamClientId(c, h.App.MediastreamRepository.HasMediaContainer)
+}
+
+// mediastreamClientId picks the client ID a stream, subtitle or attachment request
+// is served for. The file was loaded under the client ID of the request that asked
+// for it (see getRequestClientId).
+//   - The stream URL carries it as ?clientId=, which is per tab, so it is tried first.
+//   - Requests whose URLs cannot carry it (subtitles, fonts, HLS segments resolved
+//     from a playlist) still send the Seanime-Client-Id cookie, which is tried next.
+//     Tabs share that cookie, so it only identifies the tab that loaded a file last.
+//   - "default" is the legacy fallback.
+//
+// When no candidate has a file loaded, the first one present is returned.
+func mediastreamClientId(c echo.Context, loaded func(clientId string) bool) string {
+	candidates := []string{
+		strings.TrimSpace(c.QueryParam("clientId")),
+		getContextClientId(c),
+		"default",
 	}
-	return h.App.MediastreamRepository.ServeEchoExtractedAttachments(c, clientId)
+	for _, id := range candidates {
+		if id != "" && loaded(id) {
+			return id
+		}
+	}
+	for _, id := range candidates {
+		if id != "" {
+			return id
+		}
+	}
+	return "default"
 }
 
 //
@@ -212,11 +238,7 @@ func (h *Handler) HandleMediastreamGetAttachments(c echo.Context) error {
 //
 
 func (h *Handler) HandleMediastreamDirectPlay(c echo.Context) error {
-	clientId := c.QueryParam("clientId")
-	if clientId == "" {
-		clientId = "default"
-	}
-	return h.App.MediastreamRepository.ServeEchoDirectPlay(c, clientId)
+	return h.App.MediastreamRepository.ServeEchoDirectPlay(c, h.mediastreamClientId(c))
 }
 
 //
@@ -224,11 +246,7 @@ func (h *Handler) HandleMediastreamDirectPlay(c echo.Context) error {
 //
 
 func (h *Handler) HandleMediastreamTranscode(c echo.Context) error {
-	clientId := c.QueryParam("clientId")
-	if clientId == "" {
-		clientId = "default"
-	}
-	return h.App.MediastreamRepository.ServeEchoTranscodeStream(c, clientId)
+	return h.App.MediastreamRepository.ServeEchoTranscodeStream(c, h.mediastreamClientId(c))
 }
 
 // HandleMediastreamShutdownTranscodeStream
@@ -245,7 +263,7 @@ func (h *Handler) HandleMediastreamShutdownTranscodeStream(c echo.Context) error
 	}
 	var b body
 	_ = c.Bind(&b)
-	clientId := b.ClientId
+	clientId := getRequestClientId(c, b.ClientId)
 	if clientId == "" {
 		clientId = "default"
 	}
