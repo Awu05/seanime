@@ -5,7 +5,6 @@ import (
 	"errors"
 	"seanime/internal/core"
 	"seanime/internal/database/db_bridge"
-	"seanime/internal/database/models"
 	"seanime/internal/library/scanner"
 	"seanime/internal/library/summary"
 
@@ -85,15 +84,11 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 	}
 	defer scanLogger.Done()
 
-	ac, _ := h.getAnilistPlatform(c).GetAnimeCollection(c.Request().Context(), false)
+	// Match against this profile's own AniList collection, not the global platform's
+	platformRef := h.App.ScanPlatformRef(profileID)
+	ac, _ := platformRef.Get().GetAnimeCollection(c.Request().Context(), false)
 
-	var scanLibrary *models.LibrarySettings
-	if currentSettings, settingsErr := h.getSettings(c); settingsErr == nil {
-		scanLibrary = currentSettings.GetLibrary()
-	}
-	if scanLibrary == nil {
-		scanLibrary = &models.LibrarySettings{}
-	}
+	scanLibrary := h.App.ScanLibrarySettings(profileID)
 
 	// Create a new scanner
 	sc := scanner.Scanner{
@@ -102,7 +97,7 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 		OtherDirPaths:              additionalLibraryPaths,
 		Enhanced:                   b.Enhanced,
 		EnhanceWithOfflineDatabase: b.EnhanceWithOfflineDatabase,
-		PlatformRef:                h.App.AnilistPlatformRef,
+		PlatformRef:                platformRef,
 		Logger:                     h.App.Logger,
 		WSEventManager:             h.App.WSEventManager,
 		ExistingLocalFiles:         existingLfs,
@@ -147,8 +142,7 @@ func (h *Handler) HandleScanLocalFiles(c echo.Context) error {
 
 	go h.App.AutoDownloader.CleanUpDownloadedItems()
 
-	plat := h.getAnilistPlatform(c)
-	go plat.RefreshAnimeCollection(context.Background())
+	go platformRef.Get().RefreshAnimeCollection(context.Background())
 
 	go h.App.UpdateLibrarySize(true)
 

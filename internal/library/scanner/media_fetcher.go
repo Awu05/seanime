@@ -23,6 +23,9 @@ import (
 	lop "github.com/samber/lo/parallel"
 )
 
+// fetchOfflineDatabase is swapped out in tests to avoid downloading the database.
+var fetchOfflineDatabase = animeofflinedb.FetchAndConvertDatabase
+
 // MediaFetcher holds all anilist.BaseAnime that will be used for the comparison process
 type MediaFetcher struct {
 	ProfileID                    string
@@ -138,6 +141,19 @@ func NewMediaFetcher(ctx context.Context, opts *MediaFetcherOptions) (ret *Media
 			Msg("Fetched media from AniList collection")
 	}
 
+	// Collection-only matching has nothing to match against when the collection is
+	// empty (no AniList account linked, or nothing on the list yet). Fall back to the
+	// offline database, as the scan dialog does, instead of failing the whole scan.
+	if !opts.Enhanced && !opts.DisableAnimeCollection && len(allCompleteAnime) == 0 {
+		opts.Logger.Debug().Msg("media fetcher: AniList collection is empty, using the offline database for matching")
+		if mf.ScanLogger != nil {
+			mf.ScanLogger.LogMediaFetcher(zerolog.InfoLevel).
+				Msg("AniList collection is empty, falling back to anime-offline-database matching")
+		}
+		opts.Enhanced = true
+		opts.EnhanceWithOfflineDatabase = true
+	}
+
 	//--------------------------------------------
 
 	// Get the media IDs from the collection
@@ -193,7 +209,7 @@ func NewMediaFetcher(ctx context.Context, opts *MediaFetcherOptions) (ret *Media
 			existingMediaIDs[m.ID] = true
 		}
 
-		offlineMedia, err := animeofflinedb.FetchAndConvertDatabase(existingMediaIDs)
+		offlineMedia, err := fetchOfflineDatabase(existingMediaIDs)
 		if err != nil {
 			if mf.ScanLogger != nil {
 				mf.ScanLogger.LogMediaFetcher(zerolog.WarnLevel).

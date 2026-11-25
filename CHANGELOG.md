@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v4.8.14
+
+- 🦺 Library scanner: Fixed scans failing with "no media fed into the matcher" for profiles in multi-user mode
+  - Scans now match against the scanning profile's own AniList list instead of the server's default account
+  - When the AniList list is empty (or no account is linked), scans fall back to the offline anime database instead of failing
+- 🦺 Auto scanner: Each profile is now scanned with its own AniList list, matching settings and library folders, like a manual scan from that profile
+- 🦺 Plugins: Library scans started by a plugin now use the plugin profile's own AniList list
+- 🦺 Library scanner: A scan running while a profile logs in, logs out or switches AniList accounts now continues with the new account
+
 ## v4.8.13
 
 - 🦺 Video player: Auto-skip now skips files whose chapters are named "Intro" and "Credits" (an opening-length Intro counts as the opening, and it no longer stops the ending from being skipped)

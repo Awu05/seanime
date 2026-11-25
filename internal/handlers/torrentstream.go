@@ -72,7 +72,7 @@ func (h *Handler) HandleSaveTorrentstreamSettings(c echo.Context) error {
 
 	var settings *models.TorrentstreamSettings
 	var err error
-	if h.App.MultiUserEnabled && profileID != "" {
+	if h.App.MultiUserEnabled.Load() && profileID != "" {
 		settings, err = h.App.Database.UpsertTorrentstreamSettingsForProfile(profileID, &b.Settings)
 	} else {
 		b.Settings.BaseModel = models.BaseModel{ID: 1}

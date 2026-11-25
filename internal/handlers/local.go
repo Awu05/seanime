@@ -12,7 +12,7 @@ import (
 // syncs only the main account and switches every profile at once.
 func (h *Handler) singleUserOnlyMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if h.App.MultiUserEnabled {
+		if h.App.MultiUserEnabled.Load() {
 			return c.JSON(http.StatusForbidden, map[string]string{"error": "Offline mode isn't available when profiles are enabled"})
 		}
 		return next(c)

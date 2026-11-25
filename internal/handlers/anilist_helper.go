@@ -12,7 +12,7 @@ import (
 // In multi-user mode, returns a per-profile platform from the pool.
 // In single-user mode, returns the global platform.
 func (h *Handler) getAnilistPlatform(c echo.Context) platform.Platform {
-	if !h.App.MultiUserEnabled || h.App.AnilistPool == nil {
+	if !h.App.MultiUserEnabled.Load() || h.App.AnilistPool == nil {
 		return h.App.AnilistPlatformRef.Get()
 	}
 	profileID := core.GetProfileIDFromContext(c)
@@ -23,7 +23,7 @@ func (h *Handler) getAnilistPlatform(c echo.Context) platform.Platform {
 // In multi-user mode, returns per-profile settings.
 // In single-user mode, returns global settings (ID=1).
 func (h *Handler) getSettings(c echo.Context) (*models.Settings, error) {
-	if h.App.MultiUserEnabled {
+	if h.App.MultiUserEnabled.Load() {
 		profileID := core.GetProfileIDFromContext(c)
 		if profileID != "" {
 			return h.App.Database.GetSettingsForProfile(profileID)
@@ -34,7 +34,7 @@ func (h *Handler) getSettings(c echo.Context) (*models.Settings, error) {
 
 // getMediastreamSettings returns mediastream settings for the current profile.
 func (h *Handler) getMediastreamSettings(c echo.Context) *models.MediastreamSettings {
-	if h.App.MultiUserEnabled {
+	if h.App.MultiUserEnabled.Load() {
 		profileID := core.GetProfileIDFromContext(c)
 		if profileID != "" {
 			s, _ := h.App.Database.GetMediastreamSettingsForProfile(profileID)
@@ -47,7 +47,7 @@ func (h *Handler) getMediastreamSettings(c echo.Context) *models.MediastreamSett
 
 // getTorrentstreamSettings returns torrentstream settings for the current profile.
 func (h *Handler) getTorrentstreamSettings(c echo.Context) *models.TorrentstreamSettings {
-	if h.App.MultiUserEnabled {
+	if h.App.MultiUserEnabled.Load() {
 		profileID := core.GetProfileIDFromContext(c)
 		if profileID != "" {
 			s, _ := h.App.Database.GetTorrentstreamSettingsForProfile(profileID)
@@ -60,7 +60,7 @@ func (h *Handler) getTorrentstreamSettings(c echo.Context) *models.Torrentstream
 
 // getDebridSettings returns debrid settings for the current profile.
 func (h *Handler) getDebridSettings(c echo.Context) *models.DebridSettings {
-	if h.App.MultiUserEnabled {
+	if h.App.MultiUserEnabled.Load() {
 		profileID := core.GetProfileIDFromContext(c)
 		if profileID != "" {
 			s, _ := h.App.Database.GetDebridSettingsForProfile(profileID)

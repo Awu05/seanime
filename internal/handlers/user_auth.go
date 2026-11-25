@@ -31,7 +31,7 @@ func (h *Handler) HandleSetupCheck(c echo.Context) error {
 	return h.RespondWithData(c, map[string]interface{}{
 		"needsSetup":    !adminExists,
 		"hasAccessCode": hasAccessCode,
-		"multiUser":     h.App.MultiUserEnabled,
+		"multiUser":     h.App.MultiUserEnabled.Load(),
 		"sidecar":       h.App.IsDesktopSidecar,
 	})
 }
@@ -125,7 +125,7 @@ func (h *Handler) HandleAdminSetup(c echo.Context) error {
 		}
 	}
 
-	h.App.MultiUserEnabled = true
+	h.App.MultiUserEnabled.Store(true)
 	h.App.Logger.Info().Msg("app: Admin account created")
 	if h.App.IsOffline() {
 		h.App.SetOfflineMode(false)
