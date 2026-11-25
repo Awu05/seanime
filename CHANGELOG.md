@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v4.8.13
+
+- 🦺 Video player: Auto-skip now skips files whose chapters are named "Intro" and "Credits" (an opening-length Intro counts as the opening, and it no longer stops the ending from being skipped)
+
 ## v4.8.12
 
 - 🦺 Video player: Fixed the loading spinner staying on after pausing while a video was still loading

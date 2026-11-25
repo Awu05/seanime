@@ -22,16 +22,34 @@ type SkipOptions = {
     guardIntro?: boolean
 }
 
-export function getDefaultSkipChapters<T extends { label: string | null }>(chapters: T[], options: SkipOptions = {}) {
+// TV openings run about 90 seconds. An "Intro" chapter outside this range is more likely a cold
+// open with story in it, so it isn't skipped as the opening.
+const OPENING_MIN_SECONDS = 60
+const OPENING_MAX_SECONDS = 135
+
+function isOpeningLength(chapter: { start?: number, end?: number }) {
+    if (typeof chapter.start !== "number" || typeof chapter.end !== "number") return false
+    const length = chapter.end - chapter.start
+    return length >= OPENING_MIN_SECONDS && length <= OPENING_MAX_SECONDS
+}
+
+export function getDefaultSkipChapters<T extends { label: string | null, start?: number, end?: number }>(chapters: T[],
+    options: SkipOptions = {},
+) {
     let opening: T | null = null
     let ending: T | null = null
-    const usesIntro = options.guardIntro !== false && introIsOpening(chapters)
 
     for (const chapter of chapters) {
         const type = getChapterType(chapter.label)
-        if (!opening && !usesIntro && type === "Opening") opening = chapter
-        if (!ending && !usesIntro && type === "Ending") ending = chapter
+        if (!opening && type === "Opening") opening = chapter
+        if (!ending && type === "Ending") ending = chapter
         if (opening && ending) break
+    }
+
+    // Files that label the opening "Intro" have no "Opening" chapter. Only an opening-length Intro
+    // is taken as the opening, and this never affects the ending.
+    if (!opening && options.guardIntro !== false && introIsOpening(chapters)) {
+        opening = chapters.find(chapter => getChapterType(chapter.label) === "Intro" && isOpeningLength(chapter)) ?? null
     }
 
     return { opening, ending }
@@ -67,7 +85,7 @@ export function getSkipPatternError(value: string) {
     return ""
 }
 
-export function getSkipChapters<T extends { label: string | null }>(chapters: T[], patterns: string, options: SkipOptions = {}) {
+export function getSkipChapters<T extends { label: string | null, start?: number, end?: number }>(chapters: T[], patterns: string, options: SkipOptions = {}) {
     const defaults = getDefaultSkipChapters(chapters, options)
     const regexes = getRegexes(patterns)
 
