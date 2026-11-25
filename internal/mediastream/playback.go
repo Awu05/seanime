@@ -3,9 +3,10 @@ package mediastream
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"seanime/internal/mediastream/videofile"
-	"strings"
 	"seanime/internal/util/result"
+	"strings"
 
 	"github.com/rs/zerolog"
 )
@@ -72,14 +73,15 @@ func (p *PlaybackManager) RequestPlayback(filepath string, streamType StreamType
 		return nil, fmt.Errorf("failed to create media container: %v", err)
 	}
 
-	// Create a client-specific copy with clientId in the stream URL
+	// Create a client-specific copy with clientId in the stream URL, so the stream
+	// requests find this client's file even when several tabs share one client cookie.
 	clientContainer := *ret
-	if clientContainer.StreamType == StreamTypeTranscode && !strings.Contains(clientContainer.StreamUrl, "clientId=") {
+	if clientId != "" && !strings.Contains(clientContainer.StreamUrl, "clientId=") {
+		sep := "?"
 		if strings.Contains(clientContainer.StreamUrl, "?") {
-			clientContainer.StreamUrl += "&clientId=" + clientId
-		} else {
-			clientContainer.StreamUrl += "?clientId=" + clientId
+			sep = "&"
 		}
+		clientContainer.StreamUrl += sep + "clientId=" + url.QueryEscape(clientId)
 	}
 
 	// Store the media container for this client.

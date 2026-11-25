@@ -61,6 +61,15 @@ func (r *Repository) IsInitialized() bool {
 	return r.settings.IsPresent()
 }
 
+// HasMediaContainer reports whether a file has been loaded for clientId.
+func (r *Repository) HasMediaContainer(clientId string) bool {
+	if r == nil || r.playbackManager == nil {
+		return false
+	}
+	_, ok := r.playbackManager.GetMediaContainer(clientId)
+	return ok
+}
+
 func (r *Repository) OnCleanup() {
 	r.ShutdownAllTranscode()
 }
