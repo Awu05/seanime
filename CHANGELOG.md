@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## v4.8.14
+## v4.8.15
 
 - 🦺 Library scanner: Fixed scans failing with "no media fed into the matcher" for profiles in multi-user mode
   - Scans now match against the scanning profile's own AniList list instead of the server's default account
