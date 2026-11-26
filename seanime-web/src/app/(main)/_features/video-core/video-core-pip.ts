@@ -117,6 +117,12 @@ export class VideoCorePipManager extends EventTarget {
         this.playbackInfo = playbackInfo
     }
 
+    // Whether the element in Picture-in-Picture is this player's: its video, or the canvas proxy
+    // used to show burned-in subtitles. Every player's manager hears the document-level PiP event.
+    ownsPipElement(element: Element | null): boolean {
+        return !!element && (element === this.video || element === this.pipProxy)
+    }
+
     setSubtitleManager(subtitleManager: VideoCoreSubtitleManager) {
         this.subtitleManager = subtitleManager
     }

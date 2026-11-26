@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	Version              = "4.8.16"
+	Version              = "4.8.17"
 	VersionName          = "Hakumei"
 	GcTime               = time.Minute * 30
 	ConfigFileName       = "config.toml"
