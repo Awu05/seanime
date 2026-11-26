@@ -81,7 +81,7 @@ import { vc_overlayFeedbackTimeout } from "@/app/(main)/_features/video-core/vid
 import { vc_showOverlayFeedback } from "@/app/(main)/_features/video-core/video-core-overlay-display"
 import { VideoCoreOverlayDisplay } from "@/app/(main)/_features/video-core/video-core-overlay-display"
 import { vc_pip } from "@/app/(main)/_features/video-core/video-core-pip"
-import { vc_pipElement, vc_pipManager, VideoCorePipManager } from "@/app/(main)/_features/video-core/video-core-pip"
+import { PipManagerEnteredEvent, vc_pipElement, vc_pipManager, VideoCorePipManager } from "@/app/(main)/_features/video-core/video-core-pip"
 import {
     useVideoCorePlaylist,
     useVideoCorePlaylistSetup,
@@ -842,6 +842,9 @@ export function VideoCore(props: VideoCoreProps) {
             dispatchTerminatedEvent()
             setActivePlayer(null)
         }
+        // Release the page's media session. Pages that remount the player (e.g. per file) or always
+        // pass active: true would otherwise leave this manager registered as active for good.
+        mediaSessionManager?.destroy()
     })
 
     // useUnmount only fires when React actually unmounts this component - a hard browser-tab/
@@ -1646,6 +1649,20 @@ export function VideoCore(props: VideoCoreProps) {
             mediaSessionManager.deactivate()
         }
     }, [mediaSessionManager, videoRef.current, state.playbackInfo, state.active, playEpisode])
+
+    // The player put in Picture-in-Picture owns the media session, so the PiP window's ±10s buttons
+    // (which Chrome sends as "seekto") reach it. With subtitles on, PiP shows a canvas proxy that
+    // isn't in the document, so this listens to the PiP manager rather than the document.
+    React.useEffect(() => {
+        if (!pipManager || !mediaSessionManager) return
+        const handleEnteredPip = (e: PipManagerEnteredEvent) => {
+            if (pipManager.ownsPipElement(e.detail.pipElement)) {
+                mediaSessionManager.takeOwnership()
+            }
+        }
+        pipManager.addEventListener("enteredpip", handleEnteredPip)
+        return () => pipManager.removeEventListener("enteredpip", handleEnteredPip)
+    }, [pipManager, mediaSessionManager])
 
     // Handle iOS fullscreen subtitles
     useVideoCoreIOSFullscreenSubtitles({

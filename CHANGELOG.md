@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v4.8.17
+
+- 🦺 Video player: The Picture-in-Picture skip back/forward 10s buttons now work, with or without subtitles
+  - Fixed one player clearing another player's media controls (Picture-in-Picture buttons, media keys, OS media overlay)
+  - "Seek backward" from media keys or the OS media overlay no longer skips forward
+  - The OS media overlay shows the right position after switching between players
+
 ## v4.8.16
 
 - 🦺 Transcoding / Direct Play: Fixed "no file has been loaded" when playing files from the local library in the browser
